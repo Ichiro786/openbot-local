@@ -35,7 +35,7 @@ fetch() { curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ "$(uname -m)" = aarch64 ] || fail "run on an arm64 host (the chroot runs arm64 binaries natively)"
-for c in curl tar xz sha256sum openssl chroot; do command -v "$c" >/dev/null || fail "missing $c"; done
+for c in curl tar xz sha256sum openssl chroot cc; do command -v "$c" >/dev/null || fail "missing $c"; done
 
 MOUNTS=()
 cleanup_mounts() {
@@ -182,6 +182,12 @@ pswpin 0
 pswpout 0
 EOF
 chmod 0644 "$fp"/*
+
+# getuid() shim for the Electron renderers (see nonroot-shim.c). Built on the arm64 Ubuntu 24.04
+# host, the same glibc as the payload.
+install -d -m 0755 "$ROOTFS/opt/openbot-local/lib"
+cc -O2 -Wall -shared -fPIC -o "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so" "$SCRIPT_DIR/nonroot-shim.c"
+chmod 0755 "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so"
 
 # Static DNS and identity. Android has no readable /etc/resolv.conf; the app may overwrite this file
 # with the device's DNS servers before each start.

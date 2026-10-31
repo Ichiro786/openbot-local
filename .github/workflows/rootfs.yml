@@ -76,7 +76,7 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils openssl proot shellcheck jq
+          sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils openssl proot shellcheck jq gcc libc6-dev
 
       - name: Lint engine scripts
         if: steps.ver.outputs.build == 'true'

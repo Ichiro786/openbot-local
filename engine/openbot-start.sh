@@ -59,6 +59,7 @@ unset WAYLAND_DISPLAY LD_PRELOAD SESSION_MANAGER
 
 LOG="${OPENBOT_LOG:-/root/openbot.log}"
 APP="${OPENBOT_APP:-/opt/OpenBot/app/openbot}"
+NONROOT_SHIM=/opt/openbot-local/lib/libopenbot-nonroot.so
 SOCKET="$XDG_RUNTIME_DIR/control.sock"
 BUS="$XDG_RUNTIME_DIR/bus"
 STATE_FILE="$XDG_RUNTIME_DIR/engine.state"
@@ -360,7 +361,11 @@ launch() {
   mapfile -t flags < <(flags_for_profile "$PROFILE")
   LAUNCH_OFFSET=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
   log "Launching OpenBot, profile=$PROFILE: $APP ${flags[*]}"
-  "$APP" "${flags[@]}" >>"$LOG" 2>&1 &
+  # As uid 0 (proot -0, or a chroot) Electron aborts every renderer, because OpenBot enables the
+  # renderer sandbox; the shim makes getuid() non-zero in those processes only (nonroot-shim.c).
+  local preload=""
+  if [ "$(id -u)" = 0 ] && [ -f "$NONROOT_SHIM" ] && [ "${OPENBOT_NONROOT_SHIM:-1}" = 1 ]; then preload=$NONROOT_SHIM; fi
+  LD_PRELOAD=$preload "$APP" "${flags[@]}" >>"$LOG" 2>&1 &
   APP_PID=$!
   echo "$APP_PID" >"$APP_PID_FILE"
   set_state starting "launched"
