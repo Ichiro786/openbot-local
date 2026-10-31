@@ -10,6 +10,11 @@ name: Build OpenBot Local (Android APK)
 on:
   push:
     branches: [main]
+    # Engine changes reach the APK through rootfs.yml -> workflow_run.
+    paths-ignore:
+      - "engine/**"
+      - ".github/workflows/rootfs.yml"
+      - ".github/workflows/apk-release.yml"
   workflow_dispatch:
     inputs:
       engine_tag:

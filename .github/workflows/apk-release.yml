@@ -1,0 +1,76 @@
+name: Publish APK release
+
+# Turns the APK artifact of a finished "Build OpenBot Local (Android APK)" run into a prerelease
+# `apk-<date>-<n>`, so the APK can be downloaded from the GitHub app or site while signed in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run id of a successful android-local.yml run"
+        required: true
+      tag:
+        description: "Release tag (blank = apk-<UTC date>-<n>)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      INPUT_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check the build run
+        id: run
+        run: |
+          set -euo pipefail
+          read -r name conclusion sha < <(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '[.name, .conclusion, .head_sha] | @tsv')
+          echo "run $RUN_ID: $name, $conclusion, $sha"
+          [ "$name" = "Build OpenBot Local (Android APK)" ] || { echo "::error::run $RUN_ID is '$name'"; exit 1; }
+          [ "$conclusion" = success ] || { echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; }
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+
+      - name: Download the APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: openbot-local-apk-*
+          merge-multiple: true
+          path: apk
+
+      - name: Create the prerelease
+        env:
+          SHA: ${{ steps.run.outputs.sha }}
+        run: |
+          set -euo pipefail
+          apk=$(ls apk/*.apk | head -n1)
+          [ -f "$apk" ] || { echo "::error::no APK in the artifact"; exit 1; }
+          tag=$INPUT_TAG
+          if [ -z "$tag" ]; then
+            base="apk-$(date -u +%Y%m%d)"
+            n=1
+            while gh release view "$base-$n" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; do n=$((n + 1)); done
+            tag="$base-$n"
+          fi
+          size=$(( $(stat -c %s "$apk") / 1048576 ))
+          cat >notes.md <<EOF
+          OpenBot Local (run.openbot.local), arm64-v8a, signed with the Expo debug keystore (sideload only).
+
+          - \`$(basename "$apk")\`: ${size} MiB, engine payload bundled
+          - Built from ${SHA} by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}
+
+          Install: download on the phone, allow "Install unknown apps" for the browser/GitHub app, open the APK.
+          The first start unpacks the engine (about 1.3 GB) and shows its progress in the "Engine" pill.
+          EOF
+          gh release create "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "OpenBot Local $tag" --notes-file notes.md --prerelease --latest=false
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[] | "\(.name) \(.size)")'
