@@ -41,9 +41,12 @@ if [ "$MODE" = chroot ]; then
 elif [ "$MODE" = proot ]; then
   command -v proot >/dev/null || { echo "proot is not installed" >&2; exit 2; }
   # The distro proot (5.1.0) predates --kill-on-exit; the Termux build the app ships has it.
-  kill_flag=()
-  proot --help 2>&1 | grep -q -- '--kill-on-exit' && kill_flag=(--kill-on-exit)
-  PROOT_NO_SECCOMP=${PROOT_NO_SECCOMP:-} proot "${kill_flag[@]}" --link2symlink -0 -r "$M" -w /root \
+  # Same for --link2symlink in some distro builds.
+  extra=()
+  help=$(proot --help 2>&1 || true)
+  grep -q -- '--kill-on-exit' <<<"$help" && extra+=(--kill-on-exit)
+  grep -q -- '--link2symlink' <<<"$help" && extra+=(--link2symlink)
+  PROOT_NO_SECCOMP=${PROOT_NO_SECCOMP:-} proot "${extra[@]}" -0 -r "$M" -w /root \
     -b /dev -b /proc -b /sys -b "$M/tmp:/dev/shm" \
     /usr/bin/env -i "${envs[@]}" /bin/bash /root/openbot-start.sh &
   runner=$!
