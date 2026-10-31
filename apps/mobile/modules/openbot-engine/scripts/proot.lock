@@ -1,0 +1,9 @@
+# Written by scripts/fetch-proot.sh from https://packages.termux.dev/apt/termux-main. <package> <version> <deb sha256>
+proot 5.1.107.101 a28355e9be257e1f87f4e9294b3118470d4fd7a5442fed8b278f4443c83407d7
+libtalloc 2.5.0 556591f43bb773ad8777e1a29522640866a55f95dab71914418b94a8c58ad5a7
+libandroid-shmem 0.7 0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6
+# Installed jniLibs (after patchelf): <sha256> <file>
+# 11802a3b436d22bbba5ab1fdb537a799f3c84e53a93dbc8f6e588b865375a679  libproot.so
+# 1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5  libproot-loader.so
+# 9b257d35f4a8b5776a39577902b6c8e1bf98aeab17e951e99578d108abb1b96f  libtalloc.so
+# 0bd211431c1436f7fa8032b5f2a15b64c7dcd989dfef00d5388dd7085b8ce976  libandroid-shmem.so

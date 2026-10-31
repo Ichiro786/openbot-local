@@ -1,0 +1,160 @@
+name: Engine rootfs
+
+# Builds the OpenBot Local engine payload (Ubuntu 24.04 arm64 rootfs + OpenBot server, for PRoot on
+# Android) and publishes it as release `engine-<openbot version>` and as a workflow artifact.
+# A rolling release `engine-latest` carries only engine.json, which points at the newest payload.
+
+on:
+  workflow_dispatch:
+    inputs:
+      openbot_version:
+        description: "OpenBot version to package, e.g. 0.57.0 (blank = latest release)"
+        required: false
+        default: ""
+      force:
+        description: "Rebuild and replace the assets when engine-<version> already exists"
+        type: boolean
+        default: false
+      smoke_test:
+        description: "Start the engine once in a chroot and in proot before publishing"
+        type: boolean
+        default: true
+  schedule:
+    - cron: "23 4 * * 1" # weekly, Monday 04:23 UTC
+
+permissions:
+  contents: write
+
+concurrency:
+  group: engine-rootfs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OUT_DIR: ${{ github.workspace }}/out
+      WORK_DIR: ${{ github.workspace }}/build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve OpenBot version
+        id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.openbot_version }}
+          INPUT_FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            version="$INPUT_VERSION"
+          else
+            version=$(curl -fsSL --retry 3 https://github.com/nightly-labs/openbot/releases/latest/download/latest-linux-arm64.yml \
+              | sed -n 's/^version: *//p' | head -n 1)
+          fi
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Invalid OpenBot version '$version'"; exit 1; }
+          tag="engine-$version"
+          exists=false
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exists=true; fi
+          build=true
+          if [ "$exists" = true ] && [ "${INPUT_FORCE:-false}" != true ]; then build=false; fi
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "exists=$exists"
+            echo "build=$build"
+          } >>"$GITHUB_OUTPUT"
+          echo "OpenBot $version, tag $tag, exists=$exists, build=$build"
+
+      - name: Already published
+        if: steps.ver.outputs.build != 'true'
+        run: echo "::notice::${{ steps.ver.outputs.tag }} already exists; nothing to do (use force to rebuild)."
+
+      - name: Install host tools
+        if: steps.ver.outputs.build == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils openssl proot shellcheck jq
+
+      - name: Lint engine scripts
+        if: steps.ver.outputs.build == 'true'
+        run: |
+          for f in engine/*.sh; do bash -n "$f"; done
+          shellcheck -S warning engine/*.sh || echo "::warning::shellcheck reported warnings"
+
+      - name: Build rootfs
+        if: steps.ver.outputs.build == 'true'
+        env:
+          OPENBOT_VERSION: ${{ steps.ver.outputs.version }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          sudo --preserve-env=OUT_DIR,WORK_DIR,OPENBOT_VERSION,GIT_SHA bash engine/build-rootfs.sh
+          sudo chown -R "$(id -u):$(id -g)" "$OUT_DIR"
+          ls -l "$OUT_DIR"
+
+      - name: Smoke test (chroot)
+        id: smoke_chroot
+        if: steps.ver.outputs.build == 'true' && (github.event_name == 'schedule' || inputs.smoke_test)
+        continue-on-error: true
+        run: sudo SMOKE_TIMEOUT=300 bash engine/smoke-test.sh "$WORK_DIR/rootfs" chroot
+
+      - name: Smoke test (proot)
+        id: smoke_proot
+        if: steps.ver.outputs.build == 'true' && (github.event_name == 'schedule' || inputs.smoke_test)
+        continue-on-error: true
+        run: sudo SMOKE_TIMEOUT=420 bash engine/smoke-test.sh "$WORK_DIR/rootfs" proot
+
+      - name: Upload workflow artifact
+        if: steps.ver.outputs.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ steps.ver.outputs.version }}-rootfs-arm64
+          path: |
+            out/rootfs-arm64.tar.xz
+            out/rootfs-arm64.tar.xz.sha256
+            out/engine.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish release
+        if: steps.ver.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          EXISTS: ${{ steps.ver.outputs.exists }}
+          SMOKE_CHROOT: ${{ steps.smoke_chroot.outcome }}
+          SMOKE_PROOT: ${{ steps.smoke_proot.outcome }}
+        run: |
+          set -euo pipefail
+          size_mb=$(( $(stat -c %s out/rootfs-arm64.tar.xz) / 1048576 ))
+          installed_mb=$(( $(sed -n 's/.*"installed_bytes": *\([0-9]*\).*/\1/p' out/engine.json) / 1048576 ))
+          cat >notes.md <<EOF
+          OpenBot Local engine payload for OpenBot ${VERSION} (Linux arm64), Ubuntu 24.04 base.
+
+          - \`rootfs-arm64.tar.xz\`: ${size_mb} MiB download, about ${installed_mb} MiB unpacked
+          - \`rootfs-arm64.tar.xz.sha256\`, \`engine.json\` (version, sizes, sha256)
+          - Smoke test: chroot=${SMOKE_CHROOT:-skipped}, proot=${SMOKE_PROOT:-skipped}
+          - Built from ${GITHUB_SHA} by run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Start: see README-ENGINE.md (proot command, readiness, exit codes).
+          EOF
+          if [ "$EXISTS" = true ]; then
+            gh release upload "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json \
+              --title "Engine ${VERSION}" --notes-file notes.md --latest=false
+          fi
+          # Pointer for the app: engine-latest/engine.json names the newest versioned payload.
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/rootfs-arm64.tar.xz"
+          jq --arg tag "$TAG" --arg url "$url" '. + {tag: $tag, url: $url}' out/engine.json >engine.json
+          if gh release view engine-latest >/dev/null 2>&1; then
+            gh release upload engine-latest engine.json --clobber
+            gh release edit engine-latest --notes "Points at ${TAG}. Download engine.json and follow its url."
+          else
+            gh release create engine-latest engine.json --title "Engine (latest pointer)" --prerelease \
+              --notes "Points at ${TAG}. Download engine.json and follow its url." --latest=false
+          fi

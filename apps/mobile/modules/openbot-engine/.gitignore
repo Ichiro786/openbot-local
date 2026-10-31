@@ -1,0 +1,5 @@
+# Fetched by scripts/fetch-proot.sh (Termux proot build); see scripts/proot.lock.
+android/src/main/jniLibs/
+android/proot-jnilibs.sha256
+# Staged by scripts/stage-engine-payload.sh from the engine-* release (hundreds of MiB).
+android/src/main/assets/engine/

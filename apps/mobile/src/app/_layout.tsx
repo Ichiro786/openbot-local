@@ -22,6 +22,7 @@ import { MobileSessionProvider, useMobileSession } from "@/features/auth/context
 import { loadOnboardingProgress } from "@/features/onboarding/model/onboarding-progress";
 import { installNotificationHandler } from "@/features/push-notifications/use-notification-taps";
 import { installQuickActions, resetQuickActions } from "@/features/quick-actions/quick-actions-native";
+import { LocalEngineBanner } from "@/features/local-engine/local-engine-banner";
 import { loadAppLanguage } from "@/features/settings/model/app-language";
 import { loadAppearance, useAppearance } from "@/features/settings/model/appearance";
 import { loadDictationLanguage } from "@/features/settings/model/dictation-language";
@@ -48,6 +49,8 @@ import { queryClient } from "@/shared/lib/query-client";
 import { useText } from "@/shared/lib/text";
 import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
+
+import { installLocalEngine } from "../../modules/openbot-engine";
 
 export const unstable_settings = {
   anchor: "index",
@@ -175,6 +178,8 @@ function RootNavigator() {
           ) : null}
         </View>
         <BloubStage nativeSplashHidden={nativeHidden} onLayout={() => reportArtwork("stage")} />
+        {/* OpenBot Local: on-device engine status, Start/Stop and sign-in. */}
+        {covered ? null : <LocalEngineBanner />}
         <AppLockOverlay />
       </View>
     </SplashContentReadyContext.Provider>
@@ -213,6 +218,9 @@ export default function RootLayout() {
       parakeetModel.check();
       void loadAppLanguage().catch(() => undefined);
       void loadOnboardingProgress().catch(() => undefined);
+      // OpenBot Local: start the on-device engine (first launch unpacks the bundled payload).
+      // Android starts a foreground service, so this waits until the app is in the foreground.
+      installLocalEngine();
     });
   }, []);
 

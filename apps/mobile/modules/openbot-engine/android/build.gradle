@@ -1,0 +1,79 @@
+import java.security.MessageDigest
+
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'run.openbot'
+version = '1.0.0'
+
+expoModule {
+  canBePublished false
+}
+
+android {
+  namespace "run.openbot.engine"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    // The app's release build applies these rules when it shrinks the code with R8.
+    consumerProguardFiles 'consumer-rules.pro'
+    ndk {
+      // Only arm64 proot binaries are shipped (see scripts/fetch-proot.sh).
+      abiFilters 'arm64-v8a'
+    }
+  }
+  packagingOptions {
+    jniLibs {
+      // proot and its loader are executables renamed lib*.so; keep them byte-for-byte.
+      keepDebugSymbols += ['**/libproot.so', '**/libproot-loader.so', '**/libtalloc.so', '**/libandroid-shmem.so']
+    }
+  }
+}
+
+dependencies {
+  // Tar reader for the rootfs payload. 1.26+ pulls commons-io and commons-lang3 transitively.
+  implementation 'org.apache.commons:commons-compress:1.27.1'
+  // Pure-Java xz decoder (also what commons-compress uses for .xz).
+  implementation 'org.tukaani:xz:1.10'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+  implementation 'androidx.core:core-ktx:1.13.1'
+}
+
+// The proot binaries are not committed. scripts/fetch-proot.sh downloads them from the Termux
+// repository, verifies the pinned .deb hashes, patches libtalloc's soname and writes
+// proot-jnilibs.sha256 next to this file. The build refuses to run without them, or when a
+// binary does not match the recorded hash.
+def jniDir = file('src/main/jniLibs/arm64-v8a')
+def sumsFile = file('proot-jnilibs.sha256')
+
+def verifyProotJniLibs = tasks.register('verifyProotJniLibs') {
+  inputs.dir(jniDir).optional()
+  inputs.file(sumsFile).optional()
+  doLast {
+    if (!sumsFile.exists()) {
+      throw new GradleException("OpenBotEngine: ${sumsFile} is missing. Run modules/openbot-engine/scripts/fetch-proot.sh first.")
+    }
+    sumsFile.readLines().findAll { it.trim() }.each { line ->
+      def parts = line.trim().split(/\s+/)
+      def expected = parts[0]
+      def lib = new File(jniDir, parts[1])
+      if (!lib.exists()) {
+        throw new GradleException("OpenBotEngine: ${lib} is missing. Run scripts/fetch-proot.sh.")
+      }
+      def digest = MessageDigest.getInstance('SHA-256')
+      lib.withInputStream { stream ->
+        byte[] buffer = new byte[1 << 16]
+        int read
+        while ((read = stream.read(buffer)) > 0) digest.update(buffer, 0, read)
+      }
+      def actual = digest.digest().encodeHex().toString()
+      if (actual != expected) {
+        throw new GradleException("OpenBotEngine: ${lib.name} has SHA-256 ${actual}, expected ${expected}")
+      }
+    }
+  }
+}
+
+tasks.named('preBuild').configure { dependsOn verifyProotJniLibs }
