@@ -60,8 +60,15 @@ jobs:
       # A React Native release build needs more disk than the runner leaves free.
       - name: Free runner disk
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
-          df -h "$GITHUB_WORKSPACE"
+          # The engine payload is copied several times through Gradle's asset merge/package steps.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/Python /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/go /opt/hostedtoolcache/Ruby \
+            /usr/local/share/powershell /usr/share/swift /opt/az /opt/microsoft /opt/google /usr/local/julia* \
+            /usr/local/share/chromium /usr/lib/jvm/*-11-* /usr/local/aws-cli /usr/local/aws-sam-cli || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile || true
+          df -h / /mnt "$GITHUB_WORKSPACE"
 
       # Same toolchain the upstream release-android workflow uses: pinned Bun + Node from .nvmrc.
       - name: Set up Bun and Node
@@ -81,10 +88,11 @@ jobs:
           mkdir -p ~/.gradle
           echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
           echo 'org.gradle.workers.max=2' >> ~/.gradle/gradle.properties
-          sudo fallocate -l 8G /swapfile-build
-          sudo chmod 600 /swapfile-build
-          sudo mkswap /swapfile-build
-          sudo swapon /swapfile-build
+          # Swap on the separate /mnt disk so it does not eat the root disk the build needs.
+          sudo fallocate -l 8G /mnt/swapfile-build
+          sudo chmod 600 /mnt/swapfile-build
+          sudo mkswap /mnt/swapfile-build
+          sudo swapon /mnt/swapfile-build
           free -h
 
       - name: Cache Gradle
@@ -171,6 +179,7 @@ jobs:
           ./gradlew assembleRelease \
             -PreactNativeArchitectures=arm64-v8a \
             --no-daemon --stacktrace
+          df -h /
 
       - name: Collect APK
         id: apk
