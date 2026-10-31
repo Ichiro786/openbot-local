@@ -16,6 +16,10 @@ on:
         description: "Engine release to bundle, e.g. engine-0.57.0 (blank = newest)"
         required: false
         default: ""
+      skip_payload:
+        description: "Compile-check only: build without the engine payload (APK cannot install the engine)"
+        type: boolean
+        default: false
   workflow_run:
     workflows: ["Engine rootfs"]
     types: [completed]
@@ -25,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-local-${{ github.ref }}
+  group: android-local-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -108,6 +112,7 @@ jobs:
       # The rootfs payload goes into the APK assets (stored uncompressed). Fails when no release exists.
       - name: Stage engine payload
         id: payload
+        if: ${{ !inputs.skip_payload }}
         working-directory: apps/mobile/modules/openbot-engine
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -168,7 +173,7 @@ jobs:
           ENGINE_TAG: ${{ steps.payload.outputs.tag }}
         run: |
           APK=$(ls apps/mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
-          OUT="openbot-local-arm64-v8a-${GITHUB_SHA::7}-${ENGINE_TAG}.apk"
+          OUT="openbot-local-arm64-v8a-${GITHUB_SHA::7}-${ENGINE_TAG:-nopayload}.apk"
           cp "$APK" "$OUT"
           echo "path=$OUT" >> "$GITHUB_OUTPUT"
           ls -la "$OUT"
@@ -179,15 +184,20 @@ jobs:
       - name: Verify APK contents
         env:
           APK: ${{ steps.apk.outputs.path }}
+          SKIP_PAYLOAD: ${{ inputs.skip_payload }}
         run: |
           set -euo pipefail
           unzip -v "$APK" | grep -E 'lib/arm64-v8a/lib(proot|proot-loader|talloc|android-shmem)\.so|assets/engine/' | tee /tmp/apk-list.txt
           for f in libproot.so libproot-loader.so libtalloc.so libandroid-shmem.so; do
             grep -q "lib/arm64-v8a/$f" /tmp/apk-list.txt || { echo "::error::$f missing from the APK"; exit 1; }
           done
-          grep -E 'assets/engine/rootfs-arm64\.tar\.xz$' /tmp/apk-list.txt | grep -q ' Stored ' ||
-            { echo "::error::assets/engine/rootfs-arm64.tar.xz missing or compressed"; exit 1; }
-          grep -q 'assets/engine/rootfs-arm64.tar.xz.sha256' /tmp/apk-list.txt || { echo "::error::payload sha256 missing"; exit 1; }
+          if [ "$SKIP_PAYLOAD" = true ]; then
+            echo "::warning::built without the engine payload (compile check only)"
+          else
+            grep -E 'assets/engine/rootfs-arm64\.tar\.xz$' /tmp/apk-list.txt | grep -q ' Stored ' ||
+              { echo "::error::assets/engine/rootfs-arm64.tar.xz missing or compressed"; exit 1; }
+            grep -q 'assets/engine/rootfs-arm64.tar.xz.sha256' /tmp/apk-list.txt || { echo "::error::payload sha256 missing"; exit 1; }
+          fi
           MANIFEST=$(find apps/mobile/android/app/build/intermediates -path '*release*' -name AndroidManifest.xml -path '*merged_manifest*' | head -n1)
           echo "merged manifest: $MANIFEST"
           if [ -n "$MANIFEST" ]; then
