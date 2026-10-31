@@ -207,7 +207,7 @@ endstep
 
 # ------------------------------------------------------------------ 5. Shrink
 step "Strip caches, docs and locales"
-size_before=$(du -sm "$ROOTFS" | cut -f1)
+size_before=$(du -smx "$ROOTFS" 2>/dev/null | cut -f1 || true) # /proc etc. are still bind-mounted here
 chroot "$ROOTFS" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin bash -c 'apt-get clean'
 cleanup_mounts
 rm -f "$ROOTFS/usr/sbin/policy-rc.d"
