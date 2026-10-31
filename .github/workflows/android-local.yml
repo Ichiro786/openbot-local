@@ -1,0 +1,132 @@
+name: Build OpenBot Local (Android APK)
+
+# Personal side-by-side build of the OpenBot mobile app:
+#   applicationId run.openbot.local, name "OpenBot Local", scheme openbotlocal://
+# Produces an arm64-v8a release APK signed with the Expo template's debug keystore
+# (installable via adb / file manager; NOT suitable for Play Store).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-local-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Prebuild + assembleRelease (arm64-v8a)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_APP_ENV: production
+      NODE_ENV: production
+      # Root postinstall installs Electron for the desktop app; the phone build does not need it.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # A React Native release build needs more disk than the runner leaves free.
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h "$GITHUB_WORKSPACE"
+
+      # Same toolchain the upstream release-android workflow uses: pinned Bun + Node from .nvmrc.
+      - name: Set up Bun and Node
+        uses: ./.github/actions/setup-bun
+        with:
+          install: none
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Upstream note: Skia + Reanimated + Worklets + R8 can exhaust the 16 GB runner.
+      - name: Give Gradle more memory
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.workers.max=2' >> ~/.gradle/gradle.properties
+          sudo fallocate -l 8G /swapfile-build
+          sudo chmod 600 /swapfile-build
+          sudo mkswap /swapfile-build
+          sudo swapon /swapfile-build
+          free -h
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('bun.lock', 'apps/mobile/app.json', 'apps/mobile/package.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Safety net: generate the adaptive / monochrome (Material You themed) icon layers if they
+      # are missing from the commit. Normally they are committed; see apps/mobile/scripts-local/.
+      - name: Ensure adaptive icon layers
+        working-directory: apps/mobile
+        run: |
+          if [ ! -f assets/icons/adaptive-monochrome.png ] || [ ! -f assets/icons/adaptive-foreground.png ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick >/dev/null
+            bash scripts-local/make-adaptive-icons.sh
+          fi
+          ls -la assets/icons/
+
+      - name: Expo config sanity check
+        working-directory: apps/mobile
+        run: |
+          bunx expo config --type public --json > /tmp/expo-config.json
+          node -e '
+            const c = require("/tmp/expo-config.json");
+            console.log("name:", c.name, "| package:", c.android.package, "| scheme:", c.scheme);
+            console.log("adaptiveIcon:", JSON.stringify(c.android.adaptiveIcon));
+            if (c.android.package !== "run.openbot.local") process.exit(1);
+            if (!c.android.adaptiveIcon || !c.android.adaptiveIcon.monochromeImage) process.exit(1);
+            if (c.android.googleServicesFile) { console.error("google-services must stay off"); process.exit(1); }
+          '
+
+      - name: Expo prebuild (android)
+        working-directory: apps/mobile
+        run: bunx expo prebuild --platform android --clean --no-install
+
+      - name: Assemble release APK (arm64-v8a, debug keystore)
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          # The Expo template signs `release` with signingConfigs.debug (android/app/debug.keystore).
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            --no-daemon --stacktrace
+
+      - name: Collect APK
+        id: apk
+        run: |
+          APK=$(ls apps/mobile/android/app/build/outputs/apk/release/*.apk | head -n1)
+          OUT="openbot-local-arm64-v8a-${GITHUB_SHA::7}.apk"
+          cp "$APK" "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          ls -la "$OUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openbot-local-apk-${{ github.run_number }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
