@@ -11,15 +11,42 @@ import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Volume2 from "lucide-react-native/icons/volume-2";
 import { type PropsWithChildren, useMemo, useState } from "react";
 import { type AccessibilityState, Pressable, View } from "react-native";
-import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  ZoomIn,
+  ZoomOut,
+} from "react-native-reanimated";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { toggleReadAloud, useReadingAloud } from "@/features/voice/model/message-reading";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
+import { springs, timings } from "@/shared/lib/motion-tokens";
 import { useText } from "@/shared/lib/text";
 import { useCopyMessage } from "./use-copy-message";
 import { useHistoryShown } from "./use-history-shown";
 
+// Copy → check: the check pops in on M3 Expressive fast spatial (a small overshoot), the copy glyph
+// shrinks away under it on fast effects. The check leaves the same way, a little faster.
+const CHECK_IN = ZoomIn.springify()
+  .mass(springs.fastSpatial.mass)
+  .stiffness(springs.fastSpatial.stiffness)
+  .damping(springs.fastSpatial.damping)
+  .reduceMotion(ReduceMotion.System);
+const CHECK_OUT = ZoomOut.duration(120).reduceMotion(ReduceMotion.System);
+const COPY_IN = FadeIn.duration(timings.fastEffects.duration).reduceMotion(ReduceMotion.System);
+const COPY_OUT = ZoomOut.duration(timings.fastEffects.duration).reduceMotion(ReduceMotion.System);
+const GLYPH_FILL = {
+  position: "absolute",
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  alignItems: "center",
+  justifyContent: "center",
+} as const;
 const PICKER_IN = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
 const PICKER_OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
 const ICON_SIZE = 18;
@@ -204,7 +231,18 @@ export function ChatMessageActions({
             accessibilityLabel={copied ? t("mobile.chat.message.copied") : t("mobile.chat.message.copy")}
             onPress={() => void copy()}
           >
-            {copied ? <Check size={ICON_SIZE} color={muted} /> : <Copy size={ICON_SIZE} color={muted} />}
+            {/* Keyed by state, so Copy and the check trade places with layout animations. They run
+                only on a copy, and the row keeps no shared values at rest. */}
+            <LayoutAnimationConfig skipEntering skipExiting>
+              <Animated.View
+                key={copied ? "copied" : "copy"}
+                entering={copied ? CHECK_IN : COPY_IN}
+                exiting={copied ? CHECK_OUT : COPY_OUT}
+                style={GLYPH_FILL}
+              >
+                {copied ? <Check size={ICON_SIZE} color={muted} /> : <Copy size={ICON_SIZE} color={muted} />}
+              </Animated.View>
+            </LayoutAnimationConfig>
           </ActionButton>
         ) : null}
         {readAloudId && copyText ? (
