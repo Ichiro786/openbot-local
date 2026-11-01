@@ -1,4 +1,4 @@
-import { Pressable } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 
 import type { ServerDrawerIconButtonProps } from "./server-drawer-icon-button.types";
 
@@ -9,7 +9,7 @@ export function ServerDrawerIconButton({
   onPress,
 }: ServerDrawerIconButtonProps) {
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       className={
@@ -19,9 +19,9 @@ export function ServerDrawerIconButton({
       }
       hitSlop={fallbackVariant === "filled" ? 6 : 8}
       onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.58 : 1 })}
+      pressOpacity={0.6}
     >
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }

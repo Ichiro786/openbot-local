@@ -1,7 +1,8 @@
 import type { PlanLimitRow, PlanLimits } from "@openbot/team-client/plan-limits";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
-import { Pressable, View, type ViewStyle } from "react-native";
+import { View, type ViewStyle } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { lowestPlanLimitsFirst, planLimitName, planLimitWindowLabel } from "@/features/servers/model/plan-limits";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { haptics } from "@/shared/lib/haptics";
@@ -82,7 +83,7 @@ export function PlanLimitsHeaderButton({
     </View>
   );
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={t("mobile.server.planLimits.button", { summary })}
       accessibilityState={{ disabled }}
@@ -90,7 +91,8 @@ export function PlanLimitsHeaderButton({
       android_ripple={isAndroid ? HEADER_RIPPLE : undefined}
       className={isAndroid ? "h-12 justify-center rounded-full" : undefined}
       hitSlop={4}
-      style={({ pressed }) => (!isAndroid && pressed ? { opacity: 0.6 } : undefined)}
+      // Android draws its ripple; iOS dims, as before. Both sink under the finger.
+      pressOpacity={isAndroid ? 1 : 0.6}
       onPress={() => {
         void haptics.impact("soft");
         router.push({ pathname: "/plan-limits", params: { serverId } });
@@ -104,6 +106,6 @@ export function PlanLimitsHeaderButton({
       ) : (
         content
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }

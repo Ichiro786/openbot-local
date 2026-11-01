@@ -2,7 +2,8 @@ import type { AgentTask } from "@openbot/contracts/ipc";
 import { taskTone } from "@openbot/team-client/agent-tasks";
 import { Typography } from "heroui-native";
 import { useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { AgentTaskMark } from "@/features/servers/components/agent-task-mark";
@@ -57,13 +58,15 @@ export function TaskListRow({
   const mark = tone === "attention" ? String(success) : tone === "danger" ? String(danger) : null;
   const menuItems = menu ? leafActions(menu.actions) : [];
   const row = (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={t("mobile.chat.threads.open", { title: task.title, status })}
       accessibilityActions={menuItems.map((action) => ({ name: action.id, label: action.title }))}
       onAccessibilityAction={(event) => menu?.onAction(event.nativeEvent.actionName)}
       className="flex-row items-center gap-3 px-5 py-2.5"
-      style={({ pressed }) => ({ width: menu ? width : undefined, opacity: pressed ? 0.58 : 1 })}
+      variant="row"
+      pressOpacity={0.6}
+      style={{ width: menu ? width : undefined }}
       onPress={() => {
         void haptics.selection();
         onPress();
@@ -128,7 +131,7 @@ export function TaskListRow({
       ) : (
         <AgentTaskMark task={task} />
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
   if (!menu) return row;
   // The iOS menu host keeps the size of the content that it first measures. Until the slot has a

@@ -3,6 +3,7 @@ import {
   Pressable,
   type PressableProps,
   type StyleProp,
+  StyleSheet,
   type ViewStyle,
 } from "react-native";
 import Animated, {
@@ -118,8 +119,10 @@ export function AnimatedPressable({
     [minScale, minOpacity, release, fade],
   );
 
+  // A caller's own opacity, such as a disabled dim, stays the resting value: the press scales it.
+  const restOpacity = StyleSheet.flatten(style)?.opacity ?? 1;
   const pressStyle = useAnimatedStyle(() => ({
-    opacity: opacity.get(),
+    opacity: restOpacity * opacity.get(),
     transform: [{ scale: scale.get() }],
   }));
 

@@ -4,7 +4,8 @@ import { useThemeColor } from "heroui-native/hooks";
 import type { LucideIcon } from "lucide-react-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
-import { Pressable, View, type ViewStyle } from "react-native";
+import { View, type ViewStyle } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
@@ -51,7 +52,7 @@ export function AndroidHeaderButton({
     const button = hidden
       ? undefined
       : () => (
-          <Pressable
+          <AnimatedPressable
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
             accessibilityState={{ disabled }}
@@ -71,7 +72,7 @@ export function AndroidHeaderButton({
                 {text}
               </Typography.Paragraph>
             )}
-          </Pressable>
+          </AnimatedPressable>
         );
     return placement === "left" ? { headerLeft: button } : { headerRight: button };
   }, [Icon, accessibilityLabel, disabled, foreground, glass, hasGlass, hidden, placement, text]);
@@ -84,7 +85,7 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
   const foreground = useThemeColor("foreground");
   const glass = useChromeGlass();
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={t("common.back")}
       android_ripple={ICON_RIPPLE}
@@ -97,7 +98,7 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
       <GlassCircle glass={hasGlass ? glass : undefined}>
         <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
       </GlassCircle>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

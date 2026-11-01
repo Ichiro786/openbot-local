@@ -23,7 +23,8 @@ import UserRound from "lucide-react-native/icons/user-round";
 import UsersRound from "lucide-react-native/icons/users-round";
 import Vibrate from "lucide-react-native/icons/vibrate";
 import { type ReactNode, useContext, useMemo } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
@@ -77,10 +78,11 @@ function SearchRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       className="min-h-16 flex-row items-center gap-3 px-5 py-2"
-      style={({ pressed }) => ({ opacity: pressed ? 0.58 : 1 })}
+      variant="row"
+      pressOpacity={0.6}
       onPress={() => {
         void haptics.impact("soft");
         onPress();
@@ -104,7 +106,7 @@ function SearchRow({
           </Typography.Paragraph>
         ) : null}
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

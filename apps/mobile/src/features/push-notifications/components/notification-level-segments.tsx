@@ -2,7 +2,8 @@ import type { ServerNotificationLevel } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { NOTIFICATION_LEVEL_KEYS } from "./server-notification-settings";
@@ -53,7 +54,7 @@ export function NotificationLevelSegments({
         const selected = value === level;
         const fromServer = value === null && inherited === level;
         return (
-          <Pressable
+          <AnimatedPressable
             key={level}
             accessibilityRole="radio"
             accessibilityLabel={t(NOTIFICATION_LEVEL_KEYS[level])}
@@ -66,15 +67,15 @@ export function NotificationLevelSegments({
               onSelect(level);
             }}
             className={`min-h-8 justify-center px-2.5 ${selected ? "bg-control-active" : ""}`}
-            style={({ pressed }) => ({
+            pressOpacity={0.6}
+            style={{
               // Between the 8 pt of a small control and the 16 pt of the card, whose radius on a box
               // this low would make a pill. The selection then reads as part of the card.
               borderRadius: SELECTION_RADIUS,
               borderWidth: 1,
               borderStyle: fromServer ? "dashed" : "solid",
               borderColor: fromServer ? accent : "transparent",
-              opacity: pressed ? 0.6 : 1,
-            })}
+            }}
           >
             <Typography.Paragraph
               type="body-xs"
@@ -84,7 +85,7 @@ export function NotificationLevelSegments({
             >
               {t(SHORT_KEYS[level])}
             </Typography.Paragraph>
-          </Pressable>
+          </AnimatedPressable>
         );
       })}
     </View>
