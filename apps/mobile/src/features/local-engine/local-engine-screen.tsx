@@ -141,7 +141,9 @@ function ProgressBar({ progress }: { progress: number }) {
   useEffect(() => {
     width.set(withTiming(progress, { duration: 250, reduceMotion: ReduceMotion.System }));
   }, [progress, width]);
-  const style = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, width.get())) * 100}%` }));
+  const style = useAnimatedStyle(() => ({
+    width: `${Math.max(0, Math.min(1, width.get())) * 100}%` as `${number}%`,
+  }));
   return (
     <View className="h-1 overflow-hidden rounded-full bg-grouped-border">
       <Animated.View style={[{ height: "100%", backgroundColor: PHASE_COLOR.installing }, style]} />
