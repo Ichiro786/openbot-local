@@ -1,9 +1,10 @@
 import type { ChannelSummary } from "@openbot/contracts/ipc";
 import { router } from "expo-router";
-import { Spinner, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
 import { Pressable, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import type { MobileAgentActivity } from "@/features/workspace/model/agent-activity";
+import { ThinkingDots } from "@/shared/components/thinking-dots";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 
@@ -41,7 +42,7 @@ export function ChatChannelWorkRow({
           router.push({ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } });
         }}
       >
-        {activity.phase === "waiting" ? null : <Spinner size="sm" color={String(accent)} />}
+        {activity.phase === "waiting" ? null : <ThinkingDots color={String(accent)} size={5} />}
         <Typography.Paragraph weight="semibold" numberOfLines={2} className="shrink">
           {label}
         </Typography.Paragraph>

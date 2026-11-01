@@ -1,5 +1,5 @@
 import type { MobileTextKey } from "@openbot/i18n/mobile";
-import { Spinner, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
 import { Button } from "@/shared/components/button";
 import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
@@ -7,6 +7,7 @@ import { AGENT_WAIT_ACTION, AGENT_WAIT_STATE } from "@/features/agents/component
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
+import { ThinkingDots } from "@/shared/components/thinking-dots";
 import { useText } from "@/shared/lib/text";
 import type { AwaitingReply, AwaitingReplyState } from "../model/awaiting-replies";
 import { ThinkingTextGradient } from "./thinking-text-gradient";
@@ -99,7 +100,7 @@ export function AwaitingRepliesSection({
                 ) : row.state === "working" ? (
                   // Like the desktop block and the chat activity row: a teammate at work moves.
                   <View className="flex-row items-center gap-2" accessible accessibilityLabel={t(STATE_KEYS.working)}>
-                    <Spinner size="sm" color={secondary} />
+                    <ThinkingDots color={secondary} size={5} />
                     <ThinkingTextGradient
                       text={t(STATE_KEYS.working)}
                       foreground={String(primaryColor)}
