@@ -44,6 +44,7 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  FadeIn,
   FadeInDown,
   ReduceMotion,
   useAnimatedStyle,
@@ -85,6 +86,7 @@ import type { PendingApproval } from "@/features/workspace/model/pending-approva
 import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { haptics } from "@/shared/lib/haptics";
 import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
+import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { mentionDraft } from "../model/chat-mentions";
@@ -155,9 +157,18 @@ const STARTER_OPTIONS = [
   { id: "solve", label: "mobile.chat.starter.solveLabel", detail: "mobile.chat.starter.solveDetail" },
 ] as const satisfies readonly { id: string; label: MobileTextKey; detail: MobileTextKey }[];
 
-const USER_MESSAGE_ENTRANCE = FadeInDown.duration(240)
-  .easing(Easing.bezier(0.23, 1, 0.32, 1))
-  .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] })
+// A just-sent message rises into place on the M3 Expressive default spatial spring (ζ 0.8, k 380,
+// mass 1), so it lands with a hint of overshoot. Only rows in the arrival set get it, and the list does
+// not recycle rows, so scrolling never replays it.
+const USER_MESSAGE_ENTRANCE = FadeInDown.springify()
+  .mass(springs.defaultSpatial.mass)
+  .stiffness(springs.defaultSpatial.stiffness)
+  .damping(springs.defaultSpatial.damping)
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 20 }] })
+  .reduceMotion(ReduceMotion.System);
+// A reply that arrives whole, without the word-by-word playback, fades in on default effects timing.
+const AGENT_MESSAGE_ENTRANCE = FadeIn.duration(timings.defaultEffects.duration)
+  .easing(timings.defaultEffects.easing)
   .reduceMotion(ReduceMotion.System);
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 // The pill takes over from the activity row, so it fades rather than grows from nothing: its first
@@ -578,7 +589,14 @@ const MessageRow = memo(function MessageRow({
       <Animated.View
         key={message.id}
         entering={
-          arriving && !isFirstUser ? (message.author === "user" ? USER_MESSAGE_ENTRANCE : undefined) : undefined
+          arriving && !isFirstUser
+            ? message.author === "user"
+              ? USER_MESSAGE_ENTRANCE
+              : // Playback reveals its own words, and a reply that streamed in place is already shown.
+                !enabled && !message.streaming
+                ? AGENT_MESSAGE_ENTRANCE
+                : undefined
+            : undefined
         }
         className={
           message.author === "user" ? "max-w-full items-end self-end gap-2" : "max-w-full items-start self-start gap-2"
