@@ -58,6 +58,41 @@ export const haptics = {
         ? ExpoHaptics.performAndroidHapticsAsync(A.Long_Press)
         : ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Medium),
     ),
+  /** A message leaves: the key-press click Android plays for its own send buttons. */
+  send: (): Promise<void> =>
+    play(() =>
+      isAndroid
+        ? ExpoHaptics.performAndroidHapticsAsync(A.Virtual_Key)
+        : ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Light),
+    ),
+  /** Something the user asked for went through, such as a copy. */
+  confirm: (): Promise<void> =>
+    play(() =>
+      isAndroid
+        ? ExpoHaptics.performAndroidHapticsAsync(A.Confirm)
+        : ExpoHaptics.notificationAsync(ExpoHaptics.NotificationFeedbackType.Success),
+    ),
+  /** A stop or a refusal, such as stopping a running turn. */
+  reject: (): Promise<void> =>
+    play(() =>
+      isAndroid
+        ? ExpoHaptics.performAndroidHapticsAsync(A.Reject)
+        : ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Rigid),
+    ),
+  /** A switch or toggle lands on or off. Android plays a different click for each. */
+  toggle: (on: boolean): Promise<void> =>
+    play(() =>
+      isAndroid
+        ? ExpoHaptics.performAndroidHapticsAsync(on ? A.Toggle_On : A.Toggle_Off)
+        : ExpoHaptics.selectionAsync(),
+    ),
+  /** A drag or swipe passes the point where releasing commits it. */
+  gestureThreshold: (): Promise<void> =>
+    play(() =>
+      isAndroid
+        ? ExpoHaptics.performAndroidHapticsAsync(A.Gesture_Start)
+        : ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Light),
+    ),
   notification: (type: "success" | "warning" | "error" = "success"): Promise<void> =>
     play(() =>
       isAndroid
