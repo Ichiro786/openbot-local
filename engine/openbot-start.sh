@@ -264,6 +264,30 @@ tracer=$(sed -n 's/^TracerPid:[[:space:]]*//p' /proc/self/status 2>/dev/null)
 [ "$(id -u)" = 0 ] || log "Warning: uid $(id -u); proot -0 is expected. Continuing."
 log "kernel: $(uname -r 2>/dev/null) arch: $(uname -m 2>/dev/null)"
 
+# User virtual-address size, from the end of this process's stack mapping (0x7f_ffff_ffff on a 39-bit
+# kernel, 0xffff_ffff_ffff on a 48-bit one). Android GKI arm64 kernels usually use 39 bits. Google's
+# Antigravity ACP server (the Gemini provider, agy_acp_server.par, 1.2.1 to at least 1.4.1) is built with
+# TCMalloc for 48 bits: it reserves memory with MAP_FIXED_NOREPLACE near 0x6c00_0000_0000 and aborts
+# ("MmapAligned() failed ... TCMalloc assumes a 48-bit virtual address space") before it answers ACP
+# initialize. OpenBot then reports only "could not activate the managed CLI".
+# See google-antigravity/antigravity-cli#64. proot cannot change this; it is the kernel's layout.
+va_bits() {
+  local top bits=0
+  top=$(sed -n 's/^[0-9a-f]*-\([0-9a-f]*\) .*\[stack\]$/\1/p' /proc/self/maps 2>/dev/null | tail -n 1)
+  [ -n "$top" ] || return 1
+  top=$((16#$top))
+  while [ "$top" -gt 1 ]; do top=$((top >> 1)); bits=$((bits + 1)); done
+  echo $((bits + 1))
+}
+VA_BITS=$(va_bits) || VA_BITS=""
+if [ -n "$VA_BITS" ]; then
+  log "user address space: ${VA_BITS}-bit"
+  echo "$VA_BITS" >"$LOCAL_STATE/va-bits" 2>/dev/null
+  if [ "$VA_BITS" -lt 48 ]; then
+    log "Warning: ${VA_BITS}-bit user address space. Google's Gemini (Antigravity) ACP server aborts at start in TCMalloc on such kernels (antigravity-cli#64); its setup ends in \"could not activate the managed CLI\". Other providers are not affected."
+  fi
+fi
+
 chmod 1777 /tmp 2>/dev/null
 touch /tmp/.openbot-write-test 2>/dev/null && rm -f /tmp/.openbot-write-test || die 11 "/tmp is not writable."
 mkdir -p /dev/shm 2>/dev/null
