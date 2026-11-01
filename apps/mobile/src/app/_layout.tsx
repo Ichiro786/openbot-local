@@ -8,7 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { HeroUINativeProvider } from "heroui-native/provider";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { AppState, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
@@ -22,7 +22,6 @@ import { MobileSessionProvider, useMobileSession } from "@/features/auth/context
 import { loadOnboardingProgress } from "@/features/onboarding/model/onboarding-progress";
 import { installNotificationHandler } from "@/features/push-notifications/use-notification-taps";
 import { installQuickActions, resetQuickActions } from "@/features/quick-actions/quick-actions-native";
-import { LocalEngineBanner } from "@/features/local-engine/local-engine-banner";
 import { loadAppLanguage } from "@/features/settings/model/app-language";
 import { loadAppearance, useAppearance } from "@/features/settings/model/appearance";
 import { loadDictationLanguage } from "@/features/settings/model/dictation-language";
@@ -60,6 +59,13 @@ installSupportLog();
 installQuickActions();
 installAppLock();
 installNotificationHandler();
+
+// A normal launch is already in the foreground: start the two reads the splash waits for now, before
+// the first commit, instead of after it. The effect below reads them again for a background launch.
+if (AppState.currentState === "active") {
+  void loadAppearance().catch(() => undefined);
+  void loadMotionPreferences().catch(() => undefined);
+}
 
 const UniwindGestureHandlerRootView = withUniwind(GestureHandlerRootView);
 const lightTheme = { ...DefaultTheme, fonts: navigationFonts };
@@ -178,8 +184,6 @@ function RootNavigator() {
           ) : null}
         </View>
         <BloubStage nativeSplashHidden={nativeHidden} onLayout={() => reportArtwork("stage")} />
-        {/* OpenBot Local: on-device engine status, Start/Stop and sign-in. */}
-        {covered ? null : <LocalEngineBanner />}
         <AppLockOverlay />
       </View>
     </SplashContentReadyContext.Provider>

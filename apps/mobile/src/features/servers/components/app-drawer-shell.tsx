@@ -260,7 +260,9 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
   const navigateAfterClosing = useCallback(
     (href: Href) => {
       closeDrawer();
-      setTimeout(() => router.push(href), 300);
+      // Overlap the push with the second half of the 300 ms close: the sheet or slide-in covers the
+      // rest, so the next screen moves about 160 ms sooner after the tap.
+      setTimeout(() => router.push(href), 140);
     },
     [closeDrawer],
   );

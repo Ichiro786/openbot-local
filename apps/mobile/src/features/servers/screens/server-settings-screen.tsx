@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { confirmOwner } from "@/features/app-lock/model/app-lock";
+import { LocalEngineSettingsSection } from "@/features/local-engine/local-engine-screen";
 import { useMobileSession, useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { hostedServerCalls } from "@/features/servers/api/hosted-servers";
 import { SERVER_AVATAR_CORNER_RATIO, ServerAvatar } from "@/features/servers/components/server-avatar";
@@ -157,6 +158,8 @@ export function ServerSettingsScreen() {
           </SettingsRow>
         ) : null}
       </SettingsSection>
+      {/* OpenBot Local: the engine that runs on this phone. */}
+      <LocalEngineSettingsSection />
       <ServerGeneralSettings serverId={serverId} />
       <ServerKeySettings server={server} />
       {/* A section shows only when the host serves one of its pages to this role. */}

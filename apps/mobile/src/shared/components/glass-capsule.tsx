@@ -97,7 +97,9 @@ export function GlassCapsule({
               blurTarget={blurTarget}
               blurMethod={blurs ? "dimezisBlurViewSdk31Plus" : "none"}
               intensity={BLUR_RADIUS}
-              blurReductionFactor={1}
+              // Downsample before blurring: the capsule is 52 dp tall, so full-resolution blur of the
+              // whole list on every scroll frame only spends RenderThread time nobody sees.
+              blurReductionFactor={4}
               tint={theme === "dark" ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />

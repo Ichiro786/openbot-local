@@ -74,6 +74,8 @@ export default function ServerSettingsLayout() {
       {/* The page names its profile. */}
       <Stack.Screen name="browser-profile" options={{ title: t("mobile.server.route.browserProfiles") }} />
       <Stack.Screen name="browser-profile-agents" options={{ title: t("mobile.server.browserProfiles.agentsTitle") }} />
+      {/* OpenBot Local: the on-device engine (status, start and stop, sign-in, log). */}
+      <Stack.Screen name="local-engine" options={{ title: "Local engine" }} />
     </Stack>
   );
 }
