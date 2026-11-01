@@ -699,7 +699,7 @@ export function ChatView({
     return () => {
       setStoppingTurnId(turnId);
       setSendError(null);
-      void haptics.impact();
+      void haptics.reject();
       stopTurn(turnId).catch((error: unknown) => {
         void haptics.notification("error");
         setStoppingTurnId((current) => (current === turnId ? null : current));
@@ -781,7 +781,7 @@ export function ChatView({
     // the animation would hide the first message until a history that does not load.
     if (!sendsToQueue && ready) motion.beginSend();
     Keyboard.dismiss();
-    void haptics.impact();
+    void haptics.send();
     setShowStarter(false);
     // The outbox keeps the message on this phone and sends it while the server is online.
     return outbox.add(

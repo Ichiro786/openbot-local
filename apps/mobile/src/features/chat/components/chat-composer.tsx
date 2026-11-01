@@ -68,6 +68,7 @@ import { attachmentTypeLabel, shareLocalAttachment } from "./attachment-preview"
 import { AttachmentPreviewSheet } from "./attachment-preview-sheet";
 import { ComposerAttachmentTile, localPreviewUri } from "./composer-attachment-tile";
 import { ComposerPasteTarget, type PastedFiles } from "./composer-paste-target";
+import { ComposerSendControl } from "./composer-send-control";
 import type { ComposerVoice } from "./composer-voice";
 import type { ChatAttachments } from "./use-chat-attachments";
 import { VoiceCallBar } from "./voice-call-bar";
@@ -1272,41 +1273,21 @@ export const ChatComposer = memo(function ChatComposer({
                       )}
                     </Pressable>
                   ) : (
-                    <Pressable
-                      accessibilityLabel={controlLabel}
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: !control.pressable, busy: control.spinner }}
-                      disabled={!control.pressable}
-                      className="size-10 items-center justify-center rounded-full"
-                      style={{
-                        // Nothing to send reads as a bare glyph on the card, not as a
-                        // filled control the user could press.
-                        backgroundColor: control.primed ? action : "transparent",
-                        // The card dims as a whole when the composer is disabled.
-                        // Dim only this control for a state the card does not show.
-                        opacity: disabled || control.pressable ? 1 : 0.45,
-                      }}
+                    // Send, Stop and Dictate morph in place: nothing to send reads as a bare
+                    // glyph on the card, and a primed fill pops in behind the arrow.
+                    <ComposerSendControl
+                      mode={control.mode}
+                      primed={control.primed}
+                      spinner={control.spinner}
+                      pressable={control.pressable}
+                      disabled={disabled}
+                      label={controlLabel}
+                      action={action}
+                      actionForeground={actionForeground}
+                      foreground={foreground}
+                      muted={muted}
                       onPress={pressControl}
-                    >
-                      {control.spinner ? (
-                        <Spinner size="sm" color={String(actionForeground)} />
-                      ) : control.mode === "stop" ? (
-                        <Square
-                          color={String(actionForeground)}
-                          fill={String(actionForeground)}
-                          size={14}
-                          strokeWidth={2}
-                        />
-                      ) : control.mode === "dictate" ? (
-                        <Mic color={String(foreground)} size={21} strokeWidth={1.8} />
-                      ) : (
-                        <ArrowUp
-                          color={String(control.primed ? actionForeground : muted)}
-                          size={21}
-                          strokeWidth={2.2}
-                        />
-                      )}
-                    </Pressable>
+                    />
                   )}
                 </Animated.View>
               </View>
