@@ -3,6 +3,7 @@ import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { Switch, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { MenuView } from "@/shared/components/menu-view";
+import { haptics } from "@/shared/lib/haptics";
 import type { SettingsPickerProps, SettingsSwitchProps } from "./settings-controls.types";
 
 /**
@@ -61,7 +62,11 @@ export function SettingsSwitch({ value, disabled, label, onValueChange }: Settin
         value={value}
         disabled={disabled}
         trackColor={{ true: accent }}
-        onValueChange={onValueChange}
+        onValueChange={(next) => {
+          // Android plays a different click for on and off, as its own Settings switches do.
+          void haptics.toggle(next);
+          onValueChange(next);
+        }}
       />
     </View>
   );
