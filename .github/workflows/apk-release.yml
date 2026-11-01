@@ -31,7 +31,7 @@ jobs:
         id: run
         run: |
           set -euo pipefail
-          read -r name conclusion sha < <(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+          IFS=$'\t' read -r name conclusion sha < <(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
             --jq '[.name, .conclusion, .head_sha] | @tsv')
           echo "run $RUN_ID: $name, $conclusion, $sha"
           [ "$name" = "Build OpenBot Local (Android APK)" ] || { echo "::error::run $RUN_ID is '$name'"; exit 1; }
