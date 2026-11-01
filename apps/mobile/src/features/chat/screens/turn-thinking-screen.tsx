@@ -2,7 +2,8 @@ import type { AgentTasksSnapshot, ConversationSnapshot } from "@openbot/contract
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import Puzzle from "lucide-react-native/icons/puzzle";

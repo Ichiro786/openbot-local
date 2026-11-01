@@ -1,4 +1,5 @@
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Folder from "lucide-react-native/icons/folder";
 import ShieldAlert from "lucide-react-native/icons/shield-alert";

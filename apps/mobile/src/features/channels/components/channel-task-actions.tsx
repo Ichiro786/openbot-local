@@ -1,5 +1,6 @@
 import type { ChannelTask } from "@openbot/contracts/ipc";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { View } from "react-native";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { channelTaskCancelCards } from "@/features/channels/model/channel-task-actions";

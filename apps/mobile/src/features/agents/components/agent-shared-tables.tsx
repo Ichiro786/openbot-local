@@ -1,6 +1,7 @@
 import type { SharedTable } from "@openbot/contracts/ipc";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useState } from "react";

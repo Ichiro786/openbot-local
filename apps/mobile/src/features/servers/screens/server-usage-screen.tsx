@@ -1,7 +1,8 @@
 import type { AnalyticsAgent } from "@openbot/contracts/ipc";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { AgentProviderAvatar } from "@/features/agents/components/agent-provider-avatar";

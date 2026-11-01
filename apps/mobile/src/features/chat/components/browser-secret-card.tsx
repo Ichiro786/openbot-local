@@ -1,6 +1,7 @@
 import type { BrowserTakeoverRequest, RespondToBrowserSecretInput } from "@openbot/contracts/ipc";
 import { GlassView } from "expo-glass-effect";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Globe from "lucide-react-native/icons/globe";

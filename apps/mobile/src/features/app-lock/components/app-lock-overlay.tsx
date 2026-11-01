@@ -1,5 +1,6 @@
 import { usePathname } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Fingerprint from "lucide-react-native/icons/fingerprint-pattern";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";

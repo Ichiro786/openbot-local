@@ -1,5 +1,6 @@
 import type { MobileReleaseNoteGroup, MobileReleaseNotes } from "@openbot/contracts/mobile-features";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import { type PropsWithChildren, type ReactNode, useState } from "react";
 import { Linking, Pressable, View } from "react-native";

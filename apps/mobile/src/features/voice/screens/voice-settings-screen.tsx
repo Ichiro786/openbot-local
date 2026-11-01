@@ -1,7 +1,8 @@
 import type { SpeechVoice } from "@openbot/contracts/ipc";
 import type { MobileTranslate } from "@openbot/i18n/mobile";
 import { router } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import Check from "lucide-react-native/icons/check";
 import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";

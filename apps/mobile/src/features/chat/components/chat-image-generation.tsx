@@ -1,7 +1,8 @@
 import type { AttachmentSummary, ImageGenerationAspectRatio, ImageGenerationInfo } from "@openbot/contracts/ipc";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { Image } from "expo-image";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useState } from "react";

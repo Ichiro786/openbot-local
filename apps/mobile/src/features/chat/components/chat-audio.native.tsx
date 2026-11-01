@@ -1,7 +1,8 @@
 import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import * as Sharing from "expo-sharing";
 import { useVideoPlayer, type VideoPlayer } from "expo-video";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Pause from "lucide-react-native/icons/pause";
 import Play from "lucide-react-native/icons/play";

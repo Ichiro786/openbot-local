@@ -1,7 +1,8 @@
 import { rankAgentMentions } from "@openbot/contracts/agent-mention-rank";
 import { GlassView } from "expo-glass-effect";
 import { useIsFocused } from "expo-router";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Blocks from "lucide-react-native/icons/blocks";
 import Mic from "lucide-react-native/icons/mic";

@@ -3,7 +3,8 @@ import type { HostedServerCatalogPlan, HostedServerList, HostedServerSummary } f
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Chip, Skeleton, Typography } from "heroui-native";
+import { Chip, Skeleton, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import CreditCard from "lucide-react-native/icons/credit-card";

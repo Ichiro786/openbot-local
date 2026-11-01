@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";

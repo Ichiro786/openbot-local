@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import type { LucideIcon } from "lucide-react-native";
 import Check from "lucide-react-native/icons/check";

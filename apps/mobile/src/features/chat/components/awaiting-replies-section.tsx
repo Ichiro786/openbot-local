@@ -1,5 +1,6 @@
 import type { MobileTextKey } from "@openbot/i18n/mobile";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { AGENT_WAIT_ACTION, AGENT_WAIT_STATE } from "@/features/agents/components/agent-wait-badge";

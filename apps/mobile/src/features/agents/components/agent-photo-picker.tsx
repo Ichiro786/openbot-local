@@ -1,6 +1,7 @@
 import type { RemoteFileUpload } from "@openbot/team-client/remote-peer";
 import type { Href } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ImagePlus from "lucide-react-native/icons/image-plus";
 import Trash2 from "lucide-react-native/icons/trash";

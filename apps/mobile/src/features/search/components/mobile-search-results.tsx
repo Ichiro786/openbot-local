@@ -1,6 +1,7 @@
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";

@@ -1,5 +1,6 @@
 import { ONE_TIME_CODE_LENGTH } from "@openbot/contracts/validation";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import type { LucideIcon } from "lucide-react-native";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ScanLine from "lucide-react-native/icons/scan-line";

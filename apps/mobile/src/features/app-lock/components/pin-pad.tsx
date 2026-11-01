@@ -1,4 +1,5 @@
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Delete from "lucide-react-native/icons/delete";
 import type { ReactNode } from "react";

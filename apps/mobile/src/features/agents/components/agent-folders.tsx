@@ -14,7 +14,8 @@ import {
 } from "@openbot/contracts/ipc";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import CornerLeftUp from "lucide-react-native/icons/corner-left-up";

@@ -1,7 +1,8 @@
 import type { AgentTemplatePreview } from "@openbot/contracts/ipc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useState } from "react";
 import { Alert, Share, View } from "react-native";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";

@@ -10,7 +10,8 @@ import {
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { Platform } from "react-native";
 import { useUniwind } from "uniwind";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";

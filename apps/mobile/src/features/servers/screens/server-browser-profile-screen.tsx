@@ -7,7 +7,8 @@ import {
 } from "@openbot/contracts/ipc";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import Plus from "lucide-react-native/icons/plus";
 import { useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";

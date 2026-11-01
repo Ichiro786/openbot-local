@@ -6,7 +6,8 @@ import {
 } from "@openbot/contracts/event-filter-value";
 import type { EventFilter } from "@openbot/contracts/ipc-events";
 import * as Clipboard from "expo-clipboard";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import Check from "lucide-react-native/icons/check";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";

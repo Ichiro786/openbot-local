@@ -1,5 +1,6 @@
 import { type CameraType, CameraView } from "expo-camera";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import SwitchCamera from "lucide-react-native/icons/switch-camera";
 import { useEffect, useRef, useState } from "react";

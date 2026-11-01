@@ -2,7 +2,8 @@ import type { ChannelSummary, SidebarLayoutSnapshot } from "@openbot/contracts/i
 import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { type Href, router, Stack } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";

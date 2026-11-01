@@ -1,7 +1,8 @@
 import { type McpAuthValues, mcpFlowComplete } from "@openbot/contracts/mcp-connect-flows";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Lock from "lucide-react-native/icons/lock";

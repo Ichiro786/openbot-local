@@ -1,7 +1,8 @@
 import type { HostedServerSummary } from "@openbot/contracts/hosted-servers";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Spinner, Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Circle from "lucide-react-native/icons/circle";
 import CircleCheck from "lucide-react-native/icons/circle-check";

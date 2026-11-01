@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useRef } from "react";
 import { Modal, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

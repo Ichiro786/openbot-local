@@ -1,4 +1,4 @@
-import { Button } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
 

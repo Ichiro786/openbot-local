@@ -1,7 +1,8 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { ConversationQuestionPrompt } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock, UiConfirmBlock, UiConfirmValueField } from "@openbot/contracts/ui-blocks";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";

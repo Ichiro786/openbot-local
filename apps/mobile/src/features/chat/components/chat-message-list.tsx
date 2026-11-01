@@ -6,7 +6,8 @@ import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contrac
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useIsFocused } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import type { LucideIcon } from "lucide-react-native";
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import CalendarPlus from "lucide-react-native/icons/calendar-plus";

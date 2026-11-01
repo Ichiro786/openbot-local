@@ -11,7 +11,8 @@ import {
 } from "@openbot/contracts/ipc";
 import { useQuery } from "@tanstack/react-query";
 import { router, useNavigation } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import Plus from "lucide-react-native/icons/plus";

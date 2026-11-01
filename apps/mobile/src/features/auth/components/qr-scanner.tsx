@@ -2,7 +2,8 @@ import { CameraView, type CameraViewProps, useCameraPermissions } from "expo-cam
 import { Stack } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
-import { Alert, Button, Card, Spinner, Surface, Typography } from "heroui-native";
+import { Alert, Card, Spinner, Surface, Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Camera from "lucide-react-native/icons/camera";
 import ScanLine from "lucide-react-native/icons/scan-line";

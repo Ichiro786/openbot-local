@@ -1,6 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import Pin from "lucide-react-native/icons/pin";
 import PinOff from "lucide-react-native/icons/pin-off";
 import { useState } from "react";

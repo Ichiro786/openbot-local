@@ -1,7 +1,8 @@
 import type { WorkflowNode, WorkflowStep } from "@openbot/contracts/ipc";
 import { useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import Square from "lucide-react-native/icons/square";
 import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";

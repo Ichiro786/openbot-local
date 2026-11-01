@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useRef, useState } from "react";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";

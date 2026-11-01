@@ -2,7 +2,8 @@ import type { BrowserViewContextMenu, BrowserViewInput } from "@openbot/contract
 import * as Clipboard from "expo-clipboard";
 import { GlassView } from "expo-glass-effect";
 import { router, useLocalSearchParams } from "expo-router";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";

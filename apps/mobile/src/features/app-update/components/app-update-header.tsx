@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
-import { Button, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
+import { Button } from "@/shared/components/button";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
