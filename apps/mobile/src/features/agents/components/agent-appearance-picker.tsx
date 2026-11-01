@@ -2,7 +2,6 @@ import { AVATAR_HUE_CHOICES, avatarHueSwatch } from "@openbot/brand/bloub-avatar
 import type { AvatarHue } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Shuffle from "lucide-react-native/icons/shuffle";
 import { memo, type ReactNode, useCallback, useState } from "react";
@@ -11,6 +10,7 @@ import { AgentColorGlow, useAgentColorTransition } from "@/features/agents/compo
 import { AvatarThumbnail, BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { createAvatarCandidates } from "@/features/agents/model/avatar-candidates";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";

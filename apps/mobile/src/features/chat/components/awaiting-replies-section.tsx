@@ -1,12 +1,12 @@
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { AGENT_WAIT_ACTION, AGENT_WAIT_STATE } from "@/features/agents/components/agent-wait-badge";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { ThinkingDots } from "@/shared/components/thinking-dots";
 import { useText } from "@/shared/lib/text";
 import type { AwaitingReply, AwaitingReplyState } from "../model/awaiting-replies";

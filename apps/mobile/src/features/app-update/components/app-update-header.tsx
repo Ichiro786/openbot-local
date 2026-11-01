@@ -1,6 +1,5 @@
 import { StatusBar } from "expo-status-bar";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -15,13 +14,13 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
-
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { AppUpdateNotes } from "@/features/app-update/components/app-update-notes";
 import { type AppUpdate, dismissAppUpdate, installAppUpdate } from "@/features/app-update/model/app-update";
 import { BloubEyes, EYES_HEIGHT, EYES_WIDTH } from "@/shared/components/bloub-stage/bloub-eyes";
 import { BLOUB_MOVE, BLOUB_RADIUS, bloubGradient, useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import type { BloubMood } from "@/shared/components/bloub-stage/bloub-stage-store";
+import { Button } from "@/shared/components/button";
 import type { LargeTitleScroll } from "@/shared/components/large-title";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";

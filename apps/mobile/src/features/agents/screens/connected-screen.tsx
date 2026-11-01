@@ -3,7 +3,6 @@ import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { type Href, router, Stack } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";
@@ -87,6 +86,7 @@ import {
 } from "@/features/workspace/model/sidebar-layout";
 import { SplitPaneLayers, useSplitLayout } from "@/shared/components/adaptive-split";
 import { useAppLoadingOverlay, useScreenLoadingLabel } from "@/shared/components/app-loading-overlay";
+import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { LargeTitle, LargeTitleBar, useLargeTitleScroll } from "@/shared/components/large-title";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";

@@ -1,7 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import Pin from "lucide-react-native/icons/pin";
 import PinOff from "lucide-react-native/icons/pin-off";
 import { useState } from "react";
@@ -18,6 +17,7 @@ import {
   useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
+import { Button } from "@/shared/components/button";
 import { LargeTitleScrollView } from "@/shared/components/large-title";
 import { formatUpdatedAt } from "@/shared/lib/format-updated-at";
 import { haptics } from "@/shared/lib/haptics";

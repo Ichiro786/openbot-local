@@ -2,7 +2,6 @@ import type { AnalyticsAgent } from "@openbot/contracts/ipc";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { AgentProviderAvatar } from "@/features/agents/components/agent-provider-avatar";
@@ -15,6 +14,7 @@ import { PlanLimitsSummary } from "@/features/servers/components/plan-limits-sum
 import { SettingsNote } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { LargeTitleScrollView } from "@/shared/components/large-title";
 import { useText } from "@/shared/lib/text";
 

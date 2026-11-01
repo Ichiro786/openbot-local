@@ -1,7 +1,5 @@
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
-
 import type {
   OnboardingIconButtonProps,
   OnboardingPillButtonProps,
@@ -9,6 +7,7 @@ import type {
 } from "@/features/onboarding/components/onboarding-buttons.types";
 import { swapEntering, swapExiting, useOnboardingMotion } from "@/features/onboarding/components/onboarding-motion";
 import { readableOn } from "@/features/onboarding/model/onboarding-colors";
+import { Button } from "@/shared/components/button";
 
 // Every control beside the main action has its height, so the row reads as one set.
 const LARGE = 52;

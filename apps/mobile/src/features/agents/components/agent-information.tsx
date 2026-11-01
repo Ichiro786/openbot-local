@@ -3,7 +3,6 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { agentSkillsQuery } from "@/features/agents/model/agent-skills-query";
@@ -16,6 +15,7 @@ import {
   useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { useText } from "@/shared/lib/text";
 import { AgentFiles } from "./agent-files";
 import { MemoryEditor, RoutineEditor } from "./agent-record-editor";

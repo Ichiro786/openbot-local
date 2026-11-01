@@ -21,6 +21,7 @@ const PRESS_ANIMATION = {
 function ButtonRoot(props: ButtonProps) {
   // The props are a union keyed by `feedbackVariant`; one without feedback takes no scale config.
   const pressed = props.animation === undefined && props.feedbackVariant !== "none";
+  // biome-ignore lint/nursery/noUnsafeTypeAssertion: the spread only adds `animation` to a variant that takes one.
   return <HeroButton {...((pressed ? { ...props, animation: PRESS_ANIMATION } : props) as ButtonProps)} />;
 }
 

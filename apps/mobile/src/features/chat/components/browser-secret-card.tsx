@@ -1,7 +1,6 @@
 import type { BrowserTakeoverRequest, RespondToBrowserSecretInput } from "@openbot/contracts/ipc";
 import { GlassView } from "expo-glass-effect";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Globe from "lucide-react-native/icons/globe";
@@ -10,6 +9,7 @@ import X from "lucide-react-native/icons/x";
 import { type ReactNode, useState } from "react";
 import { Pressable, TextInput, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";

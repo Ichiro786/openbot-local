@@ -7,7 +7,6 @@ import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useIsFocused } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import type { LucideIcon } from "lucide-react-native";
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import CalendarPlus from "lucide-react-native/icons/calendar-plus";
@@ -85,6 +84,7 @@ import { agentActivityMood, type MobileAgentActivity } from "@/features/workspac
 import type { PendingApproval } from "@/features/workspace/model/pending-approvals";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { AnimatedPressable } from "@/shared/components/animated-pressable";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";

@@ -1,6 +1,5 @@
 import { usePathname } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Fingerprint from "lucide-react-native/icons/fingerprint-pattern";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
@@ -28,6 +27,7 @@ import { type DeviceUnlockKind, deviceUnlockKind } from "@/features/app-lock/mod
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { BloubBlock } from "@/shared/components/bloub-stage/bloub-block";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isIOS } from "@/shared/lib/platform";

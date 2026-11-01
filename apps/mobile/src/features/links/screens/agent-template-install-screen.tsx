@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
@@ -24,6 +23,7 @@ import { serverStatusLabel, showsOnline } from "@/features/workspace/model/serve
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { BlurReveal } from "@/shared/components/blur-reveal";
+import { Button } from "@/shared/components/button";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { isAndroid, isIOS } from "@/shared/lib/platform";

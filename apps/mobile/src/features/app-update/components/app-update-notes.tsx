@@ -1,6 +1,5 @@
 import type { MobileReleaseNoteGroup, MobileReleaseNotes } from "@openbot/contracts/mobile-features";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import { type PropsWithChildren, type ReactNode, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
@@ -13,9 +12,9 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { MOBILE_CHANGELOG_URL, useAppUpdateNotes } from "@/features/app-update/model/app-update";
 import { BLOUB_RADIUS } from "@/shared/components/bloub-stage/bloub-look";
+import { Button } from "@/shared/components/button";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { type MobileText, useText } from "@/shared/lib/text";

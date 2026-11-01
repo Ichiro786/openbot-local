@@ -2,7 +2,6 @@ import type { HostedServerSummary } from "@openbot/contracts/hosted-servers";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { router, useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Circle from "lucide-react-native/icons/circle";
 import CircleCheck from "lucide-react-native/icons/circle-check";
@@ -19,6 +18,7 @@ import {
   hostedSetupStatus,
 } from "@/features/servers/model/hosted-server-plans";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";

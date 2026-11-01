@@ -2,7 +2,6 @@ import { rankAgentMentions } from "@openbot/contracts/agent-mention-rank";
 import { GlassView } from "expo-glass-effect";
 import { useIsFocused } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Blocks from "lucide-react-native/icons/blocks";
 import Mic from "lucide-react-native/icons/mic";
@@ -47,6 +46,7 @@ import { showFailureAlert } from "@/features/analytics/failure-reports";
 import type { ChatBubbleMessage } from "@/features/chat/model/chat-messages";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
+import { Button } from "@/shared/components/button";
 import {
   COMPOSER_FIELD_VERTICAL_PADDING,
   COMPOSER_TOOLBAR_HEIGHT,

@@ -2,8 +2,8 @@ import type { PlanLimitRow, PlanLimits } from "@openbot/team-client/plan-limits"
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import { View, type ViewStyle } from "react-native";
-import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { lowestPlanLimitsFirst, planLimitName, planLimitWindowLabel } from "@/features/servers/model/plan-limits";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";

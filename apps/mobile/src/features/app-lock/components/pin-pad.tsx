@@ -1,10 +1,10 @@
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Delete from "lucide-react-native/icons/delete";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 import { PIN_LENGTH } from "@/features/app-lock/model/app-lock-storage";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

@@ -1,6 +1,5 @@
 import { type ConversationReaction, MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Copy from "lucide-react-native/icons/copy";
@@ -23,6 +22,7 @@ import Animated, {
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { toggleReadAloud, useReadingAloud } from "@/features/voice/model/message-reading";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { useText } from "@/shared/lib/text";

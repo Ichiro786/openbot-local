@@ -8,7 +8,6 @@ import {
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import Plus from "lucide-react-native/icons/plus";
 import { useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
@@ -25,6 +24,7 @@ import {
   SettingsSection,
 } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { haptics } from "@/shared/lib/haptics";

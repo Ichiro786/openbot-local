@@ -1,9 +1,9 @@
 import { Image } from "expo-image";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useRef } from "react";
 import { Modal, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 
 export interface AttachmentPreview {

@@ -3,7 +3,6 @@ import * as Clipboard from "expo-clipboard";
 import { GlassView } from "expo-glass-effect";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
@@ -37,6 +36,7 @@ import {
 } from "@/features/workspace/components/use-live-workspace";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgent, MobileBrowserViewSupport } from "@/features/workspace/model/workspace-types";
+import { Button } from "@/shared/components/button";
 import { type MenuAction, type MenuComponentRef, MenuView } from "@/shared/components/menu-view";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";

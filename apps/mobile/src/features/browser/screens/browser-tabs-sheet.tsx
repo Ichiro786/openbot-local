@@ -1,7 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import type { LucideIcon } from "lucide-react-native";
 import Check from "lucide-react-native/icons/check";
@@ -18,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, Share, TextInput, type TextInputInstance, View } from "react-native";
 import { useAgentBrowserTabs } from "@/features/workspace/components/use-live-workspace";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { haptics } from "@/shared/lib/haptics";
 import { isIOS } from "@/shared/lib/platform";

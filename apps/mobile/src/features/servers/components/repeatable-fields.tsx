@@ -1,10 +1,10 @@
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import X from "lucide-react-native/icons/x";
 import { type ReactNode, useRef, useState } from "react";
 import { type TextInputProps, View } from "react-native";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
+import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { haptics } from "@/shared/lib/haptics";
 

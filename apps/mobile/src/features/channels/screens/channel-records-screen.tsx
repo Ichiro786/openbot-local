@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { MemoryEditor, RoutineEditor } from "@/features/agents/components/agent-record-editor";
 import { useEventRoutines } from "@/features/agents/components/use-event-routines";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -9,6 +8,7 @@ import { useChannels } from "@/features/channels/components/use-channels";
 import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { useText } from "@/shared/lib/text";
 
 export function ChannelRecordsScreen({ section }: { section: "memories" | "memory" | "routines" | "routine" }) {

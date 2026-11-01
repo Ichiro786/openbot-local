@@ -2,7 +2,6 @@ import { type McpAuthValues, mcpFlowComplete } from "@openbot/contracts/mcp-conn
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Lock from "lucide-react-native/icons/lock";
@@ -12,6 +11,7 @@ import { useCSSVariable } from "uniwind";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";

@@ -11,7 +11,6 @@ import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/clau
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useQuery } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { Platform } from "react-native";
 import { useUniwind } from "uniwind";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -23,6 +22,7 @@ import {
   useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { useText } from "@/shared/lib/text";
 
 const EFFORT_LABELS = {

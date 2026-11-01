@@ -1,7 +1,6 @@
 import type { ShjToken } from "@speed-highlight/core";
 import * as Clipboard from "expo-clipboard";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Copy from "lucide-react-native/icons/copy";
@@ -9,6 +8,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { type ColorValue, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { type CodeToken, cachedHighlight, codeLanguageLabel, highlightCode } from "../model/code-highlight";

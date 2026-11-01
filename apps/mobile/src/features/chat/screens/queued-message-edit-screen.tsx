@@ -3,7 +3,6 @@ import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import { router, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ImagePlus from "lucide-react-native/icons/image-plus";
 import Paperclip from "lucide-react-native/icons/paperclip";
@@ -16,6 +15,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/features/settings/components/settings-content";
+import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { haptics } from "@/shared/lib/haptics";

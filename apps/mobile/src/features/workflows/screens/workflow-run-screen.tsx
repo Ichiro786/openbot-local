@@ -2,7 +2,6 @@ import type { WorkflowNode, WorkflowStep } from "@openbot/contracts/ipc";
 import { useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import Square from "lucide-react-native/icons/square";
 import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
@@ -28,6 +27,7 @@ import {
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
+import { Button } from "@/shared/components/button";
 import { LargeTitleScrollView } from "@/shared/components/large-title";
 import { formatUpdatedAt } from "@/shared/lib/format-updated-at";
 import { haptics } from "@/shared/lib/haptics";

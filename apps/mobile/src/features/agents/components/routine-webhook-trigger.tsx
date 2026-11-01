@@ -7,7 +7,6 @@ import {
 import type { EventFilter } from "@openbot/contracts/ipc-events";
 import * as Clipboard from "expo-clipboard";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import Check from "lucide-react-native/icons/check";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -18,6 +17,7 @@ import { Alert, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
+import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";

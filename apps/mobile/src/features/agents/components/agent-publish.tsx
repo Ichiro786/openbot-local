@@ -2,7 +2,6 @@ import type { AgentTemplatePreview } from "@openbot/contracts/ipc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useState } from "react";
 import { Alert, Share, View } from "react-native";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
@@ -12,6 +11,7 @@ import { SettingsRow, SettingsSection } from "@/features/settings/components/set
 import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, type MobileText, useText } from "@/shared/lib/text";

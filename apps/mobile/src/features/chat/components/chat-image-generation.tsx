@@ -2,7 +2,6 @@ import type { AttachmentSummary, ImageGenerationAspectRatio, ImageGenerationInfo
 import MaskedView from "@react-native-masked-view/masked-view";
 import { Image } from "expo-image";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useState } from "react";
@@ -10,6 +9,7 @@ import { Platform, Pressable, useWindowDimensions, View } from "react-native";
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { scheduleOnRN } from "react-native-worklets";
+import { Button } from "@/shared/components/button";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
 import type { ImageDimensions } from "../model/image-dimensions";

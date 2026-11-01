@@ -1,12 +1,12 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsNote, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { Button } from "@/shared/components/button";
 import { GLASS_CAPSULE_HEIGHT } from "@/shared/components/glass-capsule";
 import { LargeTitle, LargeTitleBar, useLargeTitleScroll } from "@/shared/components/large-title";
 import { haptics } from "@/shared/lib/haptics";

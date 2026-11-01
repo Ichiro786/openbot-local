@@ -1,7 +1,6 @@
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
@@ -20,6 +19,7 @@ import {
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { BlurEnter, BlurSwap, swapItemMotion } from "@/shared/components/blur-swap";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useTransitionMode } from "@/shared/lib/motion";
 import { isIOS } from "@/shared/lib/platform";

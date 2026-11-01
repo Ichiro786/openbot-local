@@ -1,7 +1,6 @@
 import type { SharedTable } from "@openbot/contracts/ipc";
 import { useQuery } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useState } from "react";
@@ -11,6 +10,7 @@ import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

@@ -4,7 +4,6 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Chip, Skeleton, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import CreditCard from "lucide-react-native/icons/credit-card";
@@ -21,6 +20,7 @@ import { hostedServerInSetup } from "@/features/servers/model/hosted-server-plan
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Button } from "@/shared/components/button";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { devFeatureOverride } from "@/shared/lib/dev-feature-overrides";
 import { refreshMobileFeatures, useMobileFeature } from "@/shared/lib/mobile-features";

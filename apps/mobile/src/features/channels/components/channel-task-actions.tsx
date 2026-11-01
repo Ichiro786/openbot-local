@@ -1,12 +1,12 @@
 import type { ChannelTask } from "@openbot/contracts/ipc";
 import { Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { View } from "react-native";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { channelTaskCancelCards } from "@/features/channels/model/channel-task-actions";
 import { ChatMarkdown } from "@/features/chat/components/chat-markdown";
 import { SettingsSection } from "@/features/settings/components/settings-content";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
+import { Button } from "@/shared/components/button";
 import { CoveringMenuView } from "@/shared/components/covering-menu-view";
 import { useText } from "@/shared/lib/text";
 

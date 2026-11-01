@@ -24,7 +24,6 @@ import UsersRound from "lucide-react-native/icons/users-round";
 import Vibrate from "lucide-react-native/icons/vibrate";
 import { type ReactNode, useContext, useMemo } from "react";
 import { View } from "react-native";
-import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
@@ -36,6 +35,7 @@ import {
   mobileSearchSnippet,
 } from "@/features/search/model/mobile-search";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { formatUpdatedAt } from "@/shared/lib/format-updated-at";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";

@@ -1,7 +1,6 @@
 import { SPEECH_VOICES } from "@openbot/contracts/ipc";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
-import { Button } from "@/shared/components/button";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Play from "lucide-react-native/icons/play";
@@ -15,6 +14,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/features/settings/components/settings-content";
+import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { useVoicePreview } from "../components/use-voice-preview";
