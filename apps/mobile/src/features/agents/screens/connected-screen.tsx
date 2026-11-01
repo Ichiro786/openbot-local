@@ -95,6 +95,7 @@ import { BAR_BUTTON_SIZE, NATIVE_BAR_HEIGHT, useBarTop } from "@/shared/lib/nati
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
+import { useStableMap } from "@/shared/lib/use-stable-map";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const ONBOARDING_EXIT = FadeOut.duration(220).easing(EASE_OUT);
@@ -345,9 +346,14 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   const [collapsedByServer, setCollapsedByServer] = useState<Record<string, ReadonlySet<string>>>({});
   const collapsedSectionIds = collapsedByServer[activeServer.id];
   const channels = useChannels(activeServer.id);
-  const channelAgents = useMemo(
-    () => new Map(agents.filter((agent) => agent.serverId === activeServer.id).map((agent) => [agent.id, agent])),
-    [agents, activeServer.id],
+  // OpenBot Local (audit M-2): `agents` gets a new identity on every delivered message. Keep the map
+  // when its contents are the same agent objects, so channel rows (which depend on it) do not all
+  // render again on each message.
+  const channelAgents = useStableMap(
+    useMemo(
+      () => new Map(agents.filter((agent) => agent.serverId === activeServer.id).map((agent) => [agent.id, agent])),
+      [agents, activeServer.id],
+    ),
   );
   const [foreground, muted] = useThemeColor(["foreground", "muted"]);
   // The Android header buttons have the glass of the search field.

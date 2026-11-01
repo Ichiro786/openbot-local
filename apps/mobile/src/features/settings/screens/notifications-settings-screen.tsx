@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { useState } from "react";
-import { Linking } from "react-native";
+import { useEffect, useState } from "react";
+import { AppState, Linking } from "react-native";
 import { useUniwind } from "uniwind";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { NotificationMatrix } from "@/features/push-notifications/components/notification-matrix";
@@ -16,6 +16,12 @@ import {
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import {
+  androidSdkInt,
+  canPromoteLiveUpdates,
+  isEngineSupported,
+  openLiveUpdateSettings,
+} from "../../../../modules/openbot-engine";
 
 /**
  * The one place for the notification settings. First what the user hears about from each server and
@@ -34,6 +40,16 @@ export function NotificationsSettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [liveActivitiesError, setLiveActivitiesError] = useState<string | null>(null);
   const dark = theme === "dark";
+  const [liveUpdatesSdk] = useState(androidSdkInt);
+  const liveUpdatesAvailable = isAndroid && isEngineSupported;
+  const [liveUpdatesPromoted, setLiveUpdatesPromoted] = useState(canPromoteLiveUpdates);
+  useEffect(() => {
+    if (!liveUpdatesAvailable) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setLiveUpdatesPromoted(canPromoteLiveUpdates());
+    });
+    return () => subscription.remove();
+  }, [liveUpdatesAvailable]);
   const busy = !preference.ready || preference.saving;
   const denied = preference.enabled && preference.permission === "denied";
   const soundAvailable = !busy && (preference.enabled || (!isAndroid && liveActivities.enabled));
@@ -104,16 +120,25 @@ export function NotificationsSettingsScreen() {
           />
         </SettingsRow>
       </SettingsSection>
-      {isAndroid ? null : (
+      {/* OpenBot Local: on Android the same choice drives the Live Update notification (Android 16
+          ProgressStyle, shown by realme UI / ColorOS as a Live Alert) while an agent works. */}
+      {isAndroid && !liveUpdatesAvailable ? null : (
         <SettingsSection
-          title={t("mobile.settings.liveActivities.title")}
-          footer={liveActivitiesError ?? t("mobile.settings.liveActivities.footer")}
+          title={isAndroid ? "Live updates" : t("mobile.settings.liveActivities.title")}
+          footer={
+            liveActivitiesError ??
+            (isAndroid
+              ? liveUpdatesPromoted
+                ? "While an agent works, its progress shows in the status bar and on the lock screen. It closes itself a few seconds after the reply."
+                : "While an agent works, its progress shows as an ongoing notification. On Android 16, allow Live updates for this app to see it in the status bar and on the lock screen."
+              : t("mobile.settings.liveActivities.footer"))
+          }
         >
           <SettingsRow>
             <SettingsSwitch
               value={liveActivities.enabled}
               disabled={!liveActivities.ready || liveActivities.saving}
-              label={t("mobile.settings.liveActivities.toggle")}
+              label={isAndroid ? "Live updates for running tasks" : t("mobile.settings.liveActivities.toggle")}
               dark={dark}
               onValueChange={(enabled) => {
                 mobileAnalytics.track("notification_settings_action", { action: "live_activities_toggled", enabled });
@@ -128,6 +153,18 @@ export function NotificationsSettingsScreen() {
               onPress={() => saveLiveActivities(liveActivities.enabled)}
             >
               <Typography.Paragraph>{t("mobile.settings.liveActivities.retry")}</Typography.Paragraph>
+            </SettingsRow>
+          ) : null}
+          {isAndroid && liveUpdatesSdk >= 36 && !liveUpdatesPromoted && liveActivities.enabled ? (
+            <SettingsRow
+              disclosure={false}
+              onPress={() => {
+                openLiveUpdateSettings();
+                // The answer shows when the user comes back.
+                setTimeout(() => setLiveUpdatesPromoted(canPromoteLiveUpdates()), 1500);
+              }}
+            >
+              <Typography.Paragraph>Allow in the status bar</Typography.Paragraph>
             </SettingsRow>
           ) : null}
         </SettingsSection>

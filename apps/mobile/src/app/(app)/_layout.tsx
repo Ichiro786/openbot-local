@@ -58,8 +58,25 @@ export const unstable_settings = {
   anchor: "connected",
 };
 
-function AuthenticatedStack() {
+/**
+ * OpenBot Local (audit M-3): reads the route only to fill two refs. In its own leaf, a push, a pop or
+ * a param change re-renders this and not the whole Stack config of AuthenticatedStack.
+ */
+function RouteRefs({
+  openChat,
+  onChatList,
+}: {
+  openChat: { current: string | null };
+  onChatList: { current: boolean };
+}) {
   const segments = useSegments();
+  const { agentId } = useGlobalSearchParams<{ agentId?: string }>();
+  openChat.current = segments.at(-2) === "chat" && typeof agentId === "string" ? agentId : null;
+  onChatList.current = segments.at(-1) === "connected";
+  return null;
+}
+
+function AuthenticatedStack() {
   // Reduced motion, from the device or from Settings, replaces the full-screen slide with a cross-fade.
   const pushAnimation = useReducedMotion() ? "fade" : "slide_from_right";
   // Beside the chat list pane, a chat takes the place of the chat before it, so it fades in place.
@@ -76,11 +93,8 @@ function AuthenticatedStack() {
   } as const;
   const [navigationGate] = useState(createChatNavigationGate);
   const { closeDrawer } = useAppDrawer();
-  const { agentId: openAgentId } = useGlobalSearchParams<{ agentId?: string }>();
   const openChat = useRef<string | null>(null);
-  openChat.current = segments.at(-2) === "chat" && typeof openAgentId === "string" ? openAgentId : null;
   const onChatList = useRef(false);
-  onChatList.current = segments.at(-1) === "connected";
   /** Opens a chat, or the chat list for `null`, from a Live Activity or a notification. */
   const openFromOutside = useCallback(
     (agentId: string | null) =>
@@ -168,6 +182,7 @@ function AuthenticatedStack() {
 
   return (
     <ChatNavigationGateContext value={navigationGate}>
+      <RouteRefs openChat={openChat} onChatList={onChatList} />
       <Stack
         screenListeners={({ route }) =>
           route.name === "connected"

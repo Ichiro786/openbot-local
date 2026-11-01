@@ -31,6 +31,7 @@ import { loadAgentColorMessages } from "@/features/settings/model/message-color"
 import { useMotionPreferences } from "@/features/settings/model/motion";
 import { loadMotionPreferences } from "@/features/settings/model/motion-storage";
 import { loadPushNotificationPreference } from "@/features/settings/model/push-notifications";
+import { loadThemeStyle, refreshDynamicColor } from "@/features/settings/model/theme-style";
 import { resetShareExtension } from "@/features/share/model/share-extension";
 import { installSupportLog } from "@/features/support/model/support-log-capture";
 import { parakeetModel } from "@/features/voice/model/parakeet-model";
@@ -65,7 +66,13 @@ installNotificationHandler();
 if (AppState.currentState === "active") {
   void loadAppearance().catch(() => undefined);
   void loadMotionPreferences().catch(() => undefined);
+  // OpenBot Local: AMOLED black and Material You colors, before the first screen paints.
+  void loadThemeStyle().catch(() => undefined);
 }
+// The wallpaper (and so the Material You palette) can change while the app is away.
+AppState.addEventListener("change", (state) => {
+  if (state === "active") refreshDynamicColor();
+});
 
 const UniwindGestureHandlerRootView = withUniwind(GestureHandlerRootView);
 const lightTheme = { ...DefaultTheme, fonts: navigationFonts };
@@ -211,6 +218,7 @@ export default function RootLayout() {
   useEffect(() => {
     void untilForeground().then(() => {
       void loadAppearance().catch(() => undefined);
+      void loadThemeStyle().catch(() => undefined);
       void loadHapticsPreference().catch(() => undefined);
       void loadAgentColorMessages().catch(() => undefined);
       void loadLiveActivitiesPreference().catch(() => undefined);
@@ -232,8 +240,10 @@ export default function RootLayout() {
     <UniwindGestureHandlerRootView className="flex-1">
       {/* The app draws under the system bars and pads with safe area insets. Expo Go on Android does not
           report edge-to-edge, and without these props the keyboard provider pads the whole app. */}
+      {/* OpenBot Local (audit Q-8): preload measures the keyboard once at start, so the first composer
+          focus of a session does not drop frames. */}
       <KeyboardProvider
-        preload={false}
+        preload
         statusBarTranslucent={isAndroid}
         navigationBarTranslucent={isAndroid}
         preserveEdgeToEdge={isAndroid}

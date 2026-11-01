@@ -34,6 +34,14 @@ declare class OpenBotEngineNative extends NativeModule<OpenBotEngineEvents> {
   requestNotificationPermission(): Promise<NotificationPermission>;
   isIgnoringBatteryOptimizations(): boolean;
   requestIgnoreBatteryOptimizations(force: boolean): Promise<boolean>;
+  showLiveUpdate(json: string): void;
+  endLiveUpdate(): void;
+  isLiveUpdateShown(): boolean;
+  setLiveUpdateAccent(color: string | null): void;
+  canPromoteLiveUpdates(): boolean;
+  openLiveUpdateSettings(): void;
+  getSdkInt(): number;
+  getDynamicColors(): Record<string, string> | null;
 }
 
 /** `modules/openbot-engine`. Null on iOS, web and Expo Go, which have no local engine. */

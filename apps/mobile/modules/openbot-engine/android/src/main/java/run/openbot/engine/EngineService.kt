@@ -340,7 +340,11 @@ class EngineService : Service() {
     }
   }
 
-  /** Mirrors `engine.state` into EngineState once a second, host side, no proot call. */
+  /**
+   * Mirrors `engine.state` into EngineState, host side, no proot call: once a second while the engine
+   * starts, then every 5 s once it is ready (audit L-4: fewer wakeups for the hours it runs). A crash
+   * is still caught at once by p.waitFor(), and the stdout reader sees READY / FAILED lines live.
+   */
   private suspend fun watchStateFile(p: Process) {
     var lastState: String? = null
     while (p.isAliveCompat()) {
@@ -354,7 +358,7 @@ class EngineService : Service() {
           "stopping" -> EngineState.update { it.copy(phase = EnginePhase.STOPPING) }
         }
       }
-      delay(1000)
+      delay(if (lastState == "ready") 5000L else 1000L)
     }
   }
 

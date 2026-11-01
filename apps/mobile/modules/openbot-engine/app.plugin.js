@@ -24,6 +24,9 @@ const PERMISSIONS = [
   "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
   "android.permission.WAKE_LOCK",
   "android.permission.POST_NOTIFICATIONS",
+  // Android 16 Live Updates: lets the agent progress notification be promoted to the status bar chip
+  // and lock screen (realme UI / ColorOS "Live Alerts"). A normal permission, granted at install.
+  "android.permission.POST_PROMOTED_NOTIFICATIONS",
   "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
 ];
 

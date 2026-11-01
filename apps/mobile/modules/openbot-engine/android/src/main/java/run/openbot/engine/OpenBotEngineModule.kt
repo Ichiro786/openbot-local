@@ -210,6 +210,88 @@ class OpenBotEngineModule : Module() {
     AsyncFunction("requestIgnoreBatteryOptimizations") { force: Boolean ->
       requestBatteryExemption(force)
     }.runOnQueue(Queues.MAIN)
+
+    // ---------------------------------------------------------------------------------------------
+    // Live Updates (Android 16 ProgressStyle / promoted ongoing) for running agent turns
+    // ---------------------------------------------------------------------------------------------
+
+    /** Shows or updates the Live Update from the island props (JSON of AgentLiveActivityProps). */
+    Function("showLiveUpdate") { json: String ->
+      LiveUpdates.show(context, json)
+    }
+
+    Function("endLiveUpdate") {
+      LiveUpdates.end(context)
+    }
+
+    Function("isLiveUpdateShown") {
+      LiveUpdates.isShown()
+    }
+
+    /** The accent (#RRGGBB) that colors the track; null for the brand color. */
+    Function("setLiveUpdateAccent") { color: String? ->
+      LiveUpdates.setAccent(color)
+    }
+
+    /** Android 16+: whether the user lets the app promote Live Updates to the status bar chip. */
+    Function("canPromoteLiveUpdates") {
+      LiveUpdates.canPromote(context)
+    }
+
+    /** Opens the system page where the user allows Live Updates (promoted notifications). */
+    Function("openLiveUpdateSettings") {
+      val ctx = context
+      val intent = if (Build.VERSION.SDK_INT >= 36) {
+        Intent("android.settings.MANAGE_APP_PROMOTED_NOTIFICATIONS")
+          .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+      } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))
+      }
+      val activity = appContext.currentActivity
+      runCatching {
+        if (activity != null) activity.startActivity(intent) else ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      }.recoverCatching {
+        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(fallback)
+      }
+      Unit
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Material You (Android 12+): the wallpaper palette
+    // ---------------------------------------------------------------------------------------------
+
+    Function("getSdkInt") {
+      Build.VERSION.SDK_INT
+    }
+
+    /**
+     * The system tonal palettes as #RRGGBB, keyed like `accent1_600` / `neutral2_50`. Null below
+     * Android 12, where there is no wallpaper palette.
+     */
+    Function("getDynamicColors") {
+      dynamicColors(context)
+    }
+  }
+
+  private fun dynamicColors(ctx: Context): Map<String, String>? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+    val shades = intArrayOf(0, 10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)
+    val palettes = listOf("accent1", "accent2", "accent3", "neutral1", "neutral2")
+    val out = LinkedHashMap<String, String>()
+    for (palette in palettes) {
+      for (shade in shades) {
+        @SuppressLint("DiscouragedApi")
+        val id = ctx.resources.getIdentifier("system_${palette}_$shade", "color", "android")
+        if (id == 0) continue
+        val color = ctx.getColor(id)
+        out["${palette}_$shade"] = String.format("#%06X", 0xFFFFFF and color)
+      }
+    }
+    return out.takeIf { it.isNotEmpty() }
   }
 
   private fun formOf(vararg pairs: Pair<String, String?>): Map<String, String> =

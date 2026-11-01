@@ -11,6 +11,7 @@ import { useLeaveChat } from "@/features/chat/components/use-leave-chat";
 import { noteChatOpened } from "@/features/quick-actions/model/recent-agents";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
+import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 
 export function AgentChatScreen() {
@@ -58,7 +59,9 @@ export function AgentChatScreen() {
       </Typography.Paragraph>
       <Pressable
         accessibilityRole="button"
-        className="min-h-12 flex-row items-center gap-2 rounded-full bg-control px-5"
+        className="min-h-12 flex-row items-center gap-2 overflow-hidden rounded-full bg-control px-5"
+        // OpenBot Local (audit Q-7): the same pressed feedback as the other buttons.
+        android_ripple={isAndroid ? { borderless: false, foreground: true } : undefined}
         onPress={() => {
           void haptics.impact("soft");
           leaveChat();

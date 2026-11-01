@@ -92,6 +92,78 @@ export async function requestIgnoreBatteryOptimizations(force = false): Promise<
   return (await native?.requestIgnoreBatteryOptimizations(force)) ?? true;
 }
 
+// -------------------------------------------------------------------------------------------------
+// Live Updates and Material You (Android only; no-ops elsewhere)
+// -------------------------------------------------------------------------------------------------
+
+/** Shows or updates the Android Live Update for running agent work. `props` is AgentLiveActivityProps. */
+export function showLiveUpdate(props: unknown): void {
+  try {
+    native?.showLiveUpdate(JSON.stringify(props));
+  } catch {
+    // A missing permission or an OEM refusal leaves the app working without the notification.
+  }
+}
+
+export function endLiveUpdate(): void {
+  try {
+    native?.endLiveUpdate();
+  } catch {
+    // Nothing to end.
+  }
+}
+
+export function isLiveUpdateShown(): boolean {
+  try {
+    return native?.isLiveUpdateShown() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function setLiveUpdateAccent(color: string | null): void {
+  try {
+    native?.setLiveUpdateAccent(color);
+  } catch {
+    // Keeps the brand color.
+  }
+}
+
+/** Android 16+: whether Live Updates can show as a status bar chip (the user can turn this off per app). */
+export function canPromoteLiveUpdates(): boolean {
+  try {
+    return native?.canPromoteLiveUpdates() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function openLiveUpdateSettings(): void {
+  try {
+    native?.openLiveUpdateSettings();
+  } catch {
+    // No settings page on this build.
+  }
+}
+
+/** Android API level, or 0 off Android. */
+export function androidSdkInt(): number {
+  try {
+    return native?.getSdkInt() ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** The Material You tonal palettes (`accent1_600` → `#RRGGBB`), or null below Android 12. */
+export function getDynamicColors(): Record<string, string> | null {
+  try {
+    return native?.getDynamicColors() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function addStatusListener(listener: (status: EngineStatus) => void): () => void {
   const subscription = native?.addListener("onStatusChange", listener);
   return () => subscription?.remove();
