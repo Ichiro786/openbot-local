@@ -36,7 +36,6 @@ import {
 import {
   AccessibilityInfo,
   type GestureResponderEvent,
-  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -85,6 +84,7 @@ import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-
 import { agentActivityMood, type MobileAgentActivity } from "@/features/workspace/model/agent-activity";
 import type { PendingApproval } from "@/features/workspace/model/pending-approvals";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
+import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { haptics } from "@/shared/lib/haptics";
 import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
@@ -1508,7 +1508,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                             {t("mobile.chat.starter.body")}
                           </Typography.Paragraph>
                         </View>
-                        <Pressable
+                        <AnimatedPressable
                           accessibilityLabel={t("mobile.chat.starter.dismiss")}
                           accessibilityRole="button"
                           hitSlop={8}
@@ -1518,22 +1518,24 @@ export const ChatMessageList = memo(function ChatMessageList({
                           }}
                         >
                           <X color={String(muted)} size={21} strokeWidth={1.8} />
-                        </Pressable>
+                        </AnimatedPressable>
                       </View>
 
                       <View className="overflow-hidden rounded-[18px]" style={{ backgroundColor: raised }}>
                         {STARTER_OPTIONS.map((option, index) => (
-                          <Pressable
+                          <AnimatedPressable
                             key={option.id}
                             accessibilityRole="button"
                             accessibilityState={{ disabled: !canSend }}
                             disabled={!canSend}
                             className="flex-row gap-3 px-3 py-3"
-                            style={({ pressed }) => ({
+                            variant="row"
+                            pressOpacity={0.6}
+                            style={{
                               borderBottomColor: index < STARTER_OPTIONS.length - 1 ? String(muted) : "transparent",
                               borderBottomWidth: index < STARTER_OPTIONS.length - 1 ? 0.5 : 0,
-                              opacity: !canSend ? 0.45 : pressed ? 0.55 : 1,
-                            })}
+                              opacity: canSend ? 1 : 0.45,
+                            }}
                             onPress={() => onSelectStarter(t(option.label))}
                           >
                             <View className="size-7 items-center justify-center rounded-lg bg-control">
@@ -1547,7 +1549,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                                 {t(option.detail)}
                               </Typography.Paragraph>
                             </View>
-                          </Pressable>
+                          </AnimatedPressable>
                         ))}
                       </View>
 
