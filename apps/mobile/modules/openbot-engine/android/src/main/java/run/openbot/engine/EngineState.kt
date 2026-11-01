@@ -41,6 +41,12 @@ data class EngineStatus(
   val pid: Int? = null,
   val startedAtMs: Long? = null,
   val lastExitCode: Int? = null,
+  /** Download size of [latestVersion] in bytes, or -1 when unknown. */
+  val latestBytes: Long = -1,
+  /** Why the last update attempt did not land (the previous engine was kept or restored). */
+  val updateError: String? = null,
+  /** True while a freshly installed update has not reached ready yet (a failure rolls it back). */
+  val updatePendingConfirm: Boolean = false,
 ) {
   fun toMap(): Map<String, Any?> = mapOf(
     "phase" to phase.js,
@@ -57,6 +63,9 @@ data class EngineStatus(
     "pid" to pid,
     "startedAtMs" to startedAtMs?.toDouble(),
     "lastExitCode" to lastExitCode,
+    "latestBytes" to latestBytes.toDouble(),
+    "updateError" to updateError,
+    "updatePendingConfirm" to updatePendingConfirm,
   )
 }
 

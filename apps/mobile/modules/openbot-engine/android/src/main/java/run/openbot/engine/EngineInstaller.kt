@@ -223,10 +223,7 @@ class EngineInstaller(
    * which is logged and otherwise ignored.
    */
   suspend fun checkForUpdate(force: Boolean): EngineRelease? = withContext(Dispatchers.IO) {
-    if (config.manifestUrl == null && config.githubToken == null && config.releasesApiUrl == EngineConfig.DEFAULT_RELEASES_API) {
-      // The default repo is private; nothing to ask without credentials.
-      return@withContext null
-    }
+    lastCheckError = null
     val now = System.currentTimeMillis()
     if (!force) {
       val last = runCatching { JSONObject(paths.updateCheckJson.readText()).optLong("checkedAt", 0) }.getOrDefault(0L)
@@ -238,12 +235,73 @@ class EngineInstaller(
       paths.updateCheckJson.writeText(JSONObject().put("checkedAt", now).put("latest", latest.tag).toString())
       val installed = installedVersion()
       val newer = installed != null && compareTags(latest.tag, installed) > 0
-      EngineState.update { it.copy(latestVersion = latest.tag, updateAvailable = newer) }
+      EngineState.update { it.copy(latestVersion = latest.tag, latestBytes = latest.size, updateAvailable = newer) }
       latest
     } catch (e: Exception) {
-      log.system("Update check failed: ${e.message}")
+      val message = e.message ?: e.javaClass.simpleName
+      // A private repo answers 404 to the public API; say what fixes it.
+      lastCheckError = if (message.contains("HTTP 404") && config.githubToken == null && config.manifestUrl == null) {
+        "The release repo is private or has no engine release (HTTP 404). Add a GitHub token or a public manifest URL."
+      } else {
+        message
+      }
+      log.system("Update check failed: $message")
       null
     }
+  }
+
+  /** Why the last [checkForUpdate] found nothing, or null when it succeeded or was rate-limited. */
+  @Volatile var lastCheckError: String? = null
+    private set
+
+  // ---------------------------------------------------------------------------------------------
+  // Rollback: the replaced rootfs stays at r.prev until the new engine reaches ready
+  // ---------------------------------------------------------------------------------------------
+
+  fun hasPrevious(): Boolean = paths.previousJson.exists() && NativeFs.exists(paths.previous)
+
+  /** The new engine came up: the previous rootfs is no longer needed. */
+  fun commitUpdate() {
+    if (!paths.previousJson.exists() && !NativeFs.exists(paths.previous)) return
+    NativeFs.deleteTree(paths.previous)
+    paths.previousJson.delete()
+    log.system("Update confirmed; removed the previous engine")
+  }
+
+  /**
+   * Puts the previous rootfs back (the engine must be stopped): the user's carried paths move back
+   * out of the failed rootfs, then the failed one is deleted. False when there is nothing to restore.
+   */
+  fun rollback(): Boolean {
+    if (!hasPrevious()) return false
+    val json = runCatching { JSONObject(paths.previousJson.readText()) }.getOrNull() ?: return false
+    val failedTag = installedVersion()
+    val tag = json.optString("tag").ifBlank { "previous" }
+    val carried = json.optJSONArray("carried")
+    NativeFs.deleteTree(paths.staging)
+    if (NativeFs.exists(paths.rootfs)) NativeFs.move(paths.rootfs, paths.staging)
+    NativeFs.move(paths.previous, paths.rootfs)
+    if (carried != null) {
+      for (i in carried.length() - 1 downTo 0) {
+        val rel = carried.getString(i)
+        val from = File(paths.staging, rel)
+        if (NativeFs.exists(from)) NativeFs.move(from, File(paths.rootfs, rel))
+      }
+    }
+    NativeFs.deleteTree(File(paths.rootfs, "run/openbot"))
+    NativeFs.deleteTree(paths.staging)
+    paths.installedJson.writeText(
+      JSONObject()
+        .put("tag", tag)
+        .put("sha256", json.optString("sha256"))
+        .put("source", json.optString("source", "remote"))
+        .put("installedAt", System.currentTimeMillis())
+        .toString(),
+    )
+    paths.previousJson.delete()
+    EngineState.update { it.copy(installedVersion = tag) }
+    log.system("Rolled back from ${failedTag ?: "the new engine"} to $tag")
+    return true
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -325,48 +383,96 @@ class EngineInstaller(
     File(paths.staging, "tmp").mkdirs()
     File(paths.staging, "run").mkdirs()
 
-    if (NativeFs.exists(paths.rootfs)) {
-      EngineState.installing(InstallStep.MIGRATING, null, message = "Keeping your sign-in and data")
-      for (p in config.persistPaths) carryOver(p)
-      // Stale runtime state from the old engine must not look like a live one.
-      NativeFs.deleteTree(File(paths.staging, "run/openbot"))
-      NativeFs.move(paths.rootfs, File(paths.trash, "r-${System.currentTimeMillis()}"))
+    // An earlier update that was never confirmed: settle it first, so r.prev holds one engine only.
+    if (hasPrevious()) commitUpdate() else NativeFs.deleteTree(paths.previous)
+    val carried = mutableListOf<String>()
+    val previousInstalled = paths.installedJson.takeIf { it.exists() }?.readText()
+    val previous = installed()
+    var oldMoved = false
+    try {
+      if (NativeFs.exists(paths.rootfs)) {
+        EngineState.installing(InstallStep.MIGRATING, null, message = "Keeping your sign-in and data")
+        for (p in config.persistPaths) carryOver(p, carried)
+        // Stale runtime state from the old engine must not look like a live one.
+        NativeFs.deleteTree(File(paths.staging, "run/openbot"))
+        NativeFs.move(paths.rootfs, paths.previous)
+        oldMoved = true
+        paths.previousJson.writeText(
+          JSONObject()
+            .put("tag", previous?.tag ?: "")
+            .put("sha256", previous?.sha256 ?: "")
+            .put("source", previous?.source ?: "remote")
+            .put("carried", JSONArray(carried))
+            .toString(),
+        )
+      }
+      File(paths.staging, ".engine-version").writeText(release.manifest ?: "${release.tag}\n")
+      NativeFs.move(paths.staging, paths.rootfs)
+      paths.installedJson.writeText(
+        JSONObject()
+          .put("tag", release.tag)
+          .put("sha256", sha256)
+          .put("source", release.source)
+          .put("installedAt", System.currentTimeMillis())
+          .toString(),
+      )
+    } catch (e: Exception) {
+      log.system("Swap failed (${e.message}); restoring the previous engine")
+      restoreAfterFailedSwap(oldMoved, carried, previousInstalled)
+      throw EngineInstallException("Could not swap in ${release.tag}: ${e.message}; kept the previous engine", e)
     }
-    File(paths.staging, ".engine-version").writeText(release.manifest ?: "${release.tag}\n")
-    NativeFs.move(paths.staging, paths.rootfs)
-    paths.installedJson.writeText(
-      JSONObject()
-        .put("tag", release.tag)
-        .put("sha256", sha256)
-        .put("source", release.source)
-        .put("installedAt", System.currentTimeMillis())
-        .toString(),
-    )
     paths.trash.listFiles()?.forEach { NativeFs.deleteTree(it) }
+    if (!oldMoved) paths.previousJson.delete()
     EngineState.update {
-      it.copy(installedVersion = release.tag, updateAvailable = false, installStep = null, progress = null)
+      it.copy(
+        installedVersion = release.tag,
+        updateAvailable = false,
+        installStep = null,
+        progress = null,
+        updatePendingConfirm = oldMoved,
+      )
     }
-    log.system("Engine ${release.tag} installed")
+    log.system("Engine ${release.tag} installed" + if (oldMoved) "; ${previous?.tag ?: "the old one"} kept until it starts" else "")
+  }
+
+  /** Undoes a half-done swap: the new rootfs goes back to staging, the old one and its data return. */
+  private fun restoreAfterFailedSwap(oldMoved: Boolean, carried: List<String>, previousInstalled: String?) {
+    runCatching {
+      if (oldMoved) {
+        if (NativeFs.exists(paths.rootfs) && !NativeFs.exists(paths.staging)) NativeFs.move(paths.rootfs, paths.staging)
+        if (NativeFs.exists(paths.previous)) NativeFs.move(paths.previous, paths.rootfs)
+      }
+      for (rel in carried.asReversed()) {
+        val from = File(paths.staging, rel)
+        if (NativeFs.exists(from)) NativeFs.move(from, File(paths.rootfs, rel))
+      }
+      NativeFs.deleteTree(paths.staging)
+      paths.previousJson.delete()
+      if (previousInstalled != null) paths.installedJson.writeText(previousInstalled)
+    }.onFailure { log.system("Restore after a failed swap failed too: ${it.message}") }
   }
 
   /** Moves `$R/<rel>` from the old rootfs into the staged one; the old copy wins except for keepNewPaths. */
-  private fun carryOver(rel: String) {
+  private fun carryOver(rel: String, carried: MutableList<String>) {
     val from = File(paths.rootfs, rel)
     val to = File(paths.staging, rel)
     if (!NativeFs.exists(from)) return
     if (config.keepNewPaths.any { it == rel }) return
     val keepBelow = config.keepNewPaths.any { it.startsWith("$rel/") }
     if (keepBelow && from.isDirectory && !NativeFs.isSymlink(from) && to.isDirectory) {
-      from.list()?.forEach { carryOver("$rel/$it") }
+      from.list()?.forEach { carryOver("$rel/$it", carried) }
       return
     }
     log.system("Carrying over /$rel")
     NativeFs.move(from, to)
+    carried.add(rel)
   }
 
   /** Removes the payload. Logs and config stay. The engine must be stopped. */
   fun uninstall() {
     NativeFs.deleteTree(paths.rootfs)
+    NativeFs.deleteTree(paths.previous)
+    paths.previousJson.delete()
     NativeFs.deleteTree(paths.staging)
     NativeFs.deleteTree(paths.trash)
     NativeFs.deleteTree(paths.downloads)

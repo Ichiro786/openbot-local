@@ -31,6 +31,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 
 import {
+  checkForUpdate,
   type ControlResponse,
   controlStatus,
   type EnginePhase,
@@ -39,8 +40,16 @@ import {
   loginStart,
   loginVerify,
   logout,
+  type UpdateCheck,
   useOpenBotEngine,
 } from "../../../modules/openbot-engine";
+
+/** "412 MB" for a release asset; null when the size is unknown. */
+function formatBytes(bytes: number | null | undefined): string | null {
+  if (bytes == null || bytes <= 0) return null;
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+}
 
 /** System colours read well on both the light and the dark sheet. */
 const PHASE_COLOR: Record<EnginePhase, string> = {
@@ -273,6 +282,61 @@ function LocalEngineScreenInner() {
       },
     ]);
 
+  // Engine updates (Part H): the native side resolves the newest `engine-*` release of the fork,
+  // downloads it, refuses it without a matching sha256, swaps it in with /root carried over, and
+  // rolls back to the previous rootfs when the new engine does not reach ready.
+  const [check, setCheck] = useState<UpdateCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const checkedOnOpen = useRef(false);
+
+  const runCheck = useCallback(async (quiet: boolean) => {
+    setChecking(true);
+    try {
+      const answer = await checkForUpdate();
+      setCheck(answer);
+      if (!quiet) void haptics.notification(answer.error ? "error" : "success");
+    } catch (error) {
+      setCheck({ installedVersion: null, latestVersion: null, updateAvailable: false, error: describe(error) });
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (checkedOnOpen.current) return;
+    checkedOnOpen.current = true;
+    void runCheck(true);
+  }, [runCheck]);
+
+  const latestVersion = check?.latestVersion ?? status.latestVersion;
+  const latestBytes = check?.latestBytes ?? status.latestBytes;
+  const updateAvailable = check ? check.updateAvailable : status.updateAvailable;
+  const latestSize = formatBytes(latestBytes);
+  const updating = status.phase === "installing" && status.installStep != null && status.installStep !== "checking";
+
+  const installUpdate = () => {
+    if (!latestVersion) return;
+    if (check?.verifiable === false) {
+      setNote({ text: `${latestVersion} has no sha256 to check it against, so it will not be installed.`, error: true });
+      return;
+    }
+    Alert.alert(
+      `Update the engine to ${latestVersion}?`,
+      `${latestSize ? `Downloads ${latestSize}. ` : ""}The engine stops while the update installs. Your sign-in, settings and chats are kept, and a failed update goes back to ${status.installedVersion ?? "the current engine"}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Update", onPress: () => void act(engine.update, "Updating the engine…") },
+      ],
+    );
+  };
+
+  const updateFooter =
+    status.updateError ??
+    (status.updatePendingConfirm
+      ? "Checking that the new engine starts. If it does not, the previous one comes back."
+      : (check?.error ??
+        "Updates come from the OpenBot Local releases on GitHub and are checked with sha256 before they replace the engine."));
+
   const reason =
     status.phase === "error" || status.phase === "crashed"
       ? [status.message, status.lastExitCode != null ? `exit code ${status.lastExitCode}` : null].filter(Boolean).join(" · ")
@@ -323,6 +387,44 @@ function LocalEngineScreenInner() {
           <SettingsRow disclosure={false} disabled={pending || busy || stopped} onPress={restart}>
             <Typography.Paragraph className="text-accent">Restart</Typography.Paragraph>
           </SettingsRow>
+        </SettingsSection>
+      </Animated.View>
+
+      <Animated.View layout={layout}>
+        <SettingsSection title="Engine version" footer={updateFooter}>
+          <SettingsRow
+            disclosure={false}
+            trailing={
+              <Typography.Paragraph className="text-grouped-secondary" numberOfLines={1}>
+                {status.installedVersion ?? "Not installed"}
+              </Typography.Paragraph>
+            }
+          >
+            <Typography.Paragraph>Installed</Typography.Paragraph>
+          </SettingsRow>
+          <SettingsRow
+            disclosure={false}
+            trailing={
+              <Typography.Paragraph className="text-grouped-secondary" numberOfLines={1}>
+                {latestVersion ? `${latestVersion}${latestSize ? ` · ${latestSize}` : ""}` : checking ? "Checking…" : "Unknown"}
+              </Typography.Paragraph>
+            }
+          >
+            <Typography.Paragraph>Latest</Typography.Paragraph>
+          </SettingsRow>
+          {updateAvailable && latestVersion ? (
+            <SettingsRow disclosure={false} disabled={pending || busy || updating} onPress={installUpdate}>
+              <Typography.Paragraph className="text-accent">
+                {updating ? "Updating…" : `Update to ${latestVersion}`}
+              </Typography.Paragraph>
+            </SettingsRow>
+          ) : (
+            <SettingsRow disclosure={false} disabled={checking || updating} onPress={() => void runCheck(false)}>
+              <Typography.Paragraph className="text-accent">
+                {checking ? "Checking…" : latestVersion ? "Up to date · Check again" : "Check for updates"}
+              </Typography.Paragraph>
+            </SettingsRow>
+          )}
         </SettingsSection>
       </Animated.View>
 

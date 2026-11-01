@@ -15,6 +15,8 @@ class EnginePaths(context: Context) {
   val rootfs: File = File(app.filesDir, "r")
   /** Unpack target; renamed to [rootfs] when complete. */
   val staging: File = File(app.filesDir, "r.partial")
+  /** The rootfs an update replaced, kept until the new one reaches ready (rollback target). */
+  val previous: File = File(app.filesDir, "r.prev")
 
   val root: File = File(app.filesDir, "engine")
   val trash: File = File(root, "trash")
@@ -22,6 +24,8 @@ class EnginePaths(context: Context) {
   val logs: File = File(root, "logs")
   val installedJson: File = File(root, "installed.json")
   val updateCheckJson: File = File(root, "update-check.json")
+  /** What [previous] was (tag, sha256, source) and which guest paths were carried out of it. */
+  val previousJson: File = File(root, "previous.json")
 
   /** PROOT_TMP_DIR: must exist and be writable. */
   val prootTmp: File = File(app.cacheDir, "proot")

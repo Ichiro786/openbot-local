@@ -30,6 +30,12 @@ export interface EngineStatus {
   pid: number | null;
   startedAtMs: number | null;
   lastExitCode: number | null;
+  /** Download size of latestVersion in bytes; -1 when unknown. Older native builds omit it. */
+  latestBytes?: number;
+  /** Why the last update did not land; the previous engine was kept or restored. */
+  updateError?: string | null;
+  /** A new engine was swapped in and has not reached ready yet; a failure rolls it back. */
+  updatePendingConfirm?: boolean;
 }
 
 /** What getConfig/setConfig answer (EngineConfig.toMap in Kotlin). The token itself is never returned. */
@@ -103,6 +109,10 @@ export interface UpdateCheck {
   installedVersion: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
+  /** Download size of latestVersion in bytes; -1 when unknown. */
+  latestBytes?: number;
+  /** The release carries a sha256 (asset digest or .sha256 side file); updates refuse to install without one. */
+  verifiable?: boolean;
   error: string | null;
 }
 

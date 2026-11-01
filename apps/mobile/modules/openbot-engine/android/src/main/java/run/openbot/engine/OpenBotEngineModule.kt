@@ -101,8 +101,10 @@ class OpenBotEngineModule : Module() {
       mapOf(
         "installedVersion" to installed,
         "latestVersion" to latest?.tag,
+        "latestBytes" to (latest?.size ?: -1L).toDouble(),
+        "verifiable" to (latest != null && (latest.sha256 != null || latest.sha256Url != null)),
         "updateAvailable" to (latest != null && installed != null && installer.compareTags(latest.tag, installed) > 0),
-        "error" to if (latest == null) "Could not reach the release source; see the log" else null,
+        "error" to if (latest == null) installer.lastCheckError ?: "Could not reach the release source; see the log" else null,
       )
     }
 

@@ -90,6 +90,8 @@ class EngineService : Service() {
   private var supervisor: Job? = null
   @Volatile private var process: Process? = null
   @Volatile private var stopRequested = false
+  /** An update was just swapped in; the first ready commits it, an exit before ready rolls it back. */
+  @Volatile private var awaitingConfirm = false
   private var wakeLock: PowerManager.WakeLock? = null
   private lateinit var log: EngineLog
   private lateinit var paths: EnginePaths
@@ -224,6 +226,7 @@ class EngineService : Service() {
       return
     }
 
+    if (update) EngineState.update { it.copy(updateError = null) }
     try {
       val release = if (update) {
         EngineState.installing(InstallStep.CHECKING, null, message = "Looking for an engine update")
@@ -240,10 +243,19 @@ class EngineService : Service() {
       throw e
     } catch (e: Throwable) {
       log.system("Install failed: ${e.message}")
-      fail(e.message ?: e.javaClass.simpleName)
-      return
+      if (!installer.isInstalled()) {
+        fail(e.message ?: e.javaClass.simpleName)
+        return
+      }
+      // An update that failed (download, sha256, unpack, swap) leaves the installed engine as it was: run it.
+      val kept = installer.installedVersion()
+      EngineState.update { it.copy(updateError = "Update failed: ${e.message ?: e.javaClass.simpleName}. Kept $kept.") }
     }
-    EngineState.update { it.copy(installedVersion = installer.installedVersion(), installStep = null, progress = null) }
+    // A leftover r.prev (the app died before an update reached ready) is still awaiting confirmation.
+    awaitingConfirm = installer.hasPrevious()
+    EngineState.update {
+      it.copy(installedVersion = installer.installedVersion(), installStep = null, progress = null, updatePendingConfirm = awaitingConfirm)
+    }
     scope.launch { installer.checkForUpdate(force = false) }
 
     var backoff = 1000L
@@ -262,6 +274,26 @@ class EngineService : Service() {
       val reason = LauncherState.read(paths.stateFile)?.reason
       val description = LauncherExit.describe(exit) + (reason?.let { ": $it" } ?: "")
       log.system("Launcher exited with $exit ($description)")
+      if (awaitingConfirm && exit != 0) {
+        // The update never reached ready: put the previous engine and the user's data back, then run it.
+        awaitingConfirm = false
+        val failedTag = installer.installedVersion()
+        val restored = runCatching { installer.rollback() }
+          .onFailure { log.system("Rollback failed: ${it.message}") }
+          .getOrDefault(false)
+        if (restored) {
+          EngineState.update {
+            it.copy(
+              updatePendingConfirm = false,
+              updateAvailable = false,
+              updateError = "Engine $failedTag did not start ($description). Rolled back to ${installer.installedVersion()}.",
+            )
+          }
+          backoff = 1000L
+          continue
+        }
+        EngineState.update { it.copy(updatePendingConfirm = false) }
+      }
       if (exit == 0) {
         // A clean stop we did not ask for (e.g. `openbot-start.sh --stop` from a terminal).
         EngineState.update { it.copy(phase = EnginePhase.STOPPED, pid = null, lastExitCode = 0, message = null) }
@@ -366,6 +398,12 @@ class EngineService : Service() {
     if (EngineState.current.phase == EnginePhase.RUNNING) return
     EngineState.update { it.copy(phase = EnginePhase.RUNNING, message = null, nextRestartAtMs = null) }
     log.system("Engine is up: $detail")
+    if (awaitingConfirm) {
+      awaitingConfirm = false
+      runCatching { EngineInstaller(this, paths).commitUpdate() }
+        .onFailure { log.system("Could not remove the previous engine: ${it.message}") }
+      EngineState.update { it.copy(updatePendingConfirm = false) }
+    }
   }
 
   /** A launcher left over from a killed app process blocks the next one (exit 20). Stop it first. */
