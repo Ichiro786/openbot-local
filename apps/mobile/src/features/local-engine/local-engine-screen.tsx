@@ -527,7 +527,9 @@ function LocalEngineScreenInner() {
                 setEditingToken(true);
               }}
             >
-              <Typography.Paragraph className="text-accent">{hasToken ? "Replace token" : "Add token"}</Typography.Paragraph>
+              <Typography.Paragraph className="text-accent">
+                {hasToken ? "Replace token" : "Add token"}
+              </Typography.Paragraph>
             </SettingsRow>
           )}
           {hasToken && !editingToken ? (
@@ -553,7 +555,9 @@ function LocalEngineScreenInner() {
             />
             <SettingsSection>
               <SettingsRow disclosure={false} disabled={savingToken || !tokenDraft.trim()} onPress={saveToken}>
-                <Typography.Paragraph className="text-accent">{savingToken ? "Saving…" : "Save token"}</Typography.Paragraph>
+                <Typography.Paragraph className="text-accent">
+                  {savingToken ? "Saving…" : "Save token"}
+                </Typography.Paragraph>
               </SettingsRow>
               {tokenDraft ? (
                 <SettingsRow disclosure={false} disabled={savingToken} onPress={() => setTokenDraft("")}>
