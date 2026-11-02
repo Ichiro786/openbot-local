@@ -18,21 +18,20 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-
+import { TrailingValue } from "@/features/servers/components/trailing-value";
 import {
   SettingsContent,
   SettingsNote,
   SettingsRow,
   SettingsSection,
 } from "@/features/settings/components/settings-content";
-import { TrailingValue } from "@/features/servers/components/trailing-value";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 
 import {
-  checkForUpdate,
   type ControlResponse,
+  checkForUpdate,
   controlStatus,
   type EnginePhase,
   type EngineStatus,
@@ -138,9 +137,7 @@ function StatusDot({ phase }: { phase: EnginePhase }) {
   }, [busy, reduced, pulse]);
   const style = useAnimatedStyle(() => ({ opacity: pulse.get() }));
   return (
-    <Animated.View
-      style={[{ width: 10, height: 10, borderRadius: 5, backgroundColor: PHASE_COLOR[phase] }, style]}
-    />
+    <Animated.View style={[{ width: 10, height: 10, borderRadius: 5, backgroundColor: PHASE_COLOR[phase] }, style]} />
   );
 }
 
@@ -196,7 +193,8 @@ function LocalEngineScreenInner() {
   const engine = useOpenBotEngine({ watchLogs: showLog, logLines: 80 });
   const { status, busy } = engine;
   const running = status.phase === "running";
-  const stopped = status.phase === "stopped" || status.phase === "idle" || status.phase === "crashed" || status.phase === "error";
+  const stopped =
+    status.phase === "stopped" || status.phase === "idle" || status.phase === "crashed" || status.phase === "error";
 
   const [account, setAccount] = useState<string | null>(null);
   const [accountLoaded, setAccountLoaded] = useState(false);
@@ -317,7 +315,10 @@ function LocalEngineScreenInner() {
   const installUpdate = () => {
     if (!latestVersion) return;
     if (check?.verifiable === false) {
-      setNote({ text: `${latestVersion} has no sha256 to check it against, so it will not be installed.`, error: true });
+      setNote({
+        text: `${latestVersion} has no sha256 to check it against, so it will not be installed.`,
+        error: true,
+      });
       return;
     }
     Alert.alert(
@@ -339,7 +340,9 @@ function LocalEngineScreenInner() {
 
   const reason =
     status.phase === "error" || status.phase === "crashed"
-      ? [status.message, status.lastExitCode != null ? `exit code ${status.lastExitCode}` : null].filter(Boolean).join(" · ")
+      ? [status.message, status.lastExitCode != null ? `exit code ${status.lastExitCode}` : null]
+          .filter(Boolean)
+          .join(" · ")
       : (status.message ?? undefined);
 
   return (
@@ -406,7 +409,11 @@ function LocalEngineScreenInner() {
             disclosure={false}
             trailing={
               <Typography.Paragraph className="text-grouped-secondary" numberOfLines={1}>
-                {latestVersion ? `${latestVersion}${latestSize ? ` · ${latestSize}` : ""}` : checking ? "Checking…" : "Unknown"}
+                {latestVersion
+                  ? `${latestVersion}${latestSize ? ` · ${latestSize}` : ""}`
+                  : checking
+                    ? "Checking…"
+                    : "Unknown"}
               </Typography.Paragraph>
             }
           >
@@ -450,7 +457,9 @@ function LocalEngineScreenInner() {
               />
               <SettingsSection>
                 <SettingsRow disclosure={false} disabled={pending || !code.trim()} onPress={verify}>
-                  <Typography.Paragraph className="text-accent">{pending ? "Checking…" : "Verify"}</Typography.Paragraph>
+                  <Typography.Paragraph className="text-accent">
+                    {pending ? "Checking…" : "Verify"}
+                  </Typography.Paragraph>
                 </SettingsRow>
                 <SettingsRow
                   disclosure={false}
@@ -481,7 +490,9 @@ function LocalEngineScreenInner() {
               />
               <SettingsSection>
                 <SettingsRow disclosure={false} disabled={pending || !email.includes("@")} onPress={sendCode}>
-                  <Typography.Paragraph className="text-accent">{pending ? "Sending…" : "Send code"}</Typography.Paragraph>
+                  <Typography.Paragraph className="text-accent">
+                    {pending ? "Sending…" : "Send code"}
+                  </Typography.Paragraph>
                 </SettingsRow>
               </SettingsSection>
             </Animated.View>
@@ -509,7 +520,9 @@ function LocalEngineScreenInner() {
           <SettingsRow
             expanded={showLog}
             trailing={
-              <Typography.Paragraph className="text-grouped-secondary">{showLog ? "Hide" : "Show"}</Typography.Paragraph>
+              <Typography.Paragraph className="text-grouped-secondary">
+                {showLog ? "Hide" : "Show"}
+              </Typography.Paragraph>
             }
             onPress={() => setShowLog((value) => !value)}
           >
