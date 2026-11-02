@@ -35,10 +35,12 @@ import {
   controlStatus,
   type EnginePhase,
   type EngineStatus,
+  getConfig,
   isEngineSupported,
   loginStart,
   loginVerify,
   logout,
+  setConfig,
   type UpdateCheck,
   useOpenBotEngine,
 } from "../../../modules/openbot-engine";
@@ -331,6 +333,72 @@ function LocalEngineScreenInner() {
     );
   };
 
+  // GitHub token for the private releases repo. The native side keeps it encrypted with an Android
+  // Keystore key and never hands it back; JS only learns whether one is set. The draft is cleared
+  // as soon as it is saved or the form closes.
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const [editingToken, setEditingToken] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getConfig()
+      .then((config) => {
+        if (alive) setHasToken(config?.hasGithubToken ?? false);
+      })
+      .catch(() => {
+        if (alive) setHasToken(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const closeTokenForm = () => {
+    setEditingToken(false);
+    setTokenDraft("");
+  };
+
+  const storeToken = async (value: string, success: string) => {
+    setSavingToken(true);
+    setNote(null);
+    try {
+      const config = await setConfig({ githubToken: value });
+      setHasToken(config?.hasGithubToken ?? value !== "");
+      closeTokenForm();
+      setNote({ text: success, error: false });
+      void haptics.notification("success");
+      await runCheck(true);
+    } catch (error) {
+      setNote({ text: describe(error), error: true });
+      void haptics.notification("error");
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
+  const saveToken = () => {
+    const value = tokenDraft.trim();
+    if (!value || savingToken) return;
+    if (/\s/.test(value) || value.length < 20) {
+      setNote({ text: "That does not look like a GitHub token. Paste the whole token, with no spaces.", error: true });
+      void haptics.notification("error");
+      return;
+    }
+    void storeToken(value, "Token saved. Checking for updates with it…");
+  };
+
+  const removeToken = () =>
+    Alert.alert(
+      "Remove the GitHub token?",
+      "Update checks and downloads go back to the public releases, which a private repo does not show.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: () => void storeToken("", "Token removed.") },
+      ],
+    );
+
   const updateFooter =
     status.updateError ??
     (status.updatePendingConfirm
@@ -433,6 +501,71 @@ function LocalEngineScreenInner() {
             </SettingsRow>
           )}
         </SettingsSection>
+      </Animated.View>
+
+      <Animated.View layout={layout} className="gap-3">
+        <SettingsSection
+          title="GitHub access"
+          footer="The engine releases are in a private GitHub repo. Add a fine-grained token with Contents: read on that repo only. It stays encrypted on this phone and is used only for update checks and downloads."
+        >
+          <SettingsRow
+            disclosure={false}
+            trailing={
+              <Typography.Paragraph className="text-grouped-secondary" numberOfLines={1}>
+                {hasToken == null ? "…" : hasToken ? "Saved" : "Not set"}
+              </Typography.Paragraph>
+            }
+          >
+            <Typography.Paragraph>GitHub token</Typography.Paragraph>
+          </SettingsRow>
+          {editingToken ? null : (
+            <SettingsRow
+              disclosure={false}
+              disabled={savingToken || hasToken == null}
+              onPress={() => {
+                setNote(null);
+                setEditingToken(true);
+              }}
+            >
+              <Typography.Paragraph className="text-accent">{hasToken ? "Replace token" : "Add token"}</Typography.Paragraph>
+            </SettingsRow>
+          )}
+          {hasToken && !editingToken ? (
+            <SettingsRow disclosure={false} disabled={savingToken} onPress={removeToken}>
+              <Typography.Paragraph className="text-danger-text">Remove token</Typography.Paragraph>
+            </SettingsRow>
+          ) : null}
+        </SettingsSection>
+        {editingToken ? (
+          <Animated.View entering={enter} exiting={leave} className="gap-3">
+            <SheetFormField
+              label="GitHub token"
+              placeholder="github_pat_…"
+              value={tokenDraft}
+              onChangeText={setTokenDraft}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              returnKeyType="done"
+              editable={!savingToken}
+              onSubmitEditing={saveToken}
+            />
+            <SettingsSection>
+              <SettingsRow disclosure={false} disabled={savingToken || !tokenDraft.trim()} onPress={saveToken}>
+                <Typography.Paragraph className="text-accent">{savingToken ? "Saving…" : "Save token"}</Typography.Paragraph>
+              </SettingsRow>
+              {tokenDraft ? (
+                <SettingsRow disclosure={false} disabled={savingToken} onPress={() => setTokenDraft("")}>
+                  <Typography.Paragraph className="text-accent">Clear</Typography.Paragraph>
+                </SettingsRow>
+              ) : null}
+              <SettingsRow disclosure={false} disabled={savingToken} onPress={closeTokenForm}>
+                <Typography.Paragraph className="text-accent">Cancel</Typography.Paragraph>
+              </SettingsRow>
+            </SettingsSection>
+          </Animated.View>
+        ) : null}
       </Animated.View>
 
       {running && accountLoaded ? (

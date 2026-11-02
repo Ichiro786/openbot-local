@@ -16,7 +16,8 @@ import org.json.JSONObject
  *       (the `engine-latest` release format), or
  *     - the GitHub Releases API at [releasesApiUrl]: the newest non-draft `engine-*` release with
  *       an asset [assetName]; sha256 from the asset digest or `<assetName>.sha256`. A private repo
- *       needs [githubToken] (fine-grained, Contents: read, that repo only).
+ *       needs [githubToken] (fine-grained, Contents: read, that repo only). The token is kept
+ *       encrypted with an Android Keystore key ([SecureToken]); only ciphertext is in the prefs.
  */
 data class EngineConfig(
   val releasesApiUrl: String,
@@ -78,7 +79,7 @@ data class EngineConfig(
         manifestUrl = p.getString("manifestUrl", null)?.ifBlank { null },
         tagPrefix = p.getString("tagPrefix", null)?.ifBlank { null } ?: DEFAULT_TAG_PREFIX,
         assetName = p.getString("assetName", null)?.ifBlank { null } ?: DEFAULT_ASSET,
-        githubToken = p.getString("githubToken", null)?.ifBlank { null },
+        githubToken = readToken(p),
         preferRemote = p.getBoolean("preferRemote", false),
         autoRestart = p.getBoolean("autoRestart", true),
         profile = if (p.contains("profile")) p.getString("profile", null)?.ifBlank { null } else DEFAULT_PROFILE,
@@ -92,14 +93,45 @@ data class EngineConfig(
       )
     }
 
+    private const val TOKEN_KEY = "githubTokenEnc"
+
+    /** Plain `githubToken` is the pre-build-5 format; it moves into the encrypted key on first read. */
+    private const val LEGACY_TOKEN_KEY = "githubToken"
+
+    /** The GitHub token, decrypted with the Keystore key. Never stored or returned in plain text. */
+    private fun readToken(p: SharedPreferences): String? {
+      p.getString(TOKEN_KEY, null)?.let { return SecureToken.decrypt(it) }
+      val legacy = p.getString(LEGACY_TOKEN_KEY, null)?.trim()?.ifBlank { null }
+      if (p.contains(LEGACY_TOKEN_KEY)) {
+        val sealed = legacy?.let { runCatching { SecureToken.encrypt(it) }.getOrNull() }
+        p.edit().apply {
+          remove(LEGACY_TOKEN_KEY)
+          if (sealed != null) putString(TOKEN_KEY, sealed)
+        }.apply()
+      }
+      return legacy
+    }
+
     /** Applies the fields present in [input]. An empty string resets a string field to its default. */
     fun save(context: Context, input: EngineConfigInput) {
+      // Encrypt before editing so a Keystore failure stores nothing rather than a plain token.
+      val token = input.githubToken?.trim()
+      val sealedToken = token?.ifBlank { null }?.let {
+        try {
+          SecureToken.encrypt(it)
+        } catch (e: Exception) {
+          throw IllegalStateException("Could not store the GitHub token securely on this device: ${e.message}")
+        }
+      }
       prefs(context).edit().apply {
         input.releasesApiUrl?.let { putString("releasesApiUrl", it) }
         input.manifestUrl?.let { putString("manifestUrl", it) }
         input.tagPrefix?.let { putString("tagPrefix", it) }
         input.assetName?.let { putString("assetName", it) }
-        input.githubToken?.let { putString("githubToken", it) }
+        if (token != null) {
+          remove(LEGACY_TOKEN_KEY)
+          if (sealedToken != null) putString(TOKEN_KEY, sealedToken) else remove(TOKEN_KEY)
+        }
         input.preferRemote?.let { putBoolean("preferRemote", it) }
         input.autoRestart?.let { putBoolean("autoRestart", it) }
         // "" = let the launcher pick its remembered profile; "default" = back to safe.

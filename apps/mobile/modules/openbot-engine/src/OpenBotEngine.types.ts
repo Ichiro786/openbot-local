@@ -65,8 +65,8 @@ export interface EngineConfigInput {
   tagPrefix?: string;
   assetName?: string;
   /**
-   * Fine-grained GitHub token with read access to the private releases repo. Stored in the app's
-   * private preferences on this device only. Never bake it into the JS bundle.
+   * Fine-grained GitHub token with read access to the private releases repo. Encrypted with an
+   * Android Keystore key and kept on this device only; "" removes it. Never bake it into the JS bundle.
    */
   githubToken?: string;
   preferRemote?: boolean;
