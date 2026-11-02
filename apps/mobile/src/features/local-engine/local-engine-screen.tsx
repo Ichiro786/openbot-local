@@ -44,6 +44,7 @@ import {
   type UpdateCheck,
   useOpenBotEngine,
 } from "../../../modules/openbot-engine";
+import { AntigravityRuntimeSection } from "./antigravity-runtime-section";
 
 /** "412 MB" for a release asset; null when the size is unknown. */
 function formatBytes(bytes: number | null | undefined): string | null {
@@ -502,6 +503,12 @@ function LocalEngineScreenInner() {
           )}
         </SettingsSection>
       </Animated.View>
+
+      <AntigravityRuntimeSection
+        engineInstalled={status.installedVersion != null && status.phase !== "installing"}
+        engineRunning={running}
+        onRestart={engine.restart}
+      />
 
       <Animated.View layout={layout} className="gap-3">
         <SettingsSection

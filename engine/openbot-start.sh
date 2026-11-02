@@ -284,8 +284,31 @@ if [ -n "$VA_BITS" ]; then
   log "user address space: ${VA_BITS}-bit"
   echo "$VA_BITS" >"$LOCAL_STATE/va-bits" 2>/dev/null
   if [ "$VA_BITS" -lt 48 ]; then
-    log "Warning: ${VA_BITS}-bit user address space. Google's Gemini (Antigravity) ACP server aborts at start in TCMalloc on such kernels (antigravity-cli#64); its setup ends in \"could not activate the managed CLI\". Other providers are not affected."
+    log "Warning: ${VA_BITS}-bit user address space. Google's Gemini (Antigravity) ACP server aborts at start in TCMalloc on such kernels (antigravity-cli#64); its setup ends in \"could not activate the managed CLI\". Other providers are not affected. The Antigravity hybrid runtime (Server settings > Local engine) avoids it."
   fi
+fi
+
+# Antigravity hybrid runtime (prepared on the phone by /opt/agy-hybrid/tools/prepare.py, see
+# engine/agy-hybrid/): Google's ACP server Python frontend on stock CPython 3.14 plus Google's own
+# localharness_external, no TCMalloc. Used only once it passed its smoke test (.ready). OpenBot reads
+# the version from dirname(dirname(OPENBOT_ANTIGRAVITY_PATH))/antigravity-package.json (>= 1.4 turns on
+# /usage and per-account GEMINI_HOME) and skips its managed download and hash check for an explicit path.
+AGY_CURRENT=/opt/agy-hybrid/current
+unset OPENBOT_ANTIGRAVITY_PATH
+if [ -f "$AGY_CURRENT/.ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ]; then
+  agy_version=$(sed -n "s/^__version__[[:space:]]*=[[:space:]]*['\"]\([0-9.]*\)['\"].*/\1/p" \
+    "$AGY_CURRENT/src/google3/cloud/developer_experience/antigravity_extensions/acp_server/_version.py" 2>/dev/null | head -n 1)
+  [ -n "$agy_version" ] || agy_version=$(head -n 1 "$AGY_CURRENT/.ready" 2>/dev/null)
+  if [[ $agy_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '{"version":"%s"}\n' "$agy_version" >"$AGY_CURRENT/antigravity-package.json.tmp" &&
+      mv -f "$AGY_CURRENT/antigravity-package.json.tmp" "$AGY_CURRENT/antigravity-package.json"
+    export OPENBOT_ANTIGRAVITY_PATH="$AGY_CURRENT/bin/agy_acp_server"
+    log "Antigravity (Gemini): hybrid runtime $agy_version at $OPENBOT_ANTIGRAVITY_PATH."
+  else
+    log "Antigravity (Gemini): hybrid runtime at $AGY_CURRENT has no valid version; using OpenBot's managed copy."
+  fi
+elif [ -n "$VA_BITS" ] && [ "$VA_BITS" -lt 48 ]; then
+  log "Antigravity (Gemini): hybrid runtime not set up; Gemini needs it on this kernel."
 fi
 
 chmod 1777 /tmp 2>/dev/null

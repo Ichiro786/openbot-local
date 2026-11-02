@@ -11,6 +11,10 @@ on:
         description: "OpenBot version to package, e.g. 0.57.0 (blank = latest release)"
         required: false
         default: ""
+      revision:
+        description: "Payload revision for the same OpenBot version: 1 -> engine-<version>-1 (blank = none)"
+        required: false
+        default: ""
       force:
         description: "Rebuild and replace the assets when engine-<version> already exists"
         type: boolean
@@ -46,6 +50,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.openbot_version }}
           INPUT_FORCE: ${{ inputs.force }}
+          INPUT_REVISION: ${{ inputs.revision }}
         run: |
           set -euo pipefail
           if [ -n "${INPUT_VERSION:-}" ]; then
@@ -55,13 +60,16 @@ jobs:
               | sed -n 's/^version: *//p' | head -n 1)
           fi
           [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Invalid OpenBot version '$version'"; exit 1; }
-          tag="engine-$version"
+          revision="${INPUT_REVISION:-}"
+          [[ -z $revision || $revision =~ ^[1-9][0-9]*$ ]] || { echo "::error::Invalid revision '$revision'"; exit 1; }
+          tag="engine-$version${revision:+-$revision}"
           exists=false
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exists=true; fi
           build=true
           if [ "$exists" = true ] && [ "${INPUT_FORCE:-false}" != true ]; then build=false; fi
           {
             echo "version=$version"
+            echo "revision=$revision"
             echo "tag=$tag"
             echo "exists=$exists"
             echo "build=$build"
@@ -88,9 +96,10 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         env:
           OPENBOT_VERSION: ${{ steps.ver.outputs.version }}
+          ENGINE_REVISION: ${{ steps.ver.outputs.revision }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          sudo --preserve-env=OUT_DIR,WORK_DIR,OPENBOT_VERSION,GIT_SHA bash engine/build-rootfs.sh
+          sudo --preserve-env=OUT_DIR,WORK_DIR,OPENBOT_VERSION,ENGINE_REVISION,GIT_SHA,GH_TOKEN bash engine/build-rootfs.sh
           sudo chown -R "$(id -u):$(id -g)" "$OUT_DIR"
           ls -l "$OUT_DIR"
 
@@ -110,7 +119,7 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: engine-${{ steps.ver.outputs.version }}-rootfs-arm64
+          name: ${{ steps.ver.outputs.tag }}-rootfs-arm64
           path: |
             out/rootfs-arm64.tar.xz
             out/rootfs-arm64.tar.xz.sha256
@@ -146,7 +155,7 @@ jobs:
             gh release edit "$TAG" --notes-file notes.md
           else
             gh release create "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json \
-              --title "Engine ${VERSION}" --notes-file notes.md --latest=false
+              --title "Engine ${TAG#engine-}" --notes-file notes.md --latest=false
           fi
           # Pointer for the app: engine-latest/engine.json names the newest versioned payload.
           url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/rootfs-arm64.tar.xz"

@@ -1,0 +1,13 @@
+#!/bin/sh
+# OpenBot Local hybrid launcher: Google's ACP server frontend on stock CPython 3.14 (no TCMalloc).
+# stdout is the ACP JSON-RPC channel: nothing here may print to it.
+D=$(cd "$(dirname "$0")" && pwd); R=$(dirname "$D")
+export AGY_HYBRID_SRC="${AGY_HYBRID_SRC:-$R/src}" AGY_HYBRID_ARGV0="$D/agy_acp_server"
+export ANTIGRAVITY_HARNESS_PATH="${ANTIGRAVITY_HARNESS_PATH:-$D/localharness_external}"
+export PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# python-build-standalone's OpenSSL looks for /etc/ssl/cert.pem, which Ubuntu does not have.
+if [ -z "${SSL_CERT_FILE:-}" ] && [ -r /etc/ssl/certs/ca-certificates.crt ]; then export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt; fi
+# The sign-in flow calls $BROWSER/xdg-open with the Google link. open-url records it for the app and
+# writes nothing to stdout (the URL is also printed on stderr by the server, where OpenBot reads it).
+if [ -z "${BROWSER:-}" ] && [ -x /opt/agy-hybrid/tools/open-url ]; then export BROWSER=/opt/agy-hybrid/tools/open-url; fi
+exec "${AGY_HYBRID_PY:-$R/venv/bin/python}" "$D/agy_hybrid.py" "$@"

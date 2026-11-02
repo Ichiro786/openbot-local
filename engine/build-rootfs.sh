@@ -16,6 +16,9 @@
 #   KEEP_APP_LOCALES  space separated Chromium locale .pak names to keep (default "en-US")
 #   XZ_LEVEL          xz preset (default 9)
 #   GIT_SHA           recorded in engine-version (default: unknown)
+#   ENGINE_REVISION   payload revision for the same OpenBot version: tag engine-<version>-<n> (default: none)
+#   PBS_RELEASE       python-build-standalone release for /opt/python3.14 (default 20261026)
+#   GH_TOKEN          optional, for the GitHub API lookup of that release
 set -euo pipefail
 export LC_ALL=C DEBIAN_FRONTEND=noninteractive
 
@@ -27,6 +30,7 @@ RELEASES=https://github.com/nightly-labs/openbot/releases
 UBUNTU_BASE_DIR="${UBUNTU_BASE_DIR:-https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release}"
 KEEP_APP_LOCALES="${KEEP_APP_LOCALES:-en-US}"
 XZ_LEVEL="${XZ_LEVEL:-9}"
+ENGINE_REVISION="${ENGINE_REVISION:-}"
 
 fail() { echo "build-rootfs: $*" >&2; exit 1; }
 step() { echo "::group::$*" 2>/dev/null || true; echo "==> $*"; }
@@ -35,7 +39,8 @@ fetch() { curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ "$(uname -m)" = aarch64 ] || fail "run on an arm64 host (the chroot runs arm64 binaries natively)"
-for c in curl tar xz sha256sum openssl chroot cc; do command -v "$c" >/dev/null || fail "missing $c"; done
+for c in curl tar xz sha256sum openssl chroot cc jq; do command -v "$c" >/dev/null || fail "missing $c"; done
+[[ -z $ENGINE_REVISION || $ENGINE_REVISION =~ ^[1-9][0-9]*$ ]] || fail "ENGINE_REVISION must be a positive number"
 
 MOUNTS=()
 cleanup_mounts() {
@@ -189,6 +194,47 @@ install -d -m 0755 "$ROOTFS/opt/openbot-local/lib"
 cc -O2 -Wall -shared -fPIC -o "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so" "$SCRIPT_DIR/nonroot-shim.c"
 chmod 0755 "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so"
 
+# Antigravity (Gemini) hybrid runtime tools. Google's ACP server aborts in TCMalloc on 39-bit VA kernels
+# (antigravity-cli#64); the hybrid runs its Python frontend on a stock CPython 3.14 instead. Only the
+# PSF-licensed interpreter and our scripts ship here: prepare.py downloads Google's files from
+# dl.google.com on the phone, checks the registry sha256 and builds the runtime under /root (kept on
+# engine updates). /opt/agy-hybrid/current points at it; openbot-start.sh uses it once it is .ready.
+PBS_RELEASE="${PBS_RELEASE:-20261026}"
+PBS_PYTHON="${PBS_PYTHON:-3.14}"
+pbs_auth=()
+if [ -n "${GH_TOKEN:-}" ]; then pbs_auth=(-H "Authorization: Bearer $GH_TOKEN"); fi
+pbs_json=$(fetch -H "Accept: application/vnd.github+json" "${pbs_auth[@]}" \
+  "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/$PBS_RELEASE")
+pbs_asset=$(jq -c --arg v "$PBS_PYTHON" '[.assets[] | select(.name | test("^cpython-" + ($v | gsub("\\."; "\\.")) +
+  "\\.[0-9]+\\+[0-9]+-aarch64-unknown-linux-gnu-install_only_stripped\\.tar\\.gz$"))] | first // empty' <<<"$pbs_json")
+[ -n "$pbs_asset" ] || fail "python-build-standalone $PBS_RELEASE has no CPython $PBS_PYTHON aarch64 install_only_stripped asset"
+pbs_name=$(jq -r .name <<<"$pbs_asset")
+pbs_sha=$(jq -r '.digest // empty' <<<"$pbs_asset" | sed 's/^sha256://')
+if ! [[ $pbs_sha =~ ^[0-9a-f]{64}$ ]]; then
+  pbs_sha=$(fetch "https://github.com/astral-sh/python-build-standalone/releases/download/$PBS_RELEASE/SHA256SUMS" |
+    awk -v f="$pbs_name" '$2 == f {print $1}')
+fi
+[[ $pbs_sha =~ ^[0-9a-f]{64}$ ]] || fail "no sha256 for $pbs_name"
+echo "CPython: $pbs_name ($pbs_sha)"
+fetch --output "$WORK_DIR/$pbs_name" "https://github.com/astral-sh/python-build-standalone/releases/download/$PBS_RELEASE/$pbs_name"
+echo "$pbs_sha  $WORK_DIR/$pbs_name" | sha256sum -c -
+install -d -m 0755 "$ROOTFS/opt/python$PBS_PYTHON"
+tar -xzf "$WORK_DIR/$pbs_name" -C "$ROOTFS/opt/python$PBS_PYTHON" --strip-components=1 --no-same-owner
+rm -f "$WORK_DIR/$pbs_name"
+# Tests, IDLE and tkinter are dead weight on the phone (no Tcl/Tk, no display for the user).
+rm -rf "$ROOTFS/opt/python$PBS_PYTHON/lib/python$PBS_PYTHON"/{test,idlelib,tkinter,turtledemo} \
+  "$ROOTFS/opt/python$PBS_PYTHON/lib"/{libtcl,libtk}* "$ROOTFS/opt/python$PBS_PYTHON/lib"/{tcl,tk}[0-9]* 2>/dev/null || true
+chown -R 0:0 "$ROOTFS/opt/python$PBS_PYTHON"
+ln -sfn "/opt/python$PBS_PYTHON/bin/python$PBS_PYTHON" "$ROOTFS/usr/local/bin/python$PBS_PYTHON"
+"$ROOTFS/opt/python$PBS_PYTHON/bin/python$PBS_PYTHON" -c 'import ssl, sqlite3, zlib, venv, ensurepip; print("cpython ok")' ||
+  fail "the bundled CPython does not start"
+install -d -m 0755 "$ROOTFS/opt/agy-hybrid/tools"
+for f in prepare.py agy_hybrid.py; do install -m 0644 "$SCRIPT_DIR/agy-hybrid/$f" "$ROOTFS/opt/agy-hybrid/tools/$f"; done
+for f in agy_acp_server open-url agy-hybrid.sh; do install -m 0755 "$SCRIPT_DIR/agy-hybrid/$f" "$ROOTFS/opt/agy-hybrid/tools/$f"; done
+ln -sfn /root/.local/share/agy-hybrid/current "$ROOTFS/opt/agy-hybrid/current"
+ln -sfn /opt/agy-hybrid/tools/agy-hybrid.sh "$ROOTFS/usr/local/bin/agy-hybrid"
+printf 'python=%s\npbs_release=%s\n' "$pbs_name" "$PBS_RELEASE" >"$ROOTFS/opt/agy-hybrid/tools/versions"
+
 # Static DNS and identity. Android has no readable /etc/resolv.conf; the app may overwrite this file
 # with the device's DNS servers before each start.
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions single-request-reopen\n' >"$ROOTFS/etc/resolv.conf"
@@ -203,6 +249,7 @@ openbot=$version
 ubuntu_base=$base_version
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 git=${GIT_SHA:-unknown}
+revision=${ENGINE_REVISION:-0}
 EOF
 chmod 0644 "$ROOTFS/opt/OpenBot/engine-version"
 endstep
@@ -226,7 +273,8 @@ rm -rf "$ROOTFS"/usr/share/{man,info,groff,lintian,linda,bug,doc-base,gtk-doc,he
 find "$ROOTFS/usr/share/locale" -mindepth 1 -maxdepth 1 ! -name locale.alias -exec rm -rf {} + 2>/dev/null || true
 find "$ROOTFS/usr/share/i18n/locales" -mindepth 1 -maxdepth 1 ! -name 'C' ! -name 'en_US' ! -name 'en_GB' \
   ! -name 'i18n*' ! -name 'iso14651_t1*' ! -name 'translit_*' -exec rm -rf {} + 2>/dev/null || true
-find "$ROOTFS" -xdev -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+# The bundled CPython keeps its compiled stdlib: the hybrid runs with PYTHONDONTWRITEBYTECODE=1.
+find "$ROOTFS" -xdev -path "$ROOTFS/opt/python*" -prune -o -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 # Chromium UI translations of the Electron shell; OpenBot's own UI strings live in app.asar.
 if [ -d "$ROOTFS/opt/OpenBot/app/locales" ]; then
   keep_expr=()
@@ -257,7 +305,7 @@ files=$(find "$ROOTFS" | wc -l)
 cat >"$OUT_DIR/engine.json" <<EOF
 {
   "name": "openbot-local-engine",
-  "tag": "engine-$version",
+  "tag": "engine-$version${ENGINE_REVISION:+-$ENGINE_REVISION}",
   "version": "$version",
   "openbot_version": "$version",
   "ubuntu_base": "$base_version",

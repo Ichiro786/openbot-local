@@ -44,12 +44,13 @@ if [ -n "$TAG" ]; then
 else
   api -o "$WORK/releases.json" "$API/repos/$REPO/releases?per_page=100" ||
     fail "cannot list releases of $REPO (private repo without GITHUB_TOKEN?)"
-  # Newest by numeric version, only releases that carry the payload.
+  # Newest by numeric version, only releases that carry the payload. A payload revision for the same
+  # OpenBot version (engine-0.58.0-1) sorts after engine-0.58.0 (as EngineInstaller.compareTags does).
   jq --arg a "$ASSET" '
     [ .[] | select(.draft | not)
-      | select(.tag_name | test("^engine-[0-9]+(\\.[0-9]+)*$"))
+      | select(.tag_name | test("^engine-[0-9]+(\\.[0-9]+)*(-[0-9]+)?$"))
       | select(any(.assets[]; .name == $a)) ]
-    | sort_by(.tag_name | ltrimstr("engine-") | split(".") | map(tonumber))
+    | sort_by(.tag_name | ltrimstr("engine-") | split("-") | (.[0] | split(".") | map(tonumber)) + [(.[1] // "0" | tonumber)])
     | last // empty' "$WORK/releases.json" >"$WORK/release.json"
   if [ ! -s "$WORK/release.json" ]; then
     echo "::error::No engine-<version> release with $ASSET exists in $REPO yet. Run the 'Engine rootfs' workflow (rootfs.yml) first." >&2

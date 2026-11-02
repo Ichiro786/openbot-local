@@ -1,0 +1,12 @@
+#!/bin/sh
+# BROWSER / xdg-open stand-in for the Antigravity ACP server inside the engine.
+# MUST NOT write to stdout: the server's stdout (inherited by this child) is the ACP JSON-RPC channel.
+# It records the link for the app (Server settings > Local engine > Antigravity > Open sign-in link).
+exec </dev/null >/dev/null 2>&1
+url=${1:-}
+case "$url" in https://* | http://*) ;; *) exit 0 ;; esac
+dir=/root/.config/openbot-local
+umask 077
+mkdir -p "$dir" || exit 0
+printf '%s %s\n' "$(date +%s)" "$url" >"$dir/agy-signin-url.tmp" && mv -f "$dir/agy-signin-url.tmp" "$dir/agy-signin-url"
+exit 0
