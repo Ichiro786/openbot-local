@@ -30,6 +30,8 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { create } from "zustand";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
+import { useBlurBudget } from "@/shared/glass/blurBudget";
+import { GlintRim } from "@/shared/glass/GlintRim";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { currentFrostTarget } from "./frostTarget";
@@ -691,12 +693,11 @@ function GlassFill({
   tintTop,
   tintBottom,
   gradientId,
-  width,
-  height,
   radius,
   suffix = "",
 }: Glass & { width: number; height: number; radius: number; suffix?: string }) {
   const id = `${gradientId}${suffix}`;
+  useBlurBudget(Boolean(frost), `glass-menu${suffix}`);
   return (
     <>
       {frost ? (
@@ -719,27 +720,11 @@ function GlassFill({
             <Stop offset="0" stopColor={`rgb(${tint})`} stopOpacity={tintTop} />
             <Stop offset="1" stopColor={`rgb(${tint})`} stopOpacity={tintBottom} />
           </LinearGradient>
-          <LinearGradient id={`${id}-rim`} x1="0" x2="0" y1="0" y2="1">
-            <Stop offset="0" stopColor="#ffffff" stopOpacity={dark ? 0.16 : 0.5} />
-            <Stop offset="1" stopColor="#ffffff" stopOpacity={dark ? 0.04 : 0.12} />
-          </LinearGradient>
         </Defs>
         <Rect width="100%" height="100%" fill={`url(#${id})`} />
-        {frost ? (
-          // Specular rim: a hairline, brighter at the top, inside the card's corner radius.
-          <Rect
-            x={0.5}
-            y={0.5}
-            width={Math.max(0, width - 1)}
-            height={Math.max(0, height - 1)}
-            rx={radius - 0.5}
-            ry={radius - 0.5}
-            fill="none"
-            stroke={`url(#${id}-rim)`}
-            strokeWidth={1}
-          />
-        ) : null}
       </Svg>
+      {/* Build 11: the edge glints of the shared glass (spec §1), in place of the drawn hairline. */}
+      {frost ? <GlintRim radius={radius} dark={dark} lens={false} /> : null}
     </>
   );
 }

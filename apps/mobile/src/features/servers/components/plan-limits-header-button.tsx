@@ -5,9 +5,11 @@ import { View, type ViewStyle } from "react-native";
 import { lowestPlanLimitsFirst, planLimitName, planLimitWindowLabel } from "@/features/servers/model/plan-limits";
 import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
+import { GlassButton } from "@/shared/glass/GlassButton";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { PlanLimitRing } from "./plan-limit-ring";
 
 const RING_SIZE = 30;
@@ -39,6 +41,7 @@ export function PlanLimitsHeaderButton({
   androidGlass: ViewStyle;
 }) {
   const { t } = useText();
+  const colorOS = useColorOSMotion().enabled && isAndroid;
   const lowest = lowestPlanLimitsFirst(rows);
   const shown = lowest.slice(0, 2);
   const more = lowest.length - shown.length;
@@ -82,6 +85,26 @@ export function PlanLimitsHeaderButton({
       ) : null}
     </View>
   );
+  const open = () => {
+    void haptics.impact("soft");
+    router.push({ pathname: "/plan-limits", params: { serverId } });
+  };
+  if (colorOS) {
+    // Build 11 (ColorOS): the Notes solid glass with the press physics; one ring is a circle.
+    return (
+      <View className="h-12 justify-center">
+        <GlassButton
+          variant={single ? "circle" : "pill"}
+          contentPadding={0}
+          accessibilityLabel={t("mobile.server.planLimits.button", { summary })}
+          disabled={disabled}
+          onPress={open}
+        >
+          {content}
+        </GlassButton>
+      </View>
+    );
+  }
   return (
     <AnimatedPressable
       accessibilityRole="button"

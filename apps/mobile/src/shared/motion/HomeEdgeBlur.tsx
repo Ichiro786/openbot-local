@@ -7,6 +7,7 @@ import Animated from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
+import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { edges } from "./tokens";
 import { useBlurLive } from "./useBlurLive";
 import { useColorOSMotion } from "./useColorOSMotion";
@@ -60,6 +61,7 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
   }, [shown]);
   const running = (shown || blurring) && !menuOpen;
   const live = useBlurLive(running);
+  useBlurBudget(live && enabled && ANDROID_BLUR && Boolean(target) && height > 0, "home-edge");
   if (!enabled || !ANDROID_BLUR || !target || height <= 0) return null;
   return (
     <Animated.View

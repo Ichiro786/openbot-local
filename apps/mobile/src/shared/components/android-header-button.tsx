@@ -7,11 +7,11 @@ import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
 import { View, type ViewStyle } from "react-native";
 import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
+import { GlassButton } from "@/shared/glass/GlassButton";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { PressableStretch } from "@/shared/motion/PressableStretch";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /** The 40 dp round state layer of a Material icon button. */
@@ -56,25 +56,17 @@ export function AndroidHeaderButton({
       ? undefined
       : colorOS && Icon && hasGlass
         ? () => (
-            // ColorOS motion: the glass circle swells, follows the finger and springs back.
-            <PressableStretch
-              accessibilityLabel={accessibilityLabel}
-              disabled={disabled}
-              radius={20}
-              hitSlop={4}
-              style={{
-                width: 48,
-                height: 48,
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: disabled ? 0.38 : 1,
-              }}
-              onPress={() => press.current()}
-            >
-              <GlassCircle glass={glass}>
+            // Build 11 (ColorOS): the Notes glass; it shrinks, follows the finger and springs back.
+            <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+              <GlassButton
+                accessibilityLabel={accessibilityLabel}
+                disabled={disabled}
+                style={{ opacity: disabled ? 0.38 : 1 }}
+                onPress={() => press.current()}
+              >
                 <Icon color={foreground} size={22} strokeWidth={2} />
-              </GlassCircle>
-            </PressableStretch>
+              </GlassButton>
+            </View>
           )
         : () => (
             <AnimatedPressable
@@ -109,23 +101,20 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
   const { t } = useText();
   const foreground = useThemeColor("foreground");
   const glass = useChromeGlass();
-  const { enabled: colorOS } = useColorOSMotion();
+  const colorOS = useColorOSMotion().enabled;
   if (colorOS && hasGlass) {
     return (
-      <PressableStretch
-        accessibilityLabel={t("common.back")}
-        radius={20}
-        hitSlop={4}
-        style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}
-        onPress={() => {
-          void haptics.impact("soft");
-          onPress();
-        }}
-      >
-        <GlassCircle glass={glass}>
+      <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+        <GlassButton
+          accessibilityLabel={t("common.back")}
+          onPress={() => {
+            void haptics.impact("soft");
+            onPress();
+          }}
+        >
           <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
-        </GlassCircle>
-      </PressableStretch>
+        </GlassButton>
+      </View>
     );
   }
   return (

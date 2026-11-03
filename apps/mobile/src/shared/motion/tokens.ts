@@ -16,7 +16,7 @@ export type SpringToken = {
   readonly overshootClamping?: boolean;
 };
 
-const spring = (stiffness: number, damping: number, mass = 1, overshootClamping = false): SpringToken => ({
+export const spring = (stiffness: number, damping: number, mass = 1, overshootClamping = false): SpringToken => ({
   stiffness,
   damping,
   mass,
@@ -41,23 +41,6 @@ export const press = {
   highlightOutMs: 140,
   /** List rows (research §4.10): lighter scale, tint only. */
   rowScale: 0.98,
-} as const;
-
-/** 2. Drag stretch (PressableStretch). Provisional: the spec has no "Drag stretch (measured)" section. */
-export const stretch = {
-  /** Button swells ~5% on touch. */
-  swell: 1.05,
-  /**
-   * Brief: offset = 12·d/(1+d/40). Read literally with d in dp it tends to 480 dp,
-   * so d is normalised by the falloff: offset = 12·(d/40)/(1+d/40), capped at 12 dp.
-   * Alt (spec §2): R·(1−1/(1+|d|/R·0.55)), R = 12.
-   */
-  maxOffset: 12,
-  falloff: 40,
-  /** Stretch along the drag axis, ≤ 4%. Alt (spec §2): 1 + 0.10·(1−e^(−|d|/40)). */
-  maxAlong: 0.04,
-  /** Return. Alt (spec §2): 420/22 (ζ≈0.54, ~8–10% overshoot); research: 520/22. */
-  returnSpring: spring(600, 40),
 } as const;
 
 /** 3. GlassMenu (spec §3, H for open). */
@@ -187,23 +170,3 @@ export const haptics = {
   pressIn: "light",
   menuHighlight: "selection",
 } as const;
-
-/** offset = maxOffset·(d/falloff)/(1 + d/falloff), signed, in dp. */
-export function dragOffset(d: number): number {
-  "worklet";
-  const a = Math.abs(d) / stretch.falloff;
-  return Math.sign(d) * ((stretch.maxOffset * a) / (1 + a));
-}
-
-/** Scale along the drag axis, ≤ 1 + maxAlong. */
-export function dragStretch(distance: number): number {
-  "worklet";
-  const a = Math.abs(distance);
-  return 1 + stretch.maxAlong * (a / (a + stretch.falloff));
-}
-
-export function rubberBand(offset: number, dimension: number, c = 0.55): number {
-  "worklet";
-  const x = Math.abs(offset);
-  return Math.sign(offset) * (1 - 1 / ((x * c) / dimension + 1)) * dimension;
-}

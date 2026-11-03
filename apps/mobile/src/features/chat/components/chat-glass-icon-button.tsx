@@ -1,8 +1,11 @@
 import { type GlassColorScheme, GlassView } from "expo-glass-effect";
 import type { PropsWithChildren } from "react";
-import { type AccessibilityValue, Pressable, type ViewStyle } from "react-native";
+import { type AccessibilityValue, Pressable, View, type ViewStyle } from "react-native";
 import Animated, { type CSSTransitionProperties, cubicBezier } from "react-native-reanimated";
+import { GlassButton, type GlassPress } from "@/shared/glass/GlassButton";
+import { isAndroid } from "@/shared/lib/platform";
 import { StretchShell } from "@/shared/motion/PressableStretch";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 const FADE: CSSTransitionProperties = {
   transitionProperty: "opacity",
@@ -27,6 +30,10 @@ interface ChatGlassButtonProps extends PropsWithChildren {
   liquidGlassAvailable: boolean;
   onPress: () => void;
   width?: number;
+  /** Build 11 (ColorOS): `band` when a `GlassBand` blur lies behind this button. */
+  glassMaterial?: "solid" | "band";
+  /** Build 11 (ColorOS): shared press values for a `GlassBand` mask. */
+  press?: GlassPress;
 }
 
 /** The floating control above the composer: a glass capsule with an icon, a label, or both. */
@@ -43,7 +50,46 @@ export function ChatGlassButton({
   liquidGlassAvailable,
   onPress,
   width,
+  glassMaterial = "solid",
+  press,
 }: ChatGlassButtonProps) {
+  const colorOS = useColorOSMotion().enabled && isAndroid && !liquidGlassAvailable;
+  if (colorOS) {
+    // Build 11: the Notes glass. A 40 dp glass in the button's own box (48 dp), so layouts keep
+    // their size and the box is the touch target.
+    const inset = height >= 44 ? 4 : 0;
+    return (
+      <Animated.View
+        pointerEvents={hidden ? "none" : "auto"}
+        accessibilityElementsHidden={hidden}
+        importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}
+        style={{
+          height,
+          width,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: hidden ? 0 : disabled ? 0.45 : 1,
+          ...FADE,
+        }}
+      >
+        <GlassButton
+          variant={width === height ? "circle" : "pill"}
+          size={height - inset * 2}
+          width={width === undefined ? undefined : width - inset * 2}
+          material={glassMaterial}
+          press={press}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityValue={accessibilityValue}
+          disabled={disabled || hidden}
+          hitSlop={inset + 4}
+          onPress={onPress}
+          contentPadding={width === undefined ? 4 : 0}
+        >
+          <View className={className}>{children}</View>
+        </GlassButton>
+      </Animated.View>
+    );
+  }
   return (
     // ColorOS motion: the floating capsule swells and follows the finger; its Pressable keeps the tap.
     <StretchShell>

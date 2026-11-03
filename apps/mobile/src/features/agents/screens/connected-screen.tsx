@@ -99,6 +99,7 @@ import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { LargeTitle, LargeTitleBar, useLargeTitleScroll } from "@/shared/components/large-title";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
+import { GlassButton, GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
 import { BAR_BUTTON_SIZE, NATIVE_BAR_HEIGHT, useBarTop } from "@/shared/lib/native-bar";
@@ -107,6 +108,7 @@ import { currentText, useText } from "@/shared/lib/text";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
 import { useStableMap } from "@/shared/lib/use-stable-map";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const ONBOARDING_EXIT = FadeOut.duration(220).easing(EASE_OUT);
@@ -348,6 +350,17 @@ function HeaderIconButton({
   children: React.ReactNode;
   onPress: () => void;
 }) {
+  const colorOS = useColorOSMotion().enabled && isAndroid;
+  if (colorOS) {
+    // Build 11 (ColorOS): the Notes solid glass with the press physics, in the same 48 dp box.
+    return (
+      <View className="size-12 items-center justify-center">
+        <GlassButton accessibilityLabel={accessibilityLabel} onPress={onPress}>
+          {children}
+        </GlassButton>
+      </View>
+    );
+  }
   return (
     <Pressable
       accessibilityRole="button"
@@ -360,6 +373,21 @@ function HeaderIconButton({
     >
       <HeaderGlass glass={glass}>{children}</HeaderGlass>
     </Pressable>
+  );
+}
+
+/**
+ * Build 11 (ColorOS): the ⋮ glass. The menu view owns the tap, so the press physics come from the raw
+ * touches on this view (no second pressable, no gesture root in the header).
+ */
+function MenuAnchorGlass({ children }: { children: ReactNode }) {
+  const press = useGlassPress();
+  const { reduceMotion } = useColorOSMotion();
+  const handlers = useGlassPressHandlers(press, 40, true, reduceMotion);
+  return (
+    <View {...handlers}>
+      <GlassFace press={press}>{children}</GlassFace>
+    </View>
   );
 }
 
@@ -406,6 +434,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   const [foreground, muted] = useThemeColor(["foreground", "muted"]);
   // The Android header buttons have the glass of the search field.
   const buttonGlass = useChromeGlass();
+  const colorOSHeader = useColorOSMotion().enabled && isAndroid;
   const searchBlurTarget = useRef<ViewInstance>(null);
   // ColorOS glass menus opened while home has focus frost this same list target (build 9).
   useFrostTarget(searchBlurTarget, isAndroid);
@@ -820,13 +849,19 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
           accessible
           className="size-12 items-center justify-center"
         >
-          <HeaderGlass glass={buttonGlass}>
-            {isAndroid ? (
+          {colorOSHeader ? (
+            <MenuAnchorGlass>
               <EllipsisVertical color={iconColor} size={22} strokeWidth={2} />
-            ) : (
-              <Ellipsis color={iconColor} size={22} strokeWidth={2} />
-            )}
-          </HeaderGlass>
+            </MenuAnchorGlass>
+          ) : (
+            <HeaderGlass glass={buttonGlass}>
+              {isAndroid ? (
+                <EllipsisVertical color={iconColor} size={22} strokeWidth={2} />
+              ) : (
+                <Ellipsis color={iconColor} size={22} strokeWidth={2} />
+              )}
+            </HeaderGlass>
+          )}
         </View>
       </MenuView>
     </View>
