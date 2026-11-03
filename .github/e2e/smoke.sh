@@ -28,13 +28,13 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; }
 # $1 xml $2 label (substring of text or content-desc) $3 mode: c = centre "x y", b = bounds "x1 y1 x2 y2"
 node() {
   python3 - "$1" "$2" "${3:-c}" <<'PY'
-import re,sys
+import re,sys,html
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
 label,mode=sys.argv[2],sys.argv[3]
 for m in re.finditer(r'<node [^>]*>', xml):
     n=m.group(0)
     t=re.search(r' text="([^"]*)"',n); d=re.search(r' content-desc="([^"]*)"',n)
-    if (t and label in t.group(1)) or (d and label in d.group(1)):
+    if (t and label in html.unescape(t.group(1))) or (d and label in html.unescape(d.group(1))):
         b=re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n)
         if b:
             x1,y1,x2,y2=map(int,b.groups())
@@ -99,31 +99,31 @@ blurs() { # $1 name: mounted blur views in the window (upper bound of running bl
   log "  blur views mounted ($1): $(grep -ciE 'BlurView|BlurTarget' "$OUT/$1-viewtree.txt") [$(grep -oiE '[A-Za-z.]*Blur[A-Za-z]*' "$OUT/$1-viewtree.txt" | sort | uniq -c | tr -s ' ' | tr '\n' ';')]"
 }
 selected_of() { python3 - "$1" "$2" <<'PYY'
-import re,sys
+import re,sys,html
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
 for n in re.findall(r'<node [^>]*>',xml):
     d=re.search(r' content-desc="([^"]*)"',n)
-    if d and d.group(1)==sys.argv[2]: print(re.search(r' selected="([a-z]*)"',n).group(1)); break
+    if d and html.unescape(d.group(1))==sys.argv[2]: print(re.search(r' selected="([a-z]*)"',n).group(1)); break
 PYY
 }
 count() { python3 - "$1" "$2" <<'PY'
-import re,sys
+import re,sys,html
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();l=sys.argv[2];c=0
 for n in re.findall(r'<node [^>]*>',xml):
     t=re.search(r' text="([^"]*)"',n);d=re.search(r' content-desc="([^"]*)"',n)
-    if (t and t.group(1)==l) or (d and d.group(1)==l): c+=1
+    if (t and html.unescape(t.group(1))==l) or (d and html.unescape(d.group(1))==l): c+=1
 print(c)
 PY
 }
 edit_xy() { python3 - "$1" <<'PY'
-import re,sys
+import re,sys,html
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
 for n in re.findall(r'<node [^>]*>',xml):
     if 'class="android.widget.EditText"' in n:
         x1,y1,x2,y2=map(int,re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n).groups()); print((x1+x2)//2,(y1+y2)//2,y2); break
 PY
 }
-hold() { adb shell input swipe $1 $2 $1 $2 900; }
+hold() { [ $# -ge 2 ] || { log "  hold: no target"; FAIL=1; return 1; }; adb shell input swipe $1 $2 $1 $2 900; }
 tapl() { # $1 label $2 timeout $3 dumpname -> taps, returns 1 if missing
   local xy; xy=$(wait_for "$1" "$2" "$3") || { log "  missing: $1"; return 1; }
   adb shell input tap $xy; return 0
@@ -211,7 +211,7 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c7"; sleep 0.8; adb shell input keyevent 4; sleep 0.8; dump "$n-c8"
     [ -n "$(find_node "$OUT/$n-c8.xml" "React with 👍")" ] && log "ok: back key left the emoji grid" || log "note: grid back state unclear"
     adb shell input keyevent 4; sleep 1; check "$n-grid-back" || return
-    hold $xy; sleep 1.2; tapl "Copy message" 3 "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
+    close_menu_if_open "$n-pre-copy"; hold $xy; sleep 1.2; tapl "Copy message" 3 "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
     expect_text "COPY a1" 5 "$n-c10"
     hold $xy; sleep 1.2; tapl "Select text" 3 "$n-c9s" || FAIL=1; sleep 1.5; check "$n-select" || return
     expect_text "SELECT a1" 5 "$n-c10s"
@@ -244,7 +244,7 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
   fi
   if [ "$2" = ON ]; then # the real ••• pill (last 'Info for E2E Agent' node) pushes /agent-info/[id]
     local dx; dx=$(python3 - "$OUT/$n-h0.xml" <<'PYY'
-import re,sys
+import re,sys,html
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();last=""
 for n in re.findall(r'<node [^>]*>',xml):
     if 'content-desc="Info for E2E Agent"' in n:
