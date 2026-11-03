@@ -15,8 +15,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: e2e-emulator
-  cancel-in-progress: true
+  group: e2e-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   plan:
