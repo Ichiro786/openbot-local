@@ -5,6 +5,7 @@ import { useKeyboardHandler } from "react-native-keyboard-controller";
 import {
   cancelAnimation,
   Easing,
+  makeMutable,
   ReduceMotion,
   useAnimatedReaction,
   useAnimatedStyle,
@@ -13,8 +14,10 @@ import {
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { supportLog } from "@/features/support/model/support-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid } from "@/shared/lib/platform";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatContentIsVisible } from "../model/chat-layout";
 
 /** The space under each row of the list. */
@@ -27,6 +30,29 @@ const ANDROID_PLACE_FRAMES = 2;
 const ANDROID_PLACE_TIMEOUT_MS = 250;
 /** How long the list keeps the latest message in view after the chat has its rows and its latest page. */
 const OPENING_FOLLOW_MS = 600;
+
+/** Build 10 keyboard fallback: how long a settled keyboard change takes to animate. */
+const FALLBACK_KEYBOARD_MS = 240;
+/** Build 10 keyboard fallback: the anticipated lift on focus, about an IME's own rise. */
+const ANTICIPATE_MS = 280;
+/** Build 10 keyboard fallback: no keyboard this long after a focus lowers the anticipated lift. */
+const ANTICIPATE_WAIT_MS = 1200;
+/** The last keyboard height of the app (any chat), for the anticipated lift. */
+const lastKeyboardHeight = makeMutable(0);
+/** True once a keyboard show came only as a settled burst (no IME frames on this phone). */
+const framesMissing = makeMutable(false);
+
+/**
+ * Build 10 diagnostic, declared before the keyboard worklets that call it: a keyboard that came only
+ * as a settled event, so a support log from the phone says whether its IME sends animation frames.
+ */
+function reportSettledKeyboard(height: number): void {
+  supportLog.add(
+    "info",
+    "app",
+    `Keyboard reported only when settled (no IME animation frames, or a resize): ${Math.round(height)} dp`,
+  );
+}
 
 type AnchorReadyInfo = Parameters<NonNullable<AnchoredEndSpaceConfig["onReady"]>>[0];
 
@@ -51,23 +77,54 @@ export function useChatMotion(
   // itself, so a swipe drives the shape change frame by frame.
   const keyboardProgress = useSharedValue(0);
   const keyboardDismissed = useSharedValue(false);
+  // Build 10 (ColorOS motion, Android): some phones send no IME animation frames (Syed's ColorOS
+  // build). react-native-keyboard-controller then reports the keyboard only once it has settled,
+  // as one Start/Move/End burst with duration 0, and the composer jumped. With the fallback on, a
+  // duration-0 change animates instead, a Start with a duration animates to its destination until
+  // real frames take over, and a focus starts the lift at the last keyboard height (see
+  // `anticipateKeyboard`). With the fallback off the handler behaves exactly as before; with real
+  // frames, each frame overwrites the fallback's timing on its first frame.
+  const colorOS = useColorOSMotion().enabled;
+  const fallback = useSharedValue(isAndroid && colorOS && !reducedMotion);
+  useEffect(() => {
+    fallback.set(isAndroid && colorOS && !reducedMotion);
+  }, [fallback, colorOS, reducedMotion]);
+  /** Bumped by each keyboard Start, so an anticipated lift knows whether the keyboard came. */
+  const keyboardEvents = useSharedValue(0);
   // Track opening and interactive frames. Once dismissal starts, finish the
   // return independently so a missing completion cannot retain keyboard space.
   useKeyboardHandler(
     {
       onStart: (event) => {
         "worklet";
+        keyboardEvents.set(keyboardEvents.get() + 1);
         if (event.height > 0) {
-          cancelAnimation(keyboardHeight);
-          cancelAnimation(keyboardProgress);
+          // Fallback: the settled burst (duration 0) leaves an anticipated lift running; onEnd lands it.
+          if (!(fallback.get() && event.duration === 0)) {
+            cancelAnimation(keyboardHeight);
+            cancelAnimation(keyboardProgress);
+          }
           keyboardDismissed.set(false);
+          lastKeyboardHeight.set(event.height);
+          // Fallback: ride to the destination on the keyboard's own duration; real onMove frames,
+          // when they come, overwrite this on their first frame.
+          if (fallback.get() && event.duration > 0) {
+            const timing = {
+              duration: event.duration,
+              easing: Easing.out(Easing.cubic),
+              reduceMotion: ReduceMotion.System,
+            };
+            keyboardHeight.set(withTiming(event.height, timing));
+            keyboardProgress.set(withTiming(1, timing));
+          }
         } else {
           // Complete the return from the destination event. An interrupted iOS
           // dismissal can omit its final frame; subsequent drag frames must not
           // cancel this animation and leave the composer above an absent keyboard.
           keyboardDismissed.set(true);
+          const duration = fallback.get() && event.duration === 0 ? FALLBACK_KEYBOARD_MS : Math.max(0, event.duration);
           const timing = {
-            duration: Math.max(0, event.duration),
+            duration,
             easing: Easing.out(Easing.cubic),
             reduceMotion: ReduceMotion.System,
           };
@@ -78,6 +135,10 @@ export function useChatMotion(
       onMove: (event) => {
         "worklet";
         if (keyboardDismissed.get()) return;
+        // Fallback: the settled burst (duration 0) is animated in onEnd, not jumped to here.
+        if (fallback.get() && event.duration === 0 && event.height > 0) return;
+        // Real frames: this phone animates the IME, so focus never anticipates it.
+        if (event.duration > 0) framesMissing.set(false);
         keyboardHeight.set(event.progress === 0 ? 0 : event.height);
         keyboardProgress.set(event.progress);
       },
@@ -91,25 +152,85 @@ export function useChatMotion(
         "worklet";
         if (event.height <= 0 || event.progress === 0) {
           keyboardDismissed.set(true);
+          // Fallback: a return that is still animating (from onStart) finishes on its own.
+          if (fallback.get() && keyboardHeight.get() > 0) {
+            const timing = {
+              duration: FALLBACK_KEYBOARD_MS,
+              easing: Easing.out(Easing.cubic),
+              reduceMotion: ReduceMotion.System,
+            };
+            keyboardHeight.set(withTiming(0, timing));
+            keyboardProgress.set(withTiming(0, timing));
+            return;
+          }
           keyboardHeight.set(0);
           keyboardProgress.set(0);
         } else if (!keyboardDismissed.get()) {
+          lastKeyboardHeight.set(event.height);
+          // A show reported only once settled: this phone sends no IME frames (or the keyboard resized).
+          if (event.duration === 0 && !framesMissing.get()) {
+            framesMissing.set(true);
+            scheduleOnRN(reportSettledKeyboard, event.height);
+          }
+          if (fallback.get() && event.duration === 0 && Math.abs(keyboardHeight.get() - event.height) > 1) {
+            const timing = {
+              duration: FALLBACK_KEYBOARD_MS,
+              easing: Easing.out(Easing.cubic),
+              reduceMotion: ReduceMotion.System,
+            };
+            keyboardHeight.set(withTiming(event.height, timing));
+            keyboardProgress.set(withTiming(event.progress, timing));
+            return;
+          }
           keyboardHeight.set(event.height);
           keyboardProgress.set(event.progress);
         }
       },
     },
-    [keyboardHeight, keyboardProgress, keyboardDismissed],
+    [keyboardHeight, keyboardProgress, keyboardDismissed, fallback, keyboardEvents],
   );
   useEffect(() => {
     // A native picker or interrupted dismissal can omit the controller's final frame.
     const subscription = Keyboard.addListener("keyboardDidHide", () => {
       keyboardDismissed.set(true);
+      if (fallback.get() && keyboardHeight.get() > 0) {
+        // Fallback: this arrives with the settled burst; the composer glides down instead of jumping.
+        const timing = {
+          duration: FALLBACK_KEYBOARD_MS,
+          easing: Easing.out(Easing.cubic),
+          reduceMotion: ReduceMotion.System,
+        };
+        keyboardHeight.set(withTiming(0, timing));
+        keyboardProgress.set(withTiming(0, timing));
+        return;
+      }
       keyboardHeight.set(0);
       keyboardProgress.set(0);
     });
     return () => subscription.remove();
-  }, [keyboardHeight, keyboardProgress, keyboardDismissed]);
+  }, [keyboardHeight, keyboardProgress, keyboardDismissed, fallback]);
+  /**
+   * Build 10 fallback: the composer's input took focus with the keyboard down. Where the phone sends
+   * no IME frames, start lifting at once to the last keyboard height, so the composer rises with the
+   * keyboard instead of after it; the settled event corrects the height. No keyboard within
+   * ANTICIPATE_WAIT_MS (a hardware keyboard) lowers it again.
+   */
+  const anticipateKeyboard = useCallback(() => {
+    if (!fallback.get() || keyboardHeight.get() > 0) return;
+    const height = lastKeyboardHeight.get();
+    if (height <= 0 || !framesMissing.get()) return;
+    const events = keyboardEvents.get();
+    keyboardDismissed.set(false);
+    const timing = { duration: ANTICIPATE_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System };
+    keyboardHeight.set(withTiming(height, timing));
+    keyboardProgress.set(withTiming(1, timing));
+    setTimeout(() => {
+      if (keyboardEvents.get() !== events) return;
+      keyboardDismissed.set(true);
+      keyboardHeight.set(withTiming(0, timing));
+      keyboardProgress.set(withTiming(0, timing));
+    }, ANTICIPATE_WAIT_MS);
+  }, [fallback, keyboardHeight, keyboardProgress, keyboardDismissed, keyboardEvents]);
   const composerStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -Math.max(0, keyboardHeight.get() - keyboardOffset) }],
   }));
@@ -421,6 +542,7 @@ export function useChatMotion(
       composerStyle,
       keyboardHeight,
       keyboardProgress,
+      anticipateKeyboard,
       keyboardLiftBehavior,
       /**
        * The list keeps the latest message in view. A question waits for the reader at the end of the
@@ -456,6 +578,7 @@ export function useChatMotion(
       composerStyle,
       keyboardHeight,
       keyboardProgress,
+      anticipateKeyboard,
       keyboardLiftBehavior,
       requiredInputId,
       openingFollow,

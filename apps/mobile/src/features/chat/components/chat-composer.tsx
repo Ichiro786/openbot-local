@@ -11,7 +11,17 @@ import Reply from "lucide-react-native/icons/reply";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Square from "lucide-react-native/icons/square";
 import X from "lucide-react-native/icons/x";
-import { memo, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   Text as NativeText,
@@ -21,6 +31,7 @@ import {
   type TextInputInstance,
   useWindowDimensions,
   View,
+  type ViewInstance,
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -47,6 +58,7 @@ import type { ChatBubbleMessage } from "@/features/chat/model/chat-messages";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { Button } from "@/shared/components/button";
+import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import {
   COMPOSER_FIELD_VERTICAL_PADDING,
   COMPOSER_TOOLBAR_HEIGHT,
@@ -58,6 +70,9 @@ import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid } from "@/shared/lib/platform";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";
+import { ComposerFrost } from "@/shared/motion/ComposerFrost";
+import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
 import { applyMarkdownListEdit, markdownListReturn } from "../model/composer-lists";
 import { largePastedText } from "../model/composer-paste";
@@ -164,6 +179,13 @@ interface ChatComposerProps {
   onStop?: () => void;
   /** 0 with the keyboard down, 1 with it up, and every value a swipe passes through. */
   keyboardProgress: SharedValue<number>;
+  /**
+   * Build 10 (ColorOS motion, Android 12+): the chat's message-list blur target. With it the card is
+   * frosted glass (ComposerFrost) instead of its solid fill.
+   */
+  frostTarget?: RefObject<ViewInstance | null>;
+  /** Build 10: the field took focus (the chat may start lifting the composer for the keyboard). */
+  onInputFocus?: () => void;
   /** The attachment card is open on the plus, which then has to hold still. */
   menuOpen?: boolean;
   /** The card's open progress, so the plus can cross-fade against the card. */
@@ -257,6 +279,8 @@ export const ChatComposer = memo(function ChatComposer({
   onSend,
   onStop,
   keyboardProgress,
+  frostTarget,
+  onInputFocus,
   menuOpen = false,
   menuProgress,
   stopping = false,
@@ -310,6 +334,10 @@ export const ChatComposer = memo(function ChatComposer({
   // The chat owns the voice mode. The composer only changes shape for it: the
   // round button of dictation, or the call bar of a live conversation.
   const voiceOpen = voice?.open ?? false;
+  // Build 10: frosted glass (ColorOS motion, Android 12+, a target from the chat).
+  const colorOSFrost = useColorOSMotion().enabled;
+  const frosted = isAndroid && ANDROID_BLUR && !liquidGlassAvailable && colorOSFrost && frostTarget !== undefined;
+  const doubleFrostMenu = useGlassMenuDoubleFrost();
   // A live conversation turns the card into a call bar of the full width, not the round button.
   const voiceBar = voice?.bar;
   const barMode = Boolean(voiceBar);
@@ -980,7 +1008,8 @@ export const ChatComposer = memo(function ChatComposer({
             glassEffectStyle={liquidGlassAvailable ? "regular" : "none"}
             style={[
               {
-                backgroundColor: liquidGlassAvailable ? "transparent" : fallbackBackground,
+                // Frosted, the card's fill is the solid layer under ComposerFrost's blur.
+                backgroundColor: liquidGlassAvailable || frosted ? "transparent" : fallbackBackground,
                 borderCurve: "continuous",
                 borderRadius: CARD_RADIUS,
                 overflow: "hidden",
@@ -989,6 +1018,15 @@ export const ChatComposer = memo(function ChatComposer({
               cardStyle,
             ]}
           >
+            {frosted && frostTarget ? (
+              <ComposerFrost
+                target={frostTarget}
+                // At most two blurs on the chat: a message menu brings two, so the composer pauses.
+                shown={!voiceOpen && !doubleFrostMenu}
+                solid={String(fallbackBackground)}
+                radius={CARD_RADIUS}
+              />
+            ) : null}
             {voiceFilled && voiceAccent ? (
               <Animated.View
                 pointerEvents="none"
@@ -1127,6 +1165,7 @@ export const ChatComposer = memo(function ChatComposer({
                         )
                       }
                       onFocus={() => {
+                        onInputFocus?.();
                         sendGate.focus();
                         setFocused(true);
                       }}

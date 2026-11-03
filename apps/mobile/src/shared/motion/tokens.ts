@@ -131,6 +131,19 @@ export const pill = {
   sheenLight: 0.22,
 } as const;
 
+/**
+ * Build 10: the chat composer's frost. The home pill's glass, toned down: a more opaque tint so typed
+ * text keeps its contrast over busy messages (pill 0.34 / 0.42 → 0.56 / 0.64), the same rim.
+ */
+export const composerFrost = {
+  fillDark: "rgba(22, 22, 24, 0.56)",
+  fillLight: "rgba(255, 255, 255, 0.64)",
+  /** expo-blur intensity, as the home pill (24). */
+  intensity: 24,
+  fadeInMs: 180,
+  fadeOutMs: 140,
+} as const;
+
 /** 5. Zoom open (spec §4). */
 export const zoom = {
   /** ζ≈0.95, 90% at ~200 ms. Alt: { duration: 320, dampingRatio: 0.95 }. */

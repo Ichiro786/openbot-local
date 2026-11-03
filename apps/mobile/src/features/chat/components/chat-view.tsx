@@ -4,6 +4,7 @@ import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import { serializeSelectionInstruction } from "@openbot/contracts/selection-instruction";
 import { type CauseCode, classifyFailure, type FailureProperties } from "@openbot/telemetry";
 import { useQueryClient } from "@tanstack/react-query";
+import { BlurTargetView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { router, useIsFocused } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
@@ -12,7 +13,7 @@ import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Keyboard, useColorScheme, View } from "react-native";
+import { AppState, Keyboard, useColorScheme, View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardGestureArea } from "react-native-keyboard-controller";
 import Animated, { useSharedValue } from "react-native-reanimated";
@@ -56,11 +57,14 @@ import type { MobileAgentActivity } from "@/features/workspace/model/agent-activ
 import type { PendingApproval } from "@/features/workspace/model/pending-approvals";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { showsOnline } from "@/features/workspace/model/server-status";
+import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
+import { useFrostTarget } from "@/shared/motion/frostTarget";
+import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import {
@@ -568,6 +572,13 @@ export function ChatView({
     void showLatestMessages().then(motion.returnToLatest, () => undefined);
   };
   const liquidGlassAvailable = isLiquidGlassAvailable() && !reducedTransparency;
+  // Build 10 (ColorOS motion, Android 12+): the message list is a blur target, so the composer and
+  // the glass menus over this chat frost it. Chosen when the chat mounts, so a live toggle never
+  // remounts the list; the composer and the menus read the toggle live.
+  const [frostChat] = useState(() => ANDROID_BLUR && !liquidGlassAvailable && colorOSMotionEnabled());
+  const frostTarget = useRef<ViewInstance | null>(null);
+  const colorOSMotion = useColorOSMotion().enabled;
+  useFrostTarget(frostTarget, frostChat && colorOSMotion);
   // A quiet return to the app counts as online: the chat keeps its look, and its requests wait.
   const serverOnline = showsOnline(server);
   // Speech goes to the voice mode's own transcript, and only Send makes it a
@@ -987,73 +998,75 @@ export function ChatView({
               // keeps screen readers on the transcript and the voice controls.
               accessibilityHidden={dictating}
             />
-            <ChatMessageList
-              agents={serverAgents}
-              rowsShown={rowsShown}
-              target={target}
-              accessibilityHidden={dictating}
-              motion={motion}
-              sending={Boolean(sendingMessage)}
-              awaitingTurn={awaitingTurn}
-              keyboardOffset={keyboardOffset}
-              canSend={serverOnline && canSend}
-              online={serverOnline}
-              activity={activity}
-              activities={activities}
-              historyState={
-                ready
-                  ? "ready"
-                  : server?.initialConnectionPending
-                    ? "connecting"
-                    : !serverOnline
-                      ? "waiting"
-                      : historyLoadFailed
-                        ? "error"
-                        : "loading"
-              }
-              appActive={appActive}
-              activeTurnId={activeTurnId}
-              turnSummaries={turnSummaries}
-              onOpenTurn={thinkingAgentId ? openTurn : undefined}
-              // The form is a new object on each render. Without a question the list does not read it,
-              // so it is left out and does not draw the list again.
-              questionForm={questionForm?.messageId ? questionForm : undefined}
-              onSelectQuestion={readOnly ? undefined : onSelectQuestion}
-              activityAccessory={activityAccessory}
-              approvals={readOnly ? undefined : approvals}
-              browserRequests={chatBrowserRequests}
-              serverName={server?.name ?? ""}
-              onRespondApproval={respondToApproval}
-              fieldBackground={fieldBackground}
-              foreground={foreground}
-              messages={messages}
-              messageAliases={messageAliases}
-              referenceMessages={referenceMessages}
-              hasOlder={hasOlder}
-              olderLoading={olderLoading}
-              olderError={olderError}
-              onLoadOlder={loadOlder}
-              onReply={readOnly ? undefined : replyToMessage}
-              onReact={canReact && !readOnly ? react : undefined}
-              selectingMessageId={selection?.message.id ?? null}
-              onSelectText={selectText}
-              onSelectionChange={changeSelection}
-              onNativeSelection={selectNatively}
-              onDismissSelection={dismissSelection}
-              muted={muted}
-              raised={raised}
-              showStarter={
-                showStarter && serverOnline && canSend && ready && !activity && projectedMessages.length === 0
-              }
-              topInset={insets.top}
-              onDismissStarter={dismissStarter}
-              onSelectStarter={send}
-              onRetryHistory={fetchHistory}
-              focusMessageId={focusMessageId}
-              onFocusPlaced={onFocusPlaced}
-              upload={listUpload}
-              outboxStatuses={outboxStatuses}
-            />
+            <ChatFrostTarget enabled={frostChat} target={frostTarget}>
+              <ChatMessageList
+                agents={serverAgents}
+                rowsShown={rowsShown}
+                target={target}
+                accessibilityHidden={dictating}
+                motion={motion}
+                sending={Boolean(sendingMessage)}
+                awaitingTurn={awaitingTurn}
+                keyboardOffset={keyboardOffset}
+                canSend={serverOnline && canSend}
+                online={serverOnline}
+                activity={activity}
+                activities={activities}
+                historyState={
+                  ready
+                    ? "ready"
+                    : server?.initialConnectionPending
+                      ? "connecting"
+                      : !serverOnline
+                        ? "waiting"
+                        : historyLoadFailed
+                          ? "error"
+                          : "loading"
+                }
+                appActive={appActive}
+                activeTurnId={activeTurnId}
+                turnSummaries={turnSummaries}
+                onOpenTurn={thinkingAgentId ? openTurn : undefined}
+                // The form is a new object on each render. Without a question the list does not read it,
+                // so it is left out and does not draw the list again.
+                questionForm={questionForm?.messageId ? questionForm : undefined}
+                onSelectQuestion={readOnly ? undefined : onSelectQuestion}
+                activityAccessory={activityAccessory}
+                approvals={readOnly ? undefined : approvals}
+                browserRequests={chatBrowserRequests}
+                serverName={server?.name ?? ""}
+                onRespondApproval={respondToApproval}
+                fieldBackground={fieldBackground}
+                foreground={foreground}
+                messages={messages}
+                messageAliases={messageAliases}
+                referenceMessages={referenceMessages}
+                hasOlder={hasOlder}
+                olderLoading={olderLoading}
+                olderError={olderError}
+                onLoadOlder={loadOlder}
+                onReply={readOnly ? undefined : replyToMessage}
+                onReact={canReact && !readOnly ? react : undefined}
+                selectingMessageId={selection?.message.id ?? null}
+                onSelectText={selectText}
+                onSelectionChange={changeSelection}
+                onNativeSelection={selectNatively}
+                onDismissSelection={dismissSelection}
+                muted={muted}
+                raised={raised}
+                showStarter={
+                  showStarter && serverOnline && canSend && ready && !activity && projectedMessages.length === 0
+                }
+                topInset={insets.top}
+                onDismissStarter={dismissStarter}
+                onSelectStarter={send}
+                onRetryHistory={fetchHistory}
+                focusMessageId={focusMessageId}
+                onFocusPlaced={onFocusPlaced}
+                upload={listUpload}
+                outboxStatuses={outboxStatuses}
+              />
+            </ChatFrostTarget>
             {dictating ? (
               <VoiceOverlay
                 voice={voice}
@@ -1225,6 +1238,8 @@ export function ChatView({
                   onSend={send}
                   onStop={requestStop}
                   keyboardProgress={motion.keyboardProgress}
+                  frostTarget={frostChat && colorOSMotion ? frostTarget : undefined}
+                  onInputFocus={motion.anticipateKeyboard}
                   menuOpen={attachments.menuOpen}
                   menuProgress={menuProgress}
                   stopping={stopping}
@@ -1269,5 +1284,26 @@ export function ChatView({
         ) : null}
       </View>
     </GestureDetector>
+  );
+}
+
+/**
+ * Build 10: the message list inside a `BlurTargetView` (Android, ColorOS motion), so the composer and
+ * the glass menus blur it from outside. Anything else renders the list as before.
+ */
+function ChatFrostTarget({
+  enabled,
+  target,
+  children,
+}: {
+  enabled: boolean;
+  target: { current: ViewInstance | null };
+  children: ReactNode;
+}) {
+  if (!enabled) return children;
+  return (
+    <BlurTargetView ref={target} style={{ flex: 1 }}>
+      {children}
+    </BlurTargetView>
   );
 }
