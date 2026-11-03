@@ -79,7 +79,8 @@ export function ServerConnectorsScreen() {
     bitwarden,
   } = useServerConnectors(serverId, "all");
   // OpenBot Local (build 11): WhatsApp on an engine that serves `whatsapp-mobile-v1`.
-  const whatsapp = useWhatsApp(serverId);
+  // The row reads the overview once; only the WhatsApp page polls it (review R3-4).
+  const whatsapp = useWhatsApp(serverId, false);
   if (!server || !(connectors || onePasswordAvailable || bitwardenAvailable || whatsapp.available))
     return (
       <SettingsContent>

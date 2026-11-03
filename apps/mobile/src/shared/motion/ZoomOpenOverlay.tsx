@@ -56,6 +56,11 @@ export function zoomOpen(rect: ZoomRect, navigate: () => void, radius = 16): boo
   return true;
 }
 
+/** Build 11: a zoom-open surface is up (a screen mounting now mounts under it). */
+export function zoomCovering(): boolean {
+  return useZoomStore.getState().request !== null;
+}
+
 function clear() {
   disarmZoomPush();
   useZoomStore.setState({ request: null });

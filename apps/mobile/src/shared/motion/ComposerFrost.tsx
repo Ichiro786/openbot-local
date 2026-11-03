@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useUniwind } from "uniwind";
@@ -8,6 +8,7 @@ import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { GlintRim } from "@/shared/glass/GlintRim";
 import { composerFrost } from "./tokens";
 import { useBlurLive } from "./useBlurLive";
+import { zoomCovering } from "./ZoomOpenOverlay";
 
 /**
  * Build 10 (ColorOS motion, Android 12+): the chat composer's frosted glass, the home search pill's
@@ -41,9 +42,14 @@ export function ComposerFrost({
   // frost's place never runs alongside it and no unblurred glass fill is ever seen.
   const live = useBlurLive(on);
   useBlurBudget(live, "composer-frost");
+  // Build 11 (review R3-2): mounted under the zoom surface, the first frost comes on at once; the
+  // surface's one dissolve is the fade, so the composer never crossfades after the reveal.
+  const underZoom = useRef(zoomCovering());
   useEffect(() => {
+    const instant = on && underZoom.current;
+    if (on) underZoom.current = false;
     // Paused: the glass goes at once with its blur (fading the fill alone would show unblurred text).
-    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : 0 }));
+    visible.set(withTiming(on ? 1 : 0, { duration: on && !instant ? composerFrost.fadeInMs : 0 }));
   }, [on, visible]);
   const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
   const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));

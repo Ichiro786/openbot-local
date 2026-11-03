@@ -85,8 +85,8 @@ export function PlanLimitsHeaderButton({
       ) : null}
     </View>
   );
+  // ColorOS: the glass press gives the one tick (review R2-2).
   const open = () => {
-    void haptics.impact("soft");
     router.push({ pathname: "/plan-limits", params: { serverId } });
   };
   if (colorOS) {

@@ -17,7 +17,6 @@ import { MenuView } from "@/shared/components/menu-view";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { GlassBand, type GlassBandShape } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
-import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -123,8 +122,8 @@ export function ColorOSChatHeader({
     (current) =>
       current.agents.find((agent) => agent.id === target.id && agent.serverId === target.serverId)?.title.trim() ?? "",
   );
+  // The glass press gives the one tick (review R2-2).
   const openAgentPage = () => {
-    void haptics.impact("soft");
     router.push({ pathname: "/agent-info/[agentId]", params: { agentId: target.id, serverId: target.serverId } });
   };
   const nameLabel = threadMenu
@@ -173,10 +172,7 @@ export function ColorOSChatHeader({
               liquidGlassAvailable={false}
               glassMaterial={material}
               press={backPress}
-              onPress={() => {
-                void haptics.impact("soft");
-                onBack();
-              }}
+              onPress={onBack}
             >
               <ArrowLeft color={iconColor} size={24} strokeWidth={2} />
             </ChatGlassIconButton>

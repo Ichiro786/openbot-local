@@ -77,6 +77,8 @@ function GlintSvg({
   const b = at(rim.glintB.angle, rim.glintB.x, false);
   // The spread is a fraction of half the outline.
   const half = (2 * (width - 2 * r) + 2 * (height - 2 * r) + 2 * Math.PI * r) / 2;
+  // Long top edges: both glints fade out before the middle of the edge (gate ≤ 0.04 there).
+  const capsuleR = Math.min(half * rim.capsuleSpread, width * rim.capsuleMaxWidth);
   const core = rim.core;
   const halo = rim.halo;
   const coreInset = core / 2;
@@ -103,7 +105,7 @@ function GlintSvg({
           gradientUnits="userSpaceOnUse"
           cx={a.x}
           cy={a.y}
-          r={half * (round ? rim.glintA.spread : rim.capsuleSpread)}
+          r={round ? half * rim.glintA.spread : capsuleR}
           fx={a.x}
           fy={a.y}
         >
@@ -116,7 +118,7 @@ function GlintSvg({
           gradientUnits="userSpaceOnUse"
           cx={b.x}
           cy={b.y}
-          r={half * (round ? rim.glintB.spread : rim.capsuleSpread)}
+          r={round ? half * rim.glintB.spread : capsuleR}
           fx={b.x}
           fy={b.y}
         >

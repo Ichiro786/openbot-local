@@ -22,6 +22,8 @@ export const glass = {
      * review heads-up: 0.45/0.4 left ≈ 0.053 on the composer and the header pill).
      */
     capsuleSpread: 0.3,
+    /** …and never past this fraction of the width (GlassMenu card, review R3-1). */
+    capsuleMaxWidth: 0.35,
     /** Light theme (inferred: no light-mode reference). */
     lightA: 0.55,
     lightB: 0.22,

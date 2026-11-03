@@ -43,7 +43,7 @@ function invalid(): Error {
  * OpenBot Local (build 11): WhatsApp of a joined server over `whatsapp-mobile-v1` (engine 0.60.0-2+),
  * for an owner or admin. Every answer is checked with the contract's own type guards.
  */
-export function useWhatsApp(serverId: string) {
+export function useWhatsApp(serverId: string, poll = true) {
   const { canManageWhatsApp } = useMobileWorkspace();
   const { whatsappRequest } = useMobileWorkspaceActions();
   const queryScope = useQueryScope();
@@ -54,7 +54,7 @@ export function useWhatsApp(serverId: string) {
     queryKey: queryKeys.serverConnector(queryScope, serverId, "whatsapp"),
     enabled: available,
     retry: false,
-    refetchInterval: focused ? OVERVIEW_POLL_MS : false,
+    refetchInterval: focused && poll ? OVERVIEW_POLL_MS : false,
     queryFn: async (): Promise<WhatsAppOverview> => {
       const value = await call(WHATSAPP_MOBILE_ROUTES.overview);
       if (!isWhatsAppOverview(value)) throw invalid();

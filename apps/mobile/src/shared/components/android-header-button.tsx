@@ -107,10 +107,8 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
       <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
         <GlassButton
           accessibilityLabel={t("common.back")}
-          onPress={() => {
-            void haptics.impact("soft");
-            onPress();
-          }}
+          // GlassButton gives the one press-in tick (review R2-2).
+          onPress={onPress}
         >
           <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
         </GlassButton>
