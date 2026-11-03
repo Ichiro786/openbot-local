@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
-import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { type StyleProp, StyleSheet, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { haptics } from "@/shared/lib/haptics";
 import { press, stretch } from "./tokens";
 import { useColorOSMotion } from "./useColorOSMotion";
@@ -55,20 +62,33 @@ export function PressableStretch({ children, style, radius = 0, onPress, accessi
     });
 
   const body = useAnimatedStyle(() => {
-    const sx = 1 + Math.min(stretch.maxAlong, Math.abs(tx.value) / stretch.maxOffset * stretch.maxAlong);
-    const sy = 1 + Math.min(stretch.maxAlong, Math.abs(ty.value) / stretch.maxOffset * stretch.maxAlong);
+    const sx = 1 + Math.min(stretch.maxAlong, (Math.abs(tx.value) / stretch.maxOffset) * stretch.maxAlong);
+    const sy = 1 + Math.min(stretch.maxAlong, (Math.abs(ty.value) / stretch.maxOffset) * stretch.maxAlong);
     return {
-      transform: [{ translateX: tx.value }, { translateY: ty.value }, { scaleX: scale.value * sx }, { scaleY: scale.value * sy }],
+      transform: [
+        { translateX: tx.value },
+        { translateY: ty.value },
+        { scaleX: scale.value * sx },
+        { scaleY: scale.value * sy },
+      ],
     };
   });
   const lightStyle = useAnimatedStyle(() => ({ opacity: light.value }));
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View accessible accessibilityRole="button" accessibilityLabel={accessibilityLabel} style={[style, body]}>
+      <Animated.View
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={[style, body]}
+      >
         {children}
         {enabled ? (
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "#fff", borderRadius: radius }, lightStyle]} />
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { backgroundColor: "#fff", borderRadius: radius }, lightStyle]}
+          />
         ) : null}
       </Animated.View>
     </GestureDetector>
