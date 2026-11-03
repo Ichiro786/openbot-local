@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { create } from "zustand";
 import { zoom } from "./tokens";
+import { armZoomPush } from "./zoomPush";
 
 export type ZoomRect = { x: number; y: number; width: number; height: number };
 
@@ -76,6 +77,8 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     done.current = true;
     setPassThrough(true);
     try {
+      // Build 10: the pushed chat takes no native slide under the fading surface (one open animation).
+      armZoomPush();
       navigate();
     } finally {
       // Clear whether or not the fade completes (an interrupted animation reports finished=false).
