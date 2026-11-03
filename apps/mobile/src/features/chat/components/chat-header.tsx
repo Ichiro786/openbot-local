@@ -26,7 +26,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { ToolbarMenuItems } from "@/shared/components/toolbar-menu-items";
 import { haptics } from "@/shared/lib/haptics";
 import { BAR_BUTTON_SIZE, NATIVE_BAR_BUTTON_TOP, NATIVE_BAR_HEIGHT, useBarTop } from "@/shared/lib/native-bar";
-import { isIOS } from "@/shared/lib/platform";
+import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";
 import { useVerticalBarShown } from "@/shared/lib/vertical-bar";
@@ -357,10 +357,12 @@ export function ChatHeader({
     );
   }
 
-  // Build 10 (ColorOS motion, Android): the agent chat's X-style glass header with ••• to the agent
-  // page (which holds the browser). Tasks, channels and the split pane keep the header below.
+  // Build 10 (ColorOS motion, Android only, where the agent page with the browser is full-screen):
+  // the agent chat's X-style glass header with ••• to the agent page (which holds the browser). Tasks,
+  // channels, the split pane and iOS keep the header below.
   if (
     colorOS &&
+    isAndroid &&
     target.kind === "agent" &&
     actionsMenu === undefined &&
     title === undefined &&
