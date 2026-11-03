@@ -84,6 +84,14 @@ function AuthenticatedStack() {
   const { t } = useText();
   const background = useThemeColor("background");
   const sheetBackground = String(useCSSVariable("--openbot-bg-sheet") ?? background);
+  // iOS shows the native bar over a chat and the browser, so its bar items morph with the items of the
+  // screen under it. The screen fills the bar with Back, the title and the buttons. Android draws them.
+  const nativeBarOptions = {
+    headerShown: isIOS,
+    headerBackVisible: false,
+    scrollEdgeEffects: { top: "hidden" },
+    title: "",
+  } as const;
   const largeTitlePage = {
     animation: pushAnimation,
     contentStyle: { backgroundColor: sheetBackground },
@@ -106,13 +114,9 @@ function AuthenticatedStack() {
         // The chat opens on top of the main screen, so Back returns there and not to an earlier chat.
         if (router.canDismiss()) router.dismissAll();
         if (agentId === null) return;
-        // The home row opens the chat, as it does for search, so the chat zooms from the row avatar
-        // and back. The gate waits until the list shows. A chat without a row opens without zoom.
+        // The gate waits until the list shows.
         navigationGate.request(
-          () => {
-            if (!navigationGate.openFromHome(agentId))
-              router.push({ pathname: "/chat/[agentId]", params: { agentId } });
-          },
+          () => router.push({ pathname: "/chat/[agentId]", params: { agentId } }),
           () => onChatList.current,
         );
       }),
@@ -167,10 +171,7 @@ function AuthenticatedStack() {
             closeDrawer();
             if (router.canDismiss()) router.dismissAll();
             navigationGate.request(
-              () => {
-                if (!navigationGate.openFromHome(channel.id))
-                  router.push({ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } });
-              },
+              () => router.push({ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } }),
               () => onChatList.current,
             );
           });
@@ -214,9 +215,11 @@ function AuthenticatedStack() {
           options={{
             animation: chatAnimation,
             contentStyle: { backgroundColor: background },
-            fullScreenGestureEnabled: false,
+            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
+            // reply: react-native-screens is patched so that the back swipe waits for it.
+            fullScreenGestureEnabled: true,
             gestureEnabled: true,
-            headerShown: false,
+            ...nativeBarOptions,
           }}
         />
         <Stack.Screen
@@ -225,9 +228,11 @@ function AuthenticatedStack() {
           options={{
             animation: chatAnimation,
             contentStyle: { backgroundColor: background },
-            fullScreenGestureEnabled: false,
+            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
+            // reply: react-native-screens is patched so that the back swipe waits for it.
+            fullScreenGestureEnabled: true,
             gestureEnabled: true,
-            headerShown: false,
+            ...nativeBarOptions,
           }}
         />
         <Stack.Screen
@@ -250,8 +255,7 @@ function AuthenticatedStack() {
             // Every finger on the page is the page's mouse, so only the screen edge goes back.
             fullScreenGestureEnabled: false,
             gestureEnabled: true,
-            // The screen draws the app's glass header over the page, as the chat does.
-            headerShown: false,
+            ...nativeBarOptions,
           }}
         />
         <Stack.Screen
@@ -283,9 +287,11 @@ function AuthenticatedStack() {
           options={{
             animation: chatAnimation,
             contentStyle: { backgroundColor: background },
-            fullScreenGestureEnabled: false,
+            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
+            // reply: react-native-screens is patched so that the back swipe waits for it.
+            fullScreenGestureEnabled: true,
             gestureEnabled: true,
-            headerShown: false,
+            ...nativeBarOptions,
           }}
         />
         <Stack.Screen
