@@ -392,7 +392,9 @@ function GlassMenuOverlay({
           const row = rows[index];
           const color = item.destructive ? danger : text;
           return (
-            <View key={item.id} pointerEvents="none">
+            // Full-size wrapper: a zero-size one hid the absolute rows from accessibility (Android
+            // drops nodes outside their parent's bounds), so TalkBack and UI tests could not see them.
+            <View key={item.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
               {item.separatorBefore && index > 0 && row ? (
                 <View
                   style={[
@@ -406,6 +408,11 @@ function GlassMenuOverlay({
                 accessibilityRole="menuitem"
                 accessibilityLabel={item.title}
                 accessibilityState={{ disabled: item.disabled, selected: item.selected }}
+                // TalkBack's double tap is an accessibility action, not a touch on the layer above.
+                accessibilityActions={[{ name: "activate" }]}
+                onAccessibilityAction={(event) => {
+                  if (event.nativeEvent.actionName === "activate" && !item.disabled) dismiss(item.id);
+                }}
                 style={[styles.row, { top: row?.top ?? 0, opacity: item.disabled ? 0.4 : 1 }]}
               >
                 {item.icon ? <View style={styles.icon}>{item.icon}</View> : null}
