@@ -49,6 +49,7 @@ class OpenBotEngineModule : Module() {
       if (ctx != null) {
         // Build 9: keep the last native crash for the "Copy crash log" screen on the next launch.
         CrashCapture.install(ctx)
+        CrashCapture.collectLastExit(ctx)
         // Seed the installed version so status() is meaningful before the service ever ran.
         val installed = EngineInstaller(ctx).installedVersion()
         EngineState.update { if (it.installedVersion == null) it.copy(installedVersion = installed) else it }

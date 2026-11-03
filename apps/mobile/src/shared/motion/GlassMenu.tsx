@@ -223,7 +223,10 @@ function GlassMenuOverlay({
     const { onClose, onSelect, key } = request;
     if (useGlassMenuStore.getState().request?.key === key) useGlassMenuStore.setState({ request: null });
     onClose();
-    if (id === null) return;
+    if (id === null) {
+      cancelled.delete(key);
+      return;
+    }
     const wait = Math.max(0, menu.actionDelayMs - menu.closeMs);
     setTimeout(
       () =>
