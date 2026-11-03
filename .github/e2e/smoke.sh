@@ -484,6 +484,23 @@ toggle_to t1 OFF
 round off OFF
 toggle_to t2 ON
 round on2 ON
+# Rim gate (top-edge middle <= 0.04 over the fill) needs the dark theme: in light the glass fill is near
+# white and a white glint cannot be measured (41726795282). Dark mode, relaunch, zoom into the chat, shots.
+log "== dark mode shots (rim)"
+adb shell cmd uimode night yes; sleep 2; adb shell am force-stop $PKG; sleep 1
+adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+if wait_for "E2E READY" 60 "dk-0" >/dev/null; then
+  shot "dark-home"
+  if zoom_open dark-zoom ON; then
+    sleep 1.5; shot "dark-chat"; dump "dark-chat"
+    xy=$(find_node "$OUT/dark-chat.xml" "Add attachment")
+    if [ -n "$xy" ]; then adb shell input tap $xy; sleep 1.5; shot "dark-plus"; adb shell input keyevent 4; sleep 1; fi
+    hold $(find_node "$OUT/dark-chat.xml" "E2E agent message"); sleep 1.5; shot "dark-msgmenu"; adb shell input keyevent 4; sleep 1
+    check dark-shots || true
+    blur_max dark-after
+  fi
+else log "  dark mode: harness did not come back"; fi
+adb shell cmd uimode night no
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
 adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
 log "final pid: $(adb shell pidof $PKG | tr -d '\r')"
