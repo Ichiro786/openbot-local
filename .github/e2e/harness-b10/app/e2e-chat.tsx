@@ -4,7 +4,8 @@
 // A reaction is checked with the host's own validator (isMessageReaction) and shown on screen.
 import { isMessageReaction } from "@openbot/contracts/ipc";
 import { BlurTargetView } from "expo-blur";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
+import { Pressable } from "react-native";
 import { useRef, useState } from "react";
 import { Text, View, type ViewInstance } from "react-native";
 import Animated from "react-native-reanimated";
@@ -16,6 +17,10 @@ import { openMessageMenu } from "@/features/chat/components/chat-message-menu";
 import { useChatMotion } from "@/features/chat/components/use-chat-motion";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { ChatHeader } from "@/features/chat/components/chat-header";
+import { AgentPageHero } from "@/features/agents/components/agent-page-hub";
+import { E2E_AGENT, FakeWorkspace } from "@/e2e/fake-workspace";
+void AgentPageHero;
 
 type Msg = { id: string; author: "agent" | "user"; text: string };
 const MESSAGES: Msg[] = [
@@ -23,7 +28,15 @@ const MESSAGES: Msg[] = [
   { id: "u1", author: "user", text: "E2E own message" },
 ];
 
-export default function E2EChat() {
+export default function E2EChatRoute() {
+  return (
+    <FakeWorkspace>
+      <E2EChat />
+    </FakeWorkspace>
+  );
+}
+
+function E2EChat() {
   const insets = useSafeAreaInsets();
   const colorOS = useColorOSMotion().enabled;
   const target = useRef<ViewInstance | null>(null);
@@ -42,10 +55,13 @@ export default function E2EChat() {
     <View style={{ flex: 1, backgroundColor: "#101418" }}>
       <Stack.Screen options={{ headerShown: false }} />
       <BlurTargetView ref={target} style={{ flex: 1 }}>
-        <View style={{ flex: 1, paddingTop: insets.top + 16, paddingHorizontal: 12 }}>
+        <View style={{ flex: 1, paddingTop: insets.top + 96, paddingHorizontal: 12 }}>
           <Text style={{ color: "#fff", fontSize: 16 }}>{`E2E CHAT OPEN colorOS=${colorOS ? "ON" : "OFF"}`}</Text>
           <Text style={{ color: "#fff", fontSize: 14 }}>{log}</Text>
           <Text style={{ color: "#fff", fontSize: 14 }}>{`SENT=${sent.replaceAll("\n", "\\n")}`}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="E2E Open agent page" onPress={() => router.push("/e2e-agent")} style={{ marginTop: 6, padding: 8, backgroundColor: "#34495e", borderRadius: 8, alignSelf: "flex-start" }}>
+            <Text style={{ color: "#fff" }}>Open agent page</Text>
+          </Pressable>
           {MESSAGES.map((m) => {
             const own = m.author === "user";
             const openMenu = colorOS
@@ -107,6 +123,16 @@ export default function E2EChat() {
           ))}
         </View>
       </BlurTargetView>
+      <ChatHeader
+        target={{ kind: "agent", id: E2E_AGENT.id, serverId: E2E_AGENT.serverId, name: E2E_AGENT.name, avatarSeed: E2E_AGENT.avatarSeed, avatarHue: E2E_AGENT.avatarHue as never }}
+        fallbackBackground="#1f2328"
+        foreground="#ffffff"
+        liquidGlassAvailable={false}
+        topInset={insets.top}
+        onBack={() => router.back()}
+        accessibilityHidden={false}
+        frostTarget={colorOS ? target : undefined}
+      />
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, motion.composerStyle]}>
         <ChatComposer
           action="#ffffff"

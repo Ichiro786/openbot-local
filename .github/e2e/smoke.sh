@@ -199,6 +199,23 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     hold $xy; sleep 1.2; check "$n-hold-off" || return
     expect_text "SELECT a1" 5 "$n-c1"; dump "$n-c1b"; [ "$(menu_open_kind "$n-c1b")" = none ] || { log "FAIL $n: OFF opened a glass menu"; FAIL=1; }
   fi
+  # item 6: header + agent page (before the composer, so no keyboard is up)
+  dump "$n-h0"; shot "$n-header"
+  log "  header: Back=$(count "$OUT/$n-h0.xml" Back) Info=$(count "$OUT/$n-h0.xml" "Info for E2E Agent") name=$(count "$OUT/$n-h0.xml" "E2E Agent")"
+  if [ "$2" = ON ]; then
+    [ "$(count "$OUT/$n-h0.xml" "Info for E2E Agent")" -ge 2 ] && log "ok: X header (name pill + ••• labelled)" || { log "FAIL $n: ColorOS header labels missing"; FAIL=1; }
+  else
+    [ "$(count "$OUT/$n-h0.xml" "Info for E2E Agent")" -le 1 ] && log "ok: OFF header is the build 9 one" || { log "FAIL $n: OFF shows the ColorOS header"; FAIL=1; }
+  fi
+  if [ -f "$OUT/.has-agent" ] || grep -q "E2E Open agent page" "$OUT/$n-h0.xml"; then
+    tapl "E2E Open agent page" 3 "$n-a0" && sleep 1.5; check "$n-agent-open" || return
+    expect_text "E2E AGENT PAGE OPEN" 8 "$n-a1"; shot "$n-agentpage"
+    log "  agent page: Back=$(count "$OUT/$n-a1.xml" Back) appearance=$(count "$OUT/$n-a1.xml" "Edit appearance") Edit=$(count "$OUT/$n-a1.xml" Edit) browser=$(count "$OUT/$n-a1.xml" "Open browser") Memories=$(count "$OUT/$n-a1.xml" Memories) Skills=$(count "$OUT/$n-a1.xml" Skills) Files=$(count "$OUT/$n-a1.xml" Files)"
+    tapl "Back" 3 "$n-a2" || FAIL=1; sleep 1.5; check "$n-agent-glass-back" || return
+    expect_text "E2E CHAT OPEN" 6 "$n-a3"
+    tapl "E2E Open agent page" 3 "$n-a4"; sleep 1.5; adb shell input keyevent 4; sleep 1.5; check "$n-agent-backkey" || return
+    expect_text "E2E CHAT OPEN" 6 "$n-a5"
+  fi
   # composer: multiline + send
   dump "$n-k0"; set -- $(edit_xy "$OUT/$n-k0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return; }
   local fy=$3; adb shell input tap $1 $2; sleep 1.8; check "$n-focus" || return
