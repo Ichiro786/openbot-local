@@ -193,14 +193,22 @@ export function AnimatedPressable({
           : undefined
       }
     >
-      {typeof children === "function"
-        ? (state) => (
-            <>
-              {children(state)}
-              {highlight}
-            </>
-          )
-        : [children, highlight]}
+      {/* ColorOS off (no highlight): the children pass through unchanged, as before build 7. */}
+      {highlight === null ? (
+        children
+      ) : typeof children === "function" ? (
+        (state) => (
+          <>
+            {children(state)}
+            {highlight}
+          </>
+        )
+      ) : (
+        <>
+          {children}
+          {highlight}
+        </>
+      )}
     </AnimatedBase>
   );
 }
