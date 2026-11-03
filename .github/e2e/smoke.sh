@@ -210,8 +210,8 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
   if [ -f "$OUT/.has-agent" ] || grep -q "E2E Open agent page" "$OUT/$n-h0.xml"; then
     tapl "E2E Open agent page" 3 "$n-a0" && sleep 1.5; check "$n-agent-open" || return
     expect_text "E2E AGENT PAGE OPEN" 8 "$n-a1"; shot "$n-agentpage"
-    log "  agent page: Back=$(count "$OUT/$n-a1.xml" Back) appearance=$(count "$OUT/$n-a1.xml" "Edit appearance") Edit=$(count "$OUT/$n-a1.xml" Edit) browser=$(count "$OUT/$n-a1.xml" "Open browser") Memories=$(count "$OUT/$n-a1.xml" Memories) Skills=$(count "$OUT/$n-a1.xml" Skills) Files=$(count "$OUT/$n-a1.xml" Files)"
-    tapl "Back" 3 "$n-a2" || FAIL=1; sleep 1.5; check "$n-agent-glass-back" || return
+    log "  agent page: Back=$(count "$OUT/$n-a1.xml" Back) NavUp=$(count "$OUT/$n-a1.xml" "Navigate up") appearance=$(count "$OUT/$n-a1.xml" "Edit appearance") Edit=$(count "$OUT/$n-a1.xml" Edit) browser=$(count "$OUT/$n-a1.xml" "Open browser") Memories=$(count "$OUT/$n-a1.xml" Memories) Skills=$(count "$OUT/$n-a1.xml" Skills) Files=$(count "$OUT/$n-a1.xml" Files)"
+    if [ "$(count "$OUT/$n-a1.xml" "Navigate up")" -ge 1 ]; then tapl "Navigate up" 3 "$n-a2" || FAIL=1; else tapl "Back" 3 "$n-a2" || FAIL=1; fi; sleep 1.5; check "$n-agent-bar-back" || return
     expect_text "E2E CHAT OPEN" 6 "$n-a3"
     tapl "E2E Open agent page" 3 "$n-a4"; sleep 1.5; adb shell input keyevent 4; sleep 1.5; check "$n-agent-backkey" || return
     expect_text "E2E CHAT OPEN" 6 "$n-a5"
