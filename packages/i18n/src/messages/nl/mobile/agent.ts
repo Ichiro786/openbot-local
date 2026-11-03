@@ -576,6 +576,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "Markeer alles als gelezen",
   "mobile.agent.route.appearance": "Uiterlijk",
   "mobile.agent.route.cropPhoto": "Verplaats en schaal",
+  "mobile.agent.route.profile": "Profiel",
   "mobile.agent.info.memory.inclusion.label": "Geheugengebruik",
   "mobile.agent.info.memory.inclusion.essential": "Altijd meegenomen",
   "mobile.agent.info.memory.inclusion.searchable": "Zoeken als nodig",

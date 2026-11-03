@@ -7,8 +7,8 @@ import ChevronDown from "lucide-react-native/icons/chevron-down";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Globe from "lucide-react-native/icons/globe";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import { useMemo } from "react";
-import { Pressable, View, type ViewStyle } from "react-native";
+import { type RefObject, useMemo } from "react";
+import { Pressable, View, type ViewInstance, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
@@ -30,7 +30,9 @@ import { isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";
 import { useVerticalBarShown } from "@/shared/lib/vertical-bar";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import type { ChatTarget } from "../model/chat-target";
+import { ColorOSChatHeader } from "./chat-header-coloros";
 
 interface ChatHeaderProps {
   target: ChatTarget;
@@ -60,6 +62,8 @@ interface ChatHeaderProps {
   actionsMenu?: { label: string; actions: MenuAction[]; onPressAction: (id: string) => void } | null;
   /** The agent's threads. The agent's name then opens this menu, and the menu has the agent's info. */
   threadMenu?: ChatThreadMenu;
+  /** Build 10 (ColorOS motion): the chat's message-list blur target, for the frosted name pill. */
+  frostTarget?: RefObject<ViewInstance | null>;
 }
 
 export function ChatHeader({
@@ -76,8 +80,10 @@ export function ChatHeader({
   kicker,
   actionsMenu,
   threadMenu,
+  frostTarget,
 }: ChatHeaderProps) {
   const { t } = useText();
+  const colorOS = useColorOSMotion().enabled;
   const { theme } = useUniwind();
   const width = useColumnWidth();
   const insets = useSafeAreaInsets();
@@ -348,6 +354,31 @@ export function ChatHeader({
           </View>
         ) : null}
       </>
+    );
+  }
+
+  // Build 10 (ColorOS motion, Android): the agent chat's X-style glass header with ••• to the agent
+  // page (which holds the browser). Tasks, channels and the split pane keep the header below.
+  if (
+    colorOS &&
+    target.kind === "agent" &&
+    actionsMenu === undefined &&
+    title === undefined &&
+    !kicker &&
+    !splitShown
+  ) {
+    return (
+      <ColorOSChatHeader
+        target={target}
+        fallbackBackground={fallbackBackground}
+        foreground={foreground}
+        topInset={topInset}
+        showBack={!splitDetailRoot}
+        onBack={onBack}
+        threadMenu={threadMenu}
+        frostTarget={frostTarget}
+        accessibilityHidden={accessibilityHidden}
+      />
     );
   }
 

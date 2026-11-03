@@ -544,6 +544,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "全部标为已读",
   "mobile.agent.route.appearance": "外观",
   "mobile.agent.route.cropPhoto": "移动与缩放",
+  "mobile.agent.route.profile": "资料",
   "mobile.agent.info.memory.inclusion.label": "记忆使用方式",
   "mobile.agent.info.memory.inclusion.essential": "始终包含",
   "mobile.agent.info.memory.inclusion.searchable": "需要时检索",

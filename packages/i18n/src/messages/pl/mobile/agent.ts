@@ -612,6 +612,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "Oznacz wszystkie jako przeczytane",
   "mobile.agent.route.appearance": "Wygląd",
   "mobile.agent.route.cropPhoto": "Przesuń i skaluj",
+  "mobile.agent.route.profile": "Profil",
   "mobile.agent.info.memory.inclusion.label": "Użycie pamięci",
   "mobile.agent.info.memory.inclusion.essential": "Zawsze dołączane",
   "mobile.agent.info.memory.inclusion.searchable": "Wyszukiwane w razie potrzeby",

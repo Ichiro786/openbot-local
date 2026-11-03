@@ -994,6 +994,7 @@ export function ChatView({
               topInset={insets.top}
               onBack={leaveConversation}
               threadMenu={threadMenu}
+              frostTarget={frostChat && colorOSMotion ? frostTarget : undefined}
               // The dictation overlay covers the chat. It blocks touches, and this
               // keeps screen readers on the transcript and the voice controls.
               accessibilityHidden={dictating}

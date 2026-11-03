@@ -613,6 +613,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "Отметить все прочитанными",
   "mobile.agent.route.appearance": "Внешний вид",
   "mobile.agent.route.cropPhoto": "Перемещение и масштаб",
+  "mobile.agent.route.profile": "Профиль",
   "mobile.agent.info.memory.inclusion.label": "Использование памяти",
   "mobile.agent.info.memory.inclusion.essential": "Всегда включать",
   "mobile.agent.info.memory.inclusion.searchable": "Искать при необходимости",

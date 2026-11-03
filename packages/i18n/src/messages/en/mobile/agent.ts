@@ -559,6 +559,7 @@ export const messages = defineMessages("mobile.agent", {
   "mobile.agent.home.markAllRead": "Mark all as read",
   "mobile.agent.route.appearance": "Appearance",
   "mobile.agent.route.cropPhoto": "Move and Scale",
+  "mobile.agent.route.profile": "Profile",
   "mobile.agent.info.memory.inclusion.label": "Memory use",
   "mobile.agent.info.memory.inclusion.essential": "Always included",
   "mobile.agent.info.memory.inclusion.searchable": "Search when needed",

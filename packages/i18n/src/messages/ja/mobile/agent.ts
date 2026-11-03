@@ -572,6 +572,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "すべて既読にする",
   "mobile.agent.route.appearance": "外観",
   "mobile.agent.route.cropPhoto": "移動と拡大縮小",
+  "mobile.agent.route.profile": "プロフィール",
   "mobile.agent.info.memory.inclusion.label": "メモリーの使い方",
   "mobile.agent.info.memory.inclusion.essential": "常に含める",
   "mobile.agent.info.memory.inclusion.searchable": "必要なときに検索",

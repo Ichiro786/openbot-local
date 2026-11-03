@@ -562,6 +562,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "모두 읽음으로 표시",
   "mobile.agent.route.appearance": "외형",
   "mobile.agent.route.cropPhoto": "이동 및 크기 조절",
+  "mobile.agent.route.profile": "프로필",
   "mobile.agent.info.memory.inclusion.label": "메모리 사용",
   "mobile.agent.info.memory.inclusion.essential": "항상 포함",
   "mobile.agent.info.memory.inclusion.searchable": "필요할 때 검색",

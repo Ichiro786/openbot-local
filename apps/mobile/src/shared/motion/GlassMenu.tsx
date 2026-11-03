@@ -123,6 +123,11 @@ const useGlassMenuStore = create<{ request: GlassMenuRequest | null; frosted: bo
   request: null,
   frosted: false,
 }));
+/** Build 10: whether an open glass menu frosts (draws at least one blur), for a screen's blur budget. */
+export function useGlassMenuFrostOpen(): boolean {
+  return useGlassMenuStore((s) => s.request !== null && s.frosted);
+}
+
 /** Whether an open glass menu draws two blurs (reaction bar + card), so a screen can pause its own. */
 export function useGlassMenuDoubleFrost(): boolean {
   return useGlassMenuStore((s) => Boolean(s.request?.reactions) && s.frosted);

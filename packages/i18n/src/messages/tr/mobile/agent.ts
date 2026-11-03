@@ -584,6 +584,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "Tümünü okundu olarak işaretle",
   "mobile.agent.route.appearance": "Görünüm",
   "mobile.agent.route.cropPhoto": "Taşı ve Ölçeklendir",
+  "mobile.agent.route.profile": "Profil",
   "mobile.agent.info.memory.inclusion.label": "Bellek kullanımı",
   "mobile.agent.info.memory.inclusion.essential": "Her zaman dahil",
   "mobile.agent.info.memory.inclusion.searchable": "Gerektiğinde ara",

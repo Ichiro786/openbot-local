@@ -7,6 +7,7 @@ import { useCSSVariable } from "uniwind";
 import { AgentPinTransitionProvider } from "@/features/agents/components/agent-pin-transition";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
 import { ChatListPaneProvider } from "@/features/agents/components/chat-list-pane-context";
+import { agentPageFullScreen, forgetAgentPage } from "@/features/agents/model/agent-page-presentation";
 import { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
 import { ConnectedScreen } from "@/features/agents/screens/connected-screen";
 import { whenUnlocked } from "@/features/app-lock/model/app-lock";
@@ -379,14 +380,30 @@ function AuthenticatedStack() {
         />
         <Stack.Screen
           name="agent-info/[agentId]"
-          options={{
-            contentStyle: { backgroundColor: sheetBackground },
-            headerShown: false,
-            scrollEdgeEffects: { top: "hidden", bottom: "soft" },
-            presentation: "formSheet",
-            sheetAllowedDetents: [0.85],
-            sheetGrabberVisible: true,
-          }}
+          // Build 10 (ColorOS motion, Android): a full-screen page that slides in from the right, chosen
+          // once per route (agent-page-presentation.ts). Otherwise the build 9 form sheet.
+          options={({ route }) =>
+            agentPageFullScreen(route.key)
+              ? {
+                  contentStyle: { backgroundColor: sheetBackground },
+                  headerShown: false,
+                  presentation: "card",
+                  animation: pushAnimation,
+                }
+              : {
+                  contentStyle: { backgroundColor: sheetBackground },
+                  headerShown: false,
+                  scrollEdgeEffects: { top: "hidden", bottom: "soft" },
+                  presentation: "formSheet",
+                  sheetAllowedDetents: [0.85],
+                  sheetGrabberVisible: true,
+                }
+          }
+          listeners={({ route }) => ({
+            transitionEnd: (event) => {
+              if (event.data?.closing) forgetAgentPage(route.key);
+            },
+          })}
         />
         <Stack.Screen
           name="install-agent"

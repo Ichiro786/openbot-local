@@ -586,6 +586,7 @@ export const messages = {
   "mobile.agent.home.markAllRead": "Tout marquer comme lu",
   "mobile.agent.route.appearance": "Apparence",
   "mobile.agent.route.cropPhoto": "Déplacer et redimensionner",
+  "mobile.agent.route.profile": "Profil",
   "mobile.agent.info.memory.inclusion.label": "Utilisation du souvenir",
   "mobile.agent.info.memory.inclusion.essential": "Toujours inclus",
   "mobile.agent.info.memory.inclusion.searchable": "Rechercher au besoin",

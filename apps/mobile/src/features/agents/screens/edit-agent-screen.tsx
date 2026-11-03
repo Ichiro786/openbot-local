@@ -13,7 +13,7 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import Pencil from "lucide-react-native/icons/pencil";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import {
   AgentAccessFields,
@@ -37,6 +37,7 @@ import {
   AgentTaskLimitField,
 } from "@/features/agents/components/agent-host-fields";
 import { AgentInformation } from "@/features/agents/components/agent-information";
+import { AgentPageHero } from "@/features/agents/components/agent-page-hub";
 import { type AgentPhotoDraft, AgentPhotoPicker } from "@/features/agents/components/agent-photo-picker";
 import { AgentPublish } from "@/features/agents/components/agent-publish";
 import { AgentRuntimeFields, useProviderAccounts } from "@/features/agents/components/agent-runtime-fields";
@@ -45,6 +46,7 @@ import { AgentSharedTables } from "@/features/agents/components/agent-shared-tab
 import { AgentTasksRow } from "@/features/agents/components/agent-tasks-row";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { InstructionsLimit, instructionsTooLong } from "@/features/agents/components/instructions-limit";
+import { AgentPageFullContext } from "@/features/agents/model/agent-page-presentation";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import {
   type MobileAgent,
@@ -65,6 +67,7 @@ type AgentEdits = Pick<
 
 type AgentPage =
   | "info"
+  | "profile"
   | "appearance"
   | "usage"
   | "memories"
@@ -137,6 +140,9 @@ function AgentForm({
   const queryClient = useQueryClient();
   // The Permissions row shows the access, as on desktop. Its page reads the same host answer.
   const { settings: adminSettings } = useAgentAdminSettings(agent, host, available && page === "info");
+  // Build 10 (ColorOS): the info page is the full-screen agent page. Its top is the hero, the profile
+  // form moves to its own page, and the Memories, Skills and Files rows are the hero's tiles.
+  const hub = useContext(AgentPageFullContext) && page === "info";
   const showPermissions = canManageAgentAccess(agent.serverId) || canManageAgentHostSettings(agent.serverId);
   const showFolders = canManageAgentFolders(agent.serverId);
   // The user's own level of the agent, on a host that keeps it for each member. Settings > Notifications
@@ -306,35 +312,38 @@ function AgentForm({
       {page === "usage" ? (
         <Stack.Screen options={{ title: t("mobile.agent.info.usage.agentTitle", { name: agent.name }) }} />
       ) : null}
-      {page === "info" ? (
+      {hub ? <AgentPageHero agent={agent} avatarSeed={avatarSeed} avatarHue={avatarHue} available={available} /> : null}
+      {page === "profile" || (page === "info" && !hub) ? (
         <>
           <View className="gap-6">
-            <Pressable
-              className="self-center"
-              accessibilityRole="button"
-              accessibilityLabel={t("mobile.agent.edit.appearance")}
-              onPress={() => {
-                void haptics.impact("soft");
-                router.push({
-                  pathname: "/agent-info/[agentId]/appearance",
-                  params: { agentId: agent.id, serverId: agent.serverId },
-                });
-              }}
-            >
-              <BloubAvatarPreview
-                agentId={agent.id}
-                serverId={agent.serverId}
-                seed={avatarSeed}
-                hue={avatarHue}
-                size={112}
-              />
-              {/* A photo fills the circle; the generated avatar leaves space around its shape. */}
-              <View
-                className={`absolute size-9 items-center justify-center rounded-full border-4 border-sheet bg-grouped ${agent.avatarUrl ? "right-0 bottom-0" : "right-3 bottom-3"}`}
+            {page === "info" ? (
+              <Pressable
+                className="self-center"
+                accessibilityRole="button"
+                accessibilityLabel={t("mobile.agent.edit.appearance")}
+                onPress={() => {
+                  void haptics.impact("soft");
+                  router.push({
+                    pathname: "/agent-info/[agentId]/appearance",
+                    params: { agentId: agent.id, serverId: agent.serverId },
+                  });
+                }}
               >
-                <Pencil color={foreground} size={14} />
-              </View>
-            </Pressable>
+                <BloubAvatarPreview
+                  agentId={agent.id}
+                  serverId={agent.serverId}
+                  seed={avatarSeed}
+                  hue={avatarHue}
+                  size={112}
+                />
+                {/* A photo fills the circle; the generated avatar leaves space around its shape. */}
+                <View
+                  className={`absolute size-9 items-center justify-center rounded-full border-4 border-sheet bg-grouped ${agent.avatarUrl ? "right-0 bottom-0" : "right-3 bottom-3"}`}
+                >
+                  <Pencil color={foreground} size={14} />
+                </View>
+              </Pressable>
+            ) : null}
             <SheetFormField
               label={t("mobile.agent.form.name")}
               appearance="soft"
@@ -454,7 +463,7 @@ function AgentForm({
           {error}
         </Typography.Paragraph>
       ) : null}
-      {page === "info" || page === "appearance" || page === "runtime" ? (
+      {(page === "info" && !hub) || page === "profile" || page === "appearance" || page === "runtime" ? (
         <SheetSaveAction
           dirty={dirty}
           canSave={valid && available}
@@ -479,50 +488,56 @@ function AgentForm({
             </SettingsRow>
             <AgentBackupModelsRow agent={agent} server={host} available={available} />
           </SettingsSection>
-          <SettingsSection title={t("mobile.agent.groups.knows")}>
-            <SettingsRow
-              onPress={() =>
-                router.push({
-                  pathname: "/agent-info/[agentId]/memories",
-                  params: { agentId: agent.id, serverId: agent.serverId },
-                })
-              }
-            >
-              <Typography.Paragraph>{t("mobile.agent.info.memories.title")}</Typography.Paragraph>
-            </SettingsRow>
-            <SettingsRow
-              onPress={() =>
-                router.push({
-                  pathname: "/agent-info/[agentId]/skills",
-                  params: { agentId: agent.id, serverId: agent.serverId },
-                })
-              }
-            >
-              <Typography.Paragraph>{t("mobile.agent.info.skills.title")}</Typography.Paragraph>
-            </SettingsRow>
-            <SettingsRow
-              onPress={() =>
-                router.push({
-                  pathname: "/agent-info/[agentId]/files",
-                  params: { agentId: agent.id, serverId: agent.serverId },
-                })
-              }
-            >
-              <Typography.Paragraph>{t("mobile.agent.info.files.title")}</Typography.Paragraph>
-            </SettingsRow>
-            {canManageSharedTables(agent.serverId) ? (
-              <SettingsRow
-                onPress={() =>
-                  router.push({
-                    pathname: "/agent-info/[agentId]/tables",
-                    params: { agentId: agent.id, serverId: agent.serverId },
-                  })
-                }
-              >
-                <Typography.Paragraph>{t("mobile.agent.tables.title")}</Typography.Paragraph>
-              </SettingsRow>
-            ) : null}
-          </SettingsSection>
+          {!hub || canManageSharedTables(agent.serverId) ? (
+            <SettingsSection title={t("mobile.agent.groups.knows")}>
+              {hub ? null : (
+                <>
+                  <SettingsRow
+                    onPress={() =>
+                      router.push({
+                        pathname: "/agent-info/[agentId]/memories",
+                        params: { agentId: agent.id, serverId: agent.serverId },
+                      })
+                    }
+                  >
+                    <Typography.Paragraph>{t("mobile.agent.info.memories.title")}</Typography.Paragraph>
+                  </SettingsRow>
+                  <SettingsRow
+                    onPress={() =>
+                      router.push({
+                        pathname: "/agent-info/[agentId]/skills",
+                        params: { agentId: agent.id, serverId: agent.serverId },
+                      })
+                    }
+                  >
+                    <Typography.Paragraph>{t("mobile.agent.info.skills.title")}</Typography.Paragraph>
+                  </SettingsRow>
+                  <SettingsRow
+                    onPress={() =>
+                      router.push({
+                        pathname: "/agent-info/[agentId]/files",
+                        params: { agentId: agent.id, serverId: agent.serverId },
+                      })
+                    }
+                  >
+                    <Typography.Paragraph>{t("mobile.agent.info.files.title")}</Typography.Paragraph>
+                  </SettingsRow>
+                </>
+              )}
+              {canManageSharedTables(agent.serverId) ? (
+                <SettingsRow
+                  onPress={() =>
+                    router.push({
+                      pathname: "/agent-info/[agentId]/tables",
+                      params: { agentId: agent.id, serverId: agent.serverId },
+                    })
+                  }
+                >
+                  <Typography.Paragraph>{t("mobile.agent.tables.title")}</Typography.Paragraph>
+                </SettingsRow>
+              ) : null}
+            </SettingsSection>
+          ) : null}
           <SettingsSection title={t("mobile.agent.groups.does")}>
             <AgentTasksRow agent={agent} />
             <SettingsRow
