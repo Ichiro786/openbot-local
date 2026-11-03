@@ -36,7 +36,7 @@ export const messages = {
   "settings.keepRunning.title": "OpenBot をバックグラウンドで実行し続ける",
   "settings.keepRunning.description": "ウィンドウを閉じたあとも実行中のタスクを続けます。",
   "settings.menuBar.title": "OpenBot をメニューバーに表示",
-  "settings.menuBar.description": "ウィンドウを閉じると Dock のアイコンを隠します。実行中のタスクは続きます。",
+  "settings.menuBar.description": "メニューバーのアイコンから OpenBot を開いたり終了したりします。",
   "settings.keepAwake.title": "このコンピュータをスリープさせない",
   "settings.keepAwake.description":
     "電源に接続している間、ルーティンが予定どおりに実行されます。ディスプレイはオフになることがあります。",
@@ -521,6 +521,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "返信を読み上げる",
   "settings.voice.speech.readReplies.description":
     "メッセージを音声入力すると、返信が読み上げられます。止めるには、もう一度音声入力してください。",
+  "settings.voice.speech.speed.title": "速度",
   "settings.voice.speech.voice.title": "声",
   "settings.voice.speech.voice.female": "女性の声 {number}",
   "settings.voice.speech.voice.male": "男性の声 {number}",

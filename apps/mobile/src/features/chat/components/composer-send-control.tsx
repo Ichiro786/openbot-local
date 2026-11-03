@@ -1,6 +1,6 @@
 import { Spinner } from "heroui-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
-import Mic from "lucide-react-native/icons/mic";
+import AudioLines from "lucide-react-native/icons/audio-lines";
 import Square from "lucide-react-native/icons/square";
 import { type ReactNode, useEffect } from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
@@ -22,13 +22,15 @@ interface ComposerSendControlProps {
   mode: Mode;
   primed: boolean;
   spinner: boolean;
-  pressable: boolean;
+  /** False while dictation still writes the draft: Send waits for the last words. */
+  ready: boolean;
   /** The card dims as a whole when the composer is disabled, so the control does not dim again. */
   disabled: boolean;
   label: string;
-  action: ViewStyle["backgroundColor"];
-  actionForeground: ViewStyle["backgroundColor"];
-  foreground: ViewStyle["backgroundColor"];
+  /** The agent's colour behind Send, Stop and the voice mode. */
+  accentFill: string;
+  /** The glyph colour on that fill. */
+  accentGlyph: string;
   muted: ViewStyle["backgroundColor"];
   onPress: () => void;
 }
@@ -42,12 +44,11 @@ export function ComposerSendControl({
   mode,
   primed,
   spinner,
-  pressable,
+  ready,
   disabled,
   label,
-  action,
-  actionForeground,
-  foreground,
+  accentFill,
+  accentGlyph,
   muted,
   onPress,
 }: ComposerSendControlProps) {
@@ -55,8 +56,10 @@ export function ComposerSendControl({
   const send = useSharedValue(!spinner && mode === "send" ? 1 : 0);
   const stop = useSharedValue(!spinner && mode === "stop" ? 1 : 0);
   const mic = useSharedValue(!spinner && mode === "dictate" ? 1 : 0);
-  const fill = useSharedValue(primed ? 1 : 0);
-  const fillScale = useSharedValue(primed ? 1 : 0);
+  // The voice mode is always filled: it sets it apart from the dictation mic beside it.
+  const filled = primed || mode === "dictate";
+  const fill = useSharedValue(filled ? 1 : 0);
+  const fillScale = useSharedValue(filled ? 1 : 0);
   const square = useSharedValue(mode === "stop" ? 1 : 0);
 
   useEffect(() => {
@@ -67,9 +70,9 @@ export function ComposerSendControl({
   }, [mode, spinner, motion, send, stop, mic, square]);
 
   useEffect(() => {
-    fill.set(withSpring(primed ? 1 : 0, motion.fastEffects));
-    fillScale.set(withSpring(primed ? 1 : 0, motion.fastSpatial));
-  }, [primed, motion, fill, fillScale]);
+    fill.set(withSpring(filled ? 1 : 0, motion.fastEffects));
+    fillScale.set(withSpring(filled ? 1 : 0, motion.fastSpatial));
+  }, [filled, motion, fill, fillScale]);
 
   const transforms = motion.transforms;
   const fillStyle = useAnimatedStyle(() => ({
@@ -82,26 +85,26 @@ export function ComposerSendControl({
     <AnimatedPressable
       accessibilityLabel={label}
       accessibilityRole="button"
-      accessibilityState={{ disabled: !pressable, busy: spinner }}
-      disabled={!pressable}
+      accessibilityState={{ disabled: !ready, busy: spinner }}
+      disabled={!ready}
       className="size-10 items-center justify-center"
       onPress={onPress}
     >
       {/* Dim lives on this inner layer: the pressable's own opacity belongs to its press feedback. */}
       <View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.center, { opacity: disabled || pressable ? 1 : 0.45 }]}
+        style={[StyleSheet.absoluteFill, styles.center, { opacity: disabled || ready ? 1 : 0.45 }]}
       >
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: action }, fillStyle]} />
-        {spinner ? <Spinner size="sm" color={String(actionForeground)} /> : null}
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: accentFill }, fillStyle]} />
+        {spinner ? <Spinner size="sm" color={accentGlyph} /> : null}
         <Glyph progress={send} turn={-45} transforms={transforms}>
-          <ArrowUp color={String(primed ? actionForeground : muted)} size={21} strokeWidth={2.2} />
+          <ArrowUp color={primed ? accentGlyph : String(muted)} size={21} strokeWidth={2.2} />
         </Glyph>
         <Glyph progress={stop} turn={45} transforms={transforms}>
-          <Square color={String(actionForeground)} fill={String(actionForeground)} size={14} strokeWidth={2} />
+          <Square color={accentGlyph} fill={accentGlyph} size={14} strokeWidth={2} />
         </Glyph>
         <Glyph progress={mic} turn={0} transforms={transforms}>
-          <Mic color={String(foreground)} size={21} strokeWidth={1.8} />
+          <AudioLines color={accentGlyph} size={20} strokeWidth={2} />
         </Glyph>
       </View>
     </AnimatedPressable>

@@ -36,8 +36,7 @@ export const messages = {
   "settings.keepRunning.title": "OpenBot'u arka planda çalışır durumda tut",
   "settings.keepRunning.description": "Pencereyi kapattıktan sonra etkin görevleri çalıştırmaya devam edin.",
   "settings.menuBar.title": "OpenBot’u menü çubuğunda göster",
-  "settings.menuBar.description":
-    "Pencereyi kapattıktan sonra Dock simgesini gizle. Etkin görevler çalışmaya devam eder.",
+  "settings.menuBar.description": "OpenBot’u menü çubuğundaki bir simgeden açın veya kapatın.",
   "settings.keepAwake.title": "Bilgisayarı uyanık tut",
   "settings.keepAwake.description":
     "Bilgisayar prize takılıyken rutinler zamanında çalışır. Ekran yine de kapanabilir.",
@@ -532,6 +531,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Yanıtları sesli oku",
   "settings.voice.speech.readReplies.description":
     "Bir mesajı dikte ettiğinizde yanıt sesli okunur. Durdurmak için yeniden dikte edin.",
+  "settings.voice.speech.speed.title": "Hız",
   "settings.voice.speech.voice.title": "Ses",
   "settings.voice.speech.voice.female": "Kadın sesi {number}",
   "settings.voice.speech.voice.male": "Erkek sesi {number}",

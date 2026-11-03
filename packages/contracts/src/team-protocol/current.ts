@@ -6,11 +6,13 @@ import { ACP_REGISTRY_CAPABILITY } from "./acp-registry-v1";
 import { AGENT_ACCESS_CAPABILITY } from "./agent-access-v1";
 import { AGENT_ADMIN_CAPABILITY } from "./agent-admin-v1";
 import { AGENT_BACKUP_MODELS_CAPABILITY } from "./agent-backup-models-v1";
+import { AGENT_FAST_MODE_CAPABILITY } from "./agent-fast-mode-v1";
 import { AGENT_FOLDERS_CAPABILITY } from "./agent-folders-v1";
 import { AGENT_HIDDEN_CAPABILITY } from "./agent-hidden-v1";
 import { AGENT_HOST_SETTINGS_CAPABILITY } from "./agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "./agent-import-v1";
 import { AGENT_INSTALL_CAPABILITY } from "./agent-install-v1";
+import { AGENT_INSTRUCTIONS_CAPABILITY } from "./agent-instructions-v1";
 import { AGENT_MEMORIES_CAPABILITY } from "./agent-memories-v1";
 import { AGENT_MEMORY_LIMIT_CAPABILITY } from "./agent-memory-limit-v1";
 import { AGENT_NEW_CHAT_CAPABILITY } from "./agent-new-chat-v1";
@@ -24,6 +26,7 @@ import { AGENT_TASKS_CAPABILITY } from "./agent-tasks-v1";
 import { AGENT_THREAD_BRANCHES_CAPABILITY } from "./agent-thread-branches-v1";
 import { AGENT_THREAD_FILES_CAPABILITY } from "./agent-thread-files-v1";
 import { AGENT_THREAD_READS_CAPABILITY } from "./agent-thread-reads-v1";
+import { AGENT_THREAD_REPLIES_CAPABILITY } from "./agent-thread-replies-v1";
 import { AGENT_THREADS_CAPABILITY } from "./agent-threads-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "./bitwarden-connector-v1";
@@ -44,7 +47,9 @@ import {
 } from "./browser-view-v1";
 import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "./channel-attention-v1";
 import { CLAUDE_API_KEY_CAPABILITY } from "./claude-api-key-v1";
+import { COMPUTER_ACTIVITY_CAPABILITY } from "./computer-activity-v1";
 import { CONNECTORS_CAPABILITY } from "./connectors-v1";
+import { CONTEXT_COMPACT_CAPABILITY } from "./context-compact-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
 import { TEAM_CONTEXT_USAGE_CAPABILITY } from "./context-usage-v1";
 import { CONVERSATION_FILE_SEARCH_CAPABILITY } from "./conversation-file-search-v1";
@@ -63,11 +68,13 @@ import { HOST_UPDATE_CAPABILITY } from "./host-update-v1";
 import { HOSTED_SITES_CAPABILITY } from "./hosted-sites-v1";
 import { INSTANCE_TRANSFER_CAPABILITY } from "./instance-transfer-v1";
 import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "./live-activity-push-v1";
+import { LOCAL_SERVERS_CAPABILITY } from "./local-servers-v1";
 import { MACHINE_RESOURCES_CAPABILITY } from "./machine-resources-v1";
 import { MCP_SIGN_IN_APP_CAPABILITY } from "./mcp-sign-in-app-v1";
 import { MCP_SIGN_IN_CAPABILITY } from "./mcp-sign-in-v1";
 import { MEMORY_REVIEW_CAPABILITY } from "./memory-review-v1";
 import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "./message-client-id-v1";
+import { MODEL_VISIBILITY_CAPABILITY } from "./model-visibility-v1";
 import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "./onepassword-connector-v1";
 import { PROMPT_CACHE_TTL_CAPABILITY } from "./prompt-cache-ttl-v1";
 import { TEAM_PROMPT_MULTI_SELECT_CAPABILITY } from "./prompt-multi-select-v1";
@@ -92,6 +99,7 @@ import { TEAM_REASONING_EFFORTS_CAPABILITY } from "./reasoning-efforts-v1";
 import { ROUTINE_FLOWS_CAPABILITY } from "./routine-flows-v1";
 import { ROUTINE_RECOVERY_CAPABILITY } from "./routine-recovery-v1";
 import { ROUTINE_RESULTS_CAPABILITY } from "./routine-results-v1";
+import { SERVER_AUDIT_CAPABILITY } from "./server-audit-v1";
 import { SHARED_TABLES_CAPABILITY } from "./shared-tables-v1";
 import { SIDE_QUESTION_CAPABILITY } from "./side-question-v1";
 import { SIDEBAR_FOLDERS_CAPABILITY } from "./sidebar-folders-v1";
@@ -102,6 +110,7 @@ import { SKILLS_EVENTS_CAPABILITY } from "./skills-events-v1";
 import { STORAGE_DISK_CAPABILITY } from "./storage-disk-v1";
 import { TEAM_SUBAGENTS_CAPABILITY } from "./subagents-v1";
 import { TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY } from "./ui-block-auto-answer-v1";
+import { TEAM_UI_BLOCK_VAULT_CAPABILITY } from "./ui-block-vault-v1";
 import { TEAM_UI_BLOCKS_CAPABILITY } from "./ui-blocks-v1";
 import { TEAM_OPEN_PROVIDERS_CAPABILITY } from "./v8";
 import { TEAM_LONG_CAPABILITY_LISTS_CAPABILITY, TEAM_PROTOCOL_V9_CAPABILITIES } from "./v9";
@@ -158,11 +167,13 @@ export {
   AGENT_ACCESS_CAPABILITY,
   AGENT_ADMIN_CAPABILITY,
   AGENT_BACKUP_MODELS_CAPABILITY,
+  AGENT_FAST_MODE_CAPABILITY,
   AGENT_FOLDERS_CAPABILITY,
   AGENT_HIDDEN_CAPABILITY,
   AGENT_HOST_SETTINGS_CAPABILITY,
   AGENT_IMPORT_CAPABILITY,
   AGENT_INSTALL_CAPABILITY,
+  AGENT_INSTRUCTIONS_CAPABILITY,
   AGENT_MEMORIES_CAPABILITY,
   AGENT_MEMORY_LIMIT_CAPABILITY,
   AGENT_NEW_CHAT_CAPABILITY,
@@ -176,6 +187,7 @@ export {
   AGENT_THREAD_BRANCHES_CAPABILITY,
   AGENT_THREAD_FILES_CAPABILITY,
   AGENT_THREAD_READS_CAPABILITY,
+  AGENT_THREAD_REPLIES_CAPABILITY,
   AGENT_THREADS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
   ANDROID_PUSH_NOTIFICATIONS_CAPABILITY,
@@ -188,7 +200,9 @@ export {
   BROWSER_USER_CONTROL_CAPABILITY,
   CHANNEL_DELETE_CAPABILITY,
   CHANNEL_TASK_CANCEL_CAPABILITY,
+  COMPUTER_ACTIVITY_CAPABILITY,
   CONNECTORS_CAPABILITY,
+  CONTEXT_COMPACT_CAPABILITY,
   CONTEXT_RESET_CAPABILITY,
   CONVERSATION_FILE_SEARCH_CAPABILITY,
   CUSTOM_AGENTS_CAPABILITY,
@@ -205,11 +219,13 @@ export {
   HOSTED_SITES_CAPABILITY,
   INSTANCE_TRANSFER_CAPABILITY,
   LIVE_ACTIVITY_PUSH_CAPABILITY,
+  LOCAL_SERVERS_CAPABILITY,
   MACHINE_RESOURCES_CAPABILITY,
   MCP_SERVERS_CAPABILITY,
   MCP_SIGN_IN_APP_CAPABILITY,
   MCP_SIGN_IN_CAPABILITY,
   MEMORY_REVIEW_CAPABILITY,
+  MODEL_VISIBILITY_CAPABILITY,
   ONEPASSWORD_CONNECTOR_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
@@ -230,6 +246,7 @@ export {
   ROUTINE_FLOWS_CAPABILITY,
   ROUTINE_RECOVERY_CAPABILITY,
   ROUTINE_RESULTS_CAPABILITY,
+  SERVER_AUDIT_CAPABILITY,
   SHARED_TABLES_CAPABILITY,
   SIDE_QUESTION_CAPABILITY,
   SIDEBAR_FOLDERS_CAPABILITY,
@@ -254,6 +271,7 @@ export {
   TEAM_REASONING_EFFORTS_CAPABILITY,
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY,
+  TEAM_UI_BLOCK_VAULT_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
   VAULT_CAPABILITY,
   VAULT_IMPORT_CAPABILITY,
@@ -395,6 +413,15 @@ export const TEAM_CURRENT_CAPABILITIES = [
   SIDEBAR_PINS_CAPABILITY,
   SIDEBAR_FOLDERS_CAPABILITY,
   TEAM_REASONING_EFFORTS_CAPABILITY,
+  SERVER_AUDIT_CAPABILITY,
+  AGENT_FAST_MODE_CAPABILITY,
+  CONTEXT_COMPACT_CAPABILITY,
+  AGENT_INSTRUCTIONS_CAPABILITY,
+  TEAM_UI_BLOCK_VAULT_CAPABILITY,
+  LOCAL_SERVERS_CAPABILITY,
+  COMPUTER_ACTIVITY_CAPABILITY,
+  MODEL_VISIBILITY_CAPABILITY,
+  AGENT_THREAD_REPLIES_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -543,7 +570,16 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== MCP_ACCOUNTS_CAPABILITY &&
     capability !== SIDEBAR_PINS_CAPABILITY &&
     capability !== SIDEBAR_FOLDERS_CAPABILITY &&
-    capability !== TEAM_REASONING_EFFORTS_CAPABILITY,
+    capability !== TEAM_REASONING_EFFORTS_CAPABILITY &&
+    capability !== SERVER_AUDIT_CAPABILITY &&
+    capability !== AGENT_FAST_MODE_CAPABILITY &&
+    capability !== CONTEXT_COMPACT_CAPABILITY &&
+    capability !== AGENT_INSTRUCTIONS_CAPABILITY &&
+    capability !== TEAM_UI_BLOCK_VAULT_CAPABILITY &&
+    capability !== LOCAL_SERVERS_CAPABILITY &&
+    capability !== COMPUTER_ACTIVITY_CAPABILITY &&
+    capability !== MODEL_VISIBILITY_CAPABILITY &&
+    capability !== AGENT_THREAD_REPLIES_CAPABILITY,
 );
 /**
  * The capabilities that only a protocol 9 peer sends and gets. Protocols 7 and 8 read at most 128
@@ -568,6 +604,15 @@ export const TEAM_PROTOCOL_V9_ONLY_CAPABILITIES: ReadonlySet<string> = new Set<T
   SIDEBAR_PINS_CAPABILITY,
   SIDEBAR_FOLDERS_CAPABILITY,
   TEAM_REASONING_EFFORTS_CAPABILITY,
+  SERVER_AUDIT_CAPABILITY,
+  AGENT_FAST_MODE_CAPABILITY,
+  CONTEXT_COMPACT_CAPABILITY,
+  AGENT_INSTRUCTIONS_CAPABILITY,
+  TEAM_UI_BLOCK_VAULT_CAPABILITY,
+  LOCAL_SERVERS_CAPABILITY,
+  COMPUTER_ACTIVITY_CAPABILITY,
+  MODEL_VISIBILITY_CAPABILITY,
+  AGENT_THREAD_REPLIES_CAPABILITY,
 ]);
 // A v8 host reads at most 128 capabilities, so a client sends the protocol 9 ones only after it
 // negotiates protocol 9.
@@ -675,6 +720,15 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== MCP_ACCOUNTS_CAPABILITY &&
       capability !== SIDEBAR_PINS_CAPABILITY &&
       capability !== SIDEBAR_FOLDERS_CAPABILITY &&
-      capability !== TEAM_REASONING_EFFORTS_CAPABILITY,
+      capability !== TEAM_REASONING_EFFORTS_CAPABILITY &&
+      capability !== SERVER_AUDIT_CAPABILITY &&
+      capability !== AGENT_FAST_MODE_CAPABILITY &&
+      capability !== CONTEXT_COMPACT_CAPABILITY &&
+      capability !== AGENT_INSTRUCTIONS_CAPABILITY &&
+      capability !== TEAM_UI_BLOCK_VAULT_CAPABILITY &&
+      capability !== LOCAL_SERVERS_CAPABILITY &&
+      capability !== COMPUTER_ACTIVITY_CAPABILITY &&
+      capability !== MODEL_VISIBILITY_CAPABILITY &&
+      capability !== AGENT_THREAD_REPLIES_CAPABILITY,
   );
 }

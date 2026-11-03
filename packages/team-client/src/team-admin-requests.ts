@@ -17,6 +17,7 @@ import {
   decodeAgentFolderBrowse,
   decodeAgentFolderChangeFromMain,
   decodeAgentFolderListFromMain,
+  decodeServerAuditLog,
   type HiddenAgentsSnapshot,
   type HostDiscordAccessInput,
   type HostSetDiscordAccessInput,
@@ -27,6 +28,7 @@ import {
   isHiddenAgentsSnapshot,
   isSidebarPinsSnapshot,
   type ResetAgentSessionSettingInput,
+  type ServerAuditLog,
   type SetAgentHiddenInput,
   type SetAgentNotificationLevelInput,
   type SetAgentSessionSettingInput,
@@ -47,7 +49,9 @@ import { HOST_KEY_ROTATION_ROUTES } from "@openbot/contracts/team-protocol/host-
 import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-member-update-v1";
 import { HOST_RELEASE_ROUTES } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
+import { LOCAL_SERVERS_ROUTES } from "@openbot/contracts/team-protocol/local-servers-v1";
 import { MEMORY_REVIEW_ROUTES } from "@openbot/contracts/team-protocol/memory-review-v1";
+import { MODEL_VISIBILITY_ROUTES } from "@openbot/contracts/team-protocol/model-visibility-v1";
 import { PROMPT_CACHE_TTL_ROUTES } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
 import { PROVIDER_DEFAULT_ROUTES } from "@openbot/contracts/team-protocol/provider-default-v1";
 import type { PROVIDERS_V5_ROUTES } from "@openbot/contracts/team-protocol/providers-v5";
@@ -123,6 +127,7 @@ import {
   decodeProviderApiKeyStatus,
   decodeProviderCodeLoginStart,
   decodeProviderHostSignInStatus,
+  decodeProviderModelVisibility,
   decodeProviderRuntimeSnapshot,
   decodeProviderRuntimeSnapshotV8,
   decodeProviderUsageResetOutcome,
@@ -169,6 +174,8 @@ import {
   type PromptCacheTtlSetting,
   type ProviderCodeLoginStart,
   type ProviderHostSignInStatus,
+  type ProviderModelVisibility,
+  type ProviderModelVisibilityChange,
   type ProviderRuntimeSnapshot,
   type ProviderUsageResetOutcome,
   type ProviderUsageResets,
@@ -262,6 +269,7 @@ import { PROVIDERS_SIGN_IN_V3_ROUTES } from "@openbot/contracts/team-protocol/pr
 import type { PROVIDERS_V4_ROUTES } from "@openbot/contracts/team-protocol/providers-v4";
 import { ROUTINE_RECOVERY_ROUTES } from "@openbot/contracts/team-protocol/routine-recovery-v1";
 import { ROUTINE_RESULTS_ROUTES } from "@openbot/contracts/team-protocol/routine-results-v1";
+import { SERVER_AUDIT_ROUTES } from "@openbot/contracts/team-protocol/server-audit-v1";
 import { SHARED_TABLES_ROUTES } from "@openbot/contracts/team-protocol/shared-tables-v1";
 import { type SIGN_IN_RELAY_PROVIDERS, SIGN_IN_RELAY_ROUTES } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 import { SKILLS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/skills-admin-v1";
@@ -604,6 +612,64 @@ export function rotateHostKey(request: TeamApiRequest): Effect.Effect<{ publicKe
   );
 }
 
+/** `local-servers-v1`: a server that the desktop app runs on the host's computer. */
+export interface HostLocalServer {
+  serverId: string;
+  name: string;
+  /** Registered for the owner's account, so the owner's devices list it. */
+  published: boolean;
+}
+
+export interface HostLocalServerList {
+  servers: HostLocalServer[];
+  /** How many the computer can run in addition to its own server. */
+  limit: number;
+}
+
+function decodeHostLocalServer(value: unknown): HostLocalServer {
+  const record = decodeRecord(value, "local server");
+  return {
+    serverId: requiredString(record, "serverId"),
+    name: requiredString(record, "name"),
+    published: requiredBoolean(record, "published"),
+  };
+}
+
+function decodeHostLocalServerList(value: unknown): HostLocalServerList {
+  const record = decodeRecord(value, "local servers");
+  const { servers, limit } = record;
+  if (!Array.isArray(servers)) throw new Error("Invalid local server list.");
+  if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 0)
+    throw new Error("Invalid local server limit.");
+  return { servers: servers.map(decodeHostLocalServer), limit };
+}
+
+/** The servers that the desktop app runs on the host's computer. Only the owner can read them. */
+export function listHostLocalServers(
+  request: TeamApiRequest,
+): Effect.Effect<HostLocalServerList, TeamAdminRequestError> {
+  return adminCall(() => request("POST", LOCAL_SERVERS_ROUTES.list, decodeHostLocalServerList, {}));
+}
+
+/**
+ * Makes a server on the host's computer. Resolves after it runs; while the computer is signed in, it
+ * is then also registered for the owner's account, so the server list has it.
+ */
+export function createHostLocalServer(
+  request: TeamApiRequest,
+  name: string,
+): Effect.Effect<HostLocalServer, TeamAdminRequestError> {
+  return adminCall(() => request("POST", LOCAL_SERVERS_ROUTES.create, decodeHostLocalServer, { name }));
+}
+
+/** Deletes a server on the host's computer: its data goes to that computer's Trash, and it leaves the account. */
+export function deleteHostLocalServer(
+  request: TeamApiRequest,
+  serverId: string,
+): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", LOCAL_SERVERS_ROUTES.delete, () => undefined, { serverId }));
+}
+
 /** The host's enabled messaging connections with their places. Only a host with `routine-results-v1` answers it. */
 export function listRoutineResultOptions(
   request: TeamApiRequest,
@@ -662,6 +728,11 @@ export function getHostAgentAccess(request: TeamApiRequest): Effect.Effect<Agent
   return adminCall(() => request("POST", AGENT_ACCESS_ROUTES.read, decodeAgentAccessSnapshot, {}));
 }
 
+/** The changes to the access of the host, newest first (`server-audit-v1`). Owners and admins only. */
+export function getHostAuditLog(request: TeamApiRequest): Effect.Effect<ServerAuditLog, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SERVER_AUDIT_ROUTES.read, decodeServerAuditLog, {}));
+}
+
 /** Replaces the roles. The host answers 409 when another admin saved after `change.revision`. */
 export function setHostAgentAccess(
   request: TeamApiRequest,
@@ -691,6 +762,28 @@ export function setHostPromptCacheTtl(
   ttl: PromptCacheTtl,
 ): Effect.Effect<PromptCacheTtlSetting, TeamAdminRequestError> {
   return adminCall(() => request("POST", PROMPT_CACHE_TTL_ROUTES.update, decodePromptCacheTtlSetting, { ttl }));
+}
+
+/** `model-visibility-v1`: every model of one provider of the host, and the ones its model picker shows. */
+export function getHostModelVisibility(
+  request: TeamApiRequest,
+  provider: AgentProviderRef,
+): Effect.Effect<ProviderModelVisibility, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MODEL_VISIBILITY_ROUTES.settings, decodeProviderModelVisibility, { provider }),
+  );
+}
+
+export function setHostModelVisibility(
+  request: TeamApiRequest,
+  change: ProviderModelVisibilityChange,
+): Effect.Effect<ProviderModelVisibility, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MODEL_VISIBILITY_ROUTES.update, decodeProviderModelVisibility, {
+      provider: change.provider,
+      shown: change.shown,
+    }),
+  );
 }
 
 /** `provider-default-v1`: the provider that a new agent of the host starts on. A newer host can name a provider this build does not know. */

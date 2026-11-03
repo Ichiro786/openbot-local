@@ -1,5 +1,6 @@
 import { MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
 import Copy from "lucide-react-native/icons/copy";
+import GitFork from "lucide-react-native/icons/git-fork";
 import Reply from "lucide-react-native/icons/reply";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import { isAndroid } from "@/shared/lib/platform";
@@ -88,6 +89,7 @@ export const ALL_REACTIONS: readonly string[] = Array.from(
 export type MessageMenuLabels = {
   reply: string;
   copy: string;
+  branch: string;
   selectText: string;
   react: (emoji: string) => string;
   moreEmoji: string;
@@ -107,6 +109,7 @@ export function openMessageMenu({
   labels,
   own,
   onReply,
+  onBranch,
   onCopy,
   onSelectText,
   onReact,
@@ -121,6 +124,8 @@ export function openMessageMenu({
   labels: MessageMenuLabels;
   own: string | null;
   onReply?: () => void;
+  /** Upstream 0.60 "Branch from here": only on the last answer of a finished turn. */
+  onBranch?: () => void;
   onCopy?: () => void;
   onSelectText?: () => void;
   onReact?: (emoji: string | null) => void;
@@ -128,6 +133,8 @@ export function openMessageMenu({
   if (!isAndroid) return false;
   const items: GlassMenuItem[] = [];
   if (onReply) items.push({ id: "reply", title: labels.reply, icon: <Reply size={18} color={icon} strokeWidth={2} /> });
+  if (onBranch)
+    items.push({ id: "branch", title: labels.branch, icon: <GitFork size={18} color={icon} strokeWidth={2} /> });
   if (onCopy) items.push({ id: "copy", title: labels.copy, icon: <Copy size={18} color={icon} strokeWidth={2} /> });
   if (onSelectText) {
     items.push({
@@ -140,7 +147,12 @@ export function openMessageMenu({
   const reactions: GlassReactions | undefined = onReact
     ? { quick: QUICK_REACTIONS, all: ALL_REACTIONS, own, reactLabel: labels.react, moreLabel: labels.moreEmoji }
     : undefined;
-  const handlers: Record<string, (() => void) | undefined> = { reply: onReply, copy: onCopy, select: onSelectText };
+  const handlers: Record<string, (() => void) | undefined> = {
+    reply: onReply,
+    branch: onBranch,
+    copy: onCopy,
+    select: onSelectText,
+  };
   const key = openGlassMenu({
     anchor: { x, y, width: 0, height: 0 },
     title: items.length > 0 ? title : undefined,

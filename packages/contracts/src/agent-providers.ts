@@ -124,6 +124,11 @@ export interface AgentProviderDescriptor {
    */
   readonly signInPageEnd: "callback" | "page";
   /**
+   * The site of the provider's mainland China accounts, which the ⋯ menu of this computer signs in
+   * with. Connect signs in with the global site. Absent: the provider has one site for all accounts.
+   */
+  readonly mainlandChinaSignInSite?: string;
+  /**
    * The workspace skill folders the CLI reads by itself, in its own order. OpenBot writes only
    * `.agents/skills` and `.claude/skills`, so each list names at least one of them.
    * Sources: the Codex "build skills" guide, the Claude Code skills guide, the opencode skills guide
@@ -169,7 +174,8 @@ export interface AgentProviderDescriptor {
    * Whether OpenBot can read the plan's remaining usage. `false`: the CLI exposes no usage reading,
    * so the dock says the provider does not report usage instead of waiting for a reading. Declared
    * here because the renderer cannot see the drivers; set it to `true` with a driver's usage read
-   * (Codex and Claude read it themselves, Grok, OpenCode, Antigravity and Cursor through `readRateLimits`).
+   * (Codex and Claude read it themselves, Grok, OpenCode, Antigravity, Cursor and Kimi through
+   * `readRateLimits`).
    */
   readonly reportsUsage: boolean;
   /**
@@ -363,7 +369,8 @@ const AGENT_PROVIDER_DESCRIPTOR_TABLE = {
     foldersInFullAccess: false,
   },
   // The Kimi Code CLI (`kimi acp`). Sign-in is `kimi login`, a device code that the user confirms on
-  // Kimi's page. The sign-in writes the account's models into the CLI's own config.
+  // Kimi's page. The sign-in writes the account's models into the CLI's own config. Global accounts
+  // are on kimi.ai, and mainland China accounts on kimi.com.
   kimi: {
     id: "kimi",
     displayName: "Kimi",
@@ -377,13 +384,14 @@ const AGENT_PROVIDER_DESCRIPTOR_TABLE = {
     pickerOrder: 7,
     localCodeSignIn: "device",
     signInPageEnd: "page",
+    mainlandChinaSignInSite: "kimi.com",
     skillFolders: [".kimi/skills", ".claude/skills", ".codex/skills", ".agents/skills"],
     homeSkills: "native",
     workspaceInstructionFiles: ["AGENTS.md"],
     workspaceEnforcement: "confined-process",
     steer: "deferred",
     concurrentTurns: true,
-    reportsUsage: false,
+    reportsUsage: true,
     approvalsInFullAccess: true,
     foldersInFullAccess: false,
   },

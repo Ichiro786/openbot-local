@@ -37,8 +37,7 @@ export const messages = {
   "settings.keepRunning.title": "OpenBot im Hintergrund weiter ausführen",
   "settings.keepRunning.description": "Aktive Aufgaben nach dem Schließen des Fensters weiter ausführen.",
   "settings.menuBar.title": "OpenBot in der Menüleiste zeigen",
-  "settings.menuBar.description":
-    "Das Dock-Symbol nach dem Schließen des Fensters ausblenden. Aktive Aufgaben laufen weiter.",
+  "settings.menuBar.description": "OpenBot über ein Symbol in der Menüleiste öffnen oder beenden.",
   "settings.keepAwake.title": "Computer wach halten",
   "settings.keepAwake.description":
     "Routinen laufen pünktlich, solange der Computer am Strom hängt. Der Bildschirm kann sich trotzdem ausschalten.",
@@ -544,6 +543,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Antworten vorlesen",
   "settings.voice.speech.readReplies.description":
     "Wenn du eine Nachricht diktierst, wird die Antwort vorgelesen. Diktiere erneut, um sie zu stoppen.",
+  "settings.voice.speech.speed.title": "Geschwindigkeit",
   "settings.voice.speech.voice.title": "Stimme",
   "settings.voice.speech.voice.female": "Weibliche Stimme {number}",
   "settings.voice.speech.voice.male": "Männliche Stimme {number}",

@@ -37,8 +37,7 @@ export const messages = {
   "settings.keepRunning.title": "Mantieni OpenBot attivo in background",
   "settings.keepRunning.description": "Le attività in corso continuano anche dopo aver chiuso la finestra.",
   "settings.menuBar.title": "Mostra OpenBot nella barra dei menu",
-  "settings.menuBar.description":
-    "Nasconde l’icona nel Dock dopo la chiusura della finestra. Le attività in corso continuano.",
+  "settings.menuBar.description": "Apri o chiudi OpenBot da un’icona nella barra dei menu.",
   "settings.keepAwake.title": "Mantieni attivo il computer",
   "settings.keepAwake.description":
     "Le routine partono in orario finché il computer è collegato alla corrente. Lo schermo può comunque spegnersi.",
@@ -529,6 +528,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Leggi le risposte ad alta voce",
   "settings.voice.speech.readReplies.description":
     "Quando detti un messaggio, la risposta viene letta ad alta voce. Detta di nuovo per fermarla.",
+  "settings.voice.speech.speed.title": "Velocità",
   "settings.voice.speech.voice.title": "Voce",
   "settings.voice.speech.voice.female": "Voce femminile {number}",
   "settings.voice.speech.voice.male": "Voce maschile {number}",

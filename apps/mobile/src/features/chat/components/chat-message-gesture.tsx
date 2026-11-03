@@ -3,16 +3,39 @@ import Reply from "lucide-react-native/icons/reply";
 import { type PropsWithChildren, useMemo, useRef, useState } from "react";
 import { View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { haptics } from "@/shared/lib/haptics";
 
+/** How long a touch and hold lasts before the sheet opens. */
+const HOLD_MS = 500;
+/**
+ * The bubble starts to press in only after this time, so a touch that starts a scroll does not move
+ * it. It then shrinks until the hold ends, so the reader sees the hold fill up.
+ */
+const PRESS_DELAY_MS = 120;
+const PRESSED_SCALE = 0.96;
+const PRESS_IN = {
+  duration: HOLD_MS - PRESS_DELAY_MS,
+  easing: Easing.out(Easing.quad),
+  reduceMotion: ReduceMotion.System,
+};
+// Build 10: TalkBack's touch and hold opens the message menu too.
 const HOLD_ACTIONS = [{ name: "longpress" as const }];
+const RELEASE = { duration: 300, dampingRatio: 0.7, reduceMotion: ReduceMotion.System };
 
 /**
  * A swipe away from the bubble's side of the chat replies: to the right for a bubble at the start,
- * to the left for a bubble at the end. A touch and hold selects text in the bubble. The action row
- * under the message has the same actions, so a screen reader uses that row.
+ * to the left for a bubble at the end. A touch and hold opens the sheet with the message actions. A
+ * screen reader cannot use these gestures, so it gets a button for that sheet under the message.
  */
 export function ChatMessageGesture({
   children,
@@ -27,10 +50,11 @@ export function ChatMessageGesture({
   /** The text is selected in the bubble: the handles get the touches, not the swipe. */
   selecting: boolean;
   onReply?: () => void;
+  /** Without `onHold`, a touch and hold selects text (fork fallback). */
   onSelectText?: () => void;
   /**
-   * Build 10 (ColorOS motion): a touch and hold opens the message menu at the finger (window
-   * coordinates) instead of selecting text. Select text is then a row of that menu.
+   * Opens the message actions. Build 10 (ColorOS motion) opens its glass menu at the finger
+   * (window coordinates); the sheet ignores them.
    */
   onHold?: (x: number, y: number) => void;
 }>) {
@@ -39,7 +63,11 @@ export function ChatMessageGesture({
   // The swipe distance toward the middle of the chat, in points. A bubble at the end moves left.
   const offset = useSharedValue(0);
   const direction = align === "end" ? -1 : 1;
-  const bubbleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() * direction }] }));
+  // The press of a touch and hold. It runs on the UI thread, so a press renders nothing in React.
+  const pressScale = useSharedValue(1);
+  const bubbleStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offset.get() * direction }, { scale: pressScale.get() }],
+  }));
   const iconStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, offset.get() / 64) }));
   // The reply icon behind the bubble mounts with the first swipe, not with each row of the chat.
   // It is clear until the bubble has moved, so it shows in time.
@@ -47,7 +75,7 @@ export function ChatMessageGesture({
   const handlers = useRef({ onReply, onSelectText, onHold });
   handlers.current = { onReply, onSelectText, onHold };
   const canReply = Boolean(onReply) && !selecting;
-  const canSelect = (Boolean(onSelectText) || Boolean(onHold)) && !selecting;
+  const canHold = (Boolean(onHold) || Boolean(onSelectText)) && !selecting;
   // Build the gestures once per row. A streaming reply re-renders its row for each chunk, and a new
   // gesture would reconfigure the native handler each time.
   const gesture = useMemo(() => {
@@ -55,10 +83,10 @@ export function ChatMessageGesture({
       void haptics.impact();
       handlers.current.onReply?.();
     };
-    const selectText = (x: number, y: number) => {
-      void haptics.impact();
-      const { onHold: hold, onSelectText: select } = handlers.current;
-      if (hold) hold(x, y);
+    const hold = (x: number, y: number) => {
+      void haptics.longPress();
+      const { onHold: open, onSelectText: select } = handlers.current;
+      if (open) open(x, y);
       else select?.();
     };
     const swipe = Gesture.Pan()
@@ -78,11 +106,21 @@ export function ChatMessageGesture({
       .onFinalize(() => {
         offset.set(withSpring(0, { duration: 400, dampingRatio: 1, reduceMotion: ReduceMotion.System }));
       });
-    const hold = Gesture.LongPress()
-      .enabled(canSelect)
-      .onStart((event) => scheduleOnRN(selectText, event.absoluteX, event.absoluteY));
-    return Gesture.Race(swipe, hold);
-  }, [canReply, canSelect, direction, offset]);
+    const press = Gesture.LongPress()
+      .enabled(canHold)
+      .minDuration(HOLD_MS)
+      .onBegin(() => {
+        pressScale.set(withDelay(PRESS_DELAY_MS, withTiming(PRESSED_SCALE, PRESS_IN)));
+      })
+      .onStart((event) => {
+        pressScale.set(withSpring(1, RELEASE));
+        scheduleOnRN(hold, event.absoluteX, event.absoluteY);
+      })
+      .onFinalize(() => {
+        pressScale.set(withSpring(1, RELEASE));
+      });
+    return Gesture.Race(swipe, press);
+  }, [canReply, canHold, direction, offset, pressScale]);
 
   return (
     <View className={align === "end" ? "max-w-full self-end" : "max-w-[92%] self-start"}>

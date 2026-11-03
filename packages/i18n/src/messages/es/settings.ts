@@ -37,7 +37,7 @@ export const messages = {
   "settings.keepRunning.title": "Mantener OpenBot en segundo plano",
   "settings.keepRunning.description": "Mantener las tareas activas al cerrar la ventana.",
   "settings.menuBar.title": "Mostrar OpenBot en la barra de menús",
-  "settings.menuBar.description": "Oculta el icono del Dock al cerrar la ventana. Las tareas activas siguen en marcha.",
+  "settings.menuBar.description": "Abre o cierra OpenBot desde un icono en la barra de menús.",
   "settings.keepAwake.title": "Mantener el ordenador activo",
   "settings.keepAwake.description":
     "Las rutinas se ejecutan a tiempo mientras el ordenador está conectado a la corriente. La pantalla puede apagarse.",
@@ -536,6 +536,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Leer las respuestas en voz alta",
   "settings.voice.speech.readReplies.description":
     "Cuando dictas un mensaje, la respuesta se lee en voz alta. Dicta otra vez para detenerla.",
+  "settings.voice.speech.speed.title": "Velocidad",
   "settings.voice.speech.voice.title": "Voz",
   "settings.voice.speech.voice.female": "Voz femenina {number}",
   "settings.voice.speech.voice.male": "Voz masculina {number}",
