@@ -325,7 +325,11 @@ for n in re.findall(r'<node [^>]*>',xml):
 print(last)
 PYY
 )
-    if [ -n "$dx" ]; then adb shell input tap $dx; sleep 2; check "$n-dots-agentpage" || return; dump "$n-d1"; shot "$n-dots-agentpage"
+    if [ -n "$dx" ]; then
+      # build 11: Notes press physics on the header ••• (recorded press, drag 0.33 D, release; 20 fast press-cancels)
+      press_drag "$n-press" "$dx" || return
+      blur_max "$n-after-press"
+      adb shell input tap $dx; sleep 2; check "$n-dots-agentpage" || return; dump "$n-d1"; shot "$n-dots-agentpage"
       log "  ••• → page: chat still on top=$(count "$OUT/$n-d1.xml" "E2E agent message: hold me to react.") NavUp=$(count "$OUT/$n-d1.xml" "Navigate up") Memories=$(count "$OUT/$n-d1.xml" Memories)"
       [ "$(count "$OUT/$n-d1.xml" "E2E agent message: hold me to react.")" = 0 ] && log "ok: ••• pushed a page" || { log "FAIL $n: ••• did not open the agent page"; FAIL=1; }
       adb shell input keyevent 4; sleep 1.5; check "$n-dots-back" || return; expect_text "E2E CHAT OPEN" 6 "$n-d2"
@@ -348,7 +352,7 @@ press_drag() { # $1 name $2 "x y" : press, drag 0.33 D down-left while held (rec
   adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n.mp4" & local rec=$!
   sleep 0.6
   adb shell input motionevent DOWN $x $y; sleep 0.25
-  for i in 1 2 3 4 5 6; do adb shell input motionevent MOVE $((x - i*2)) $((y + i*7)); done
+  for i in 1 2 3 4 5 6; do adb shell input motionevent MOVE $((x - i*4)) $((y + i*18)); done
   sleep 0.15; adb exec-out screencap -p > "$OUT/$n-held.png" 2>/dev/null
   adb shell input motionevent MOVE $((x + 400)) $((y + 500)); adb shell input motionevent UP $((x + 400)) $((y + 500))
   wait $rec 2>/dev/null; adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
