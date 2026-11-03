@@ -47,6 +47,8 @@ class OpenBotEngineModule : Module() {
     OnCreate {
       val ctx = appContext.reactContext?.applicationContext
       if (ctx != null) {
+        // Build 9: keep the last native crash for the "Copy crash log" screen on the next launch.
+        CrashCapture.install(ctx)
         // Seed the installed version so status() is meaningful before the service ever ran.
         val installed = EngineInstaller(ctx).installedVersion()
         EngineState.update { if (it.installedVersion == null) it.copy(installedVersion = installed) else it }
@@ -76,6 +78,12 @@ class OpenBotEngineModule : Module() {
     /** Downloads and swaps in the newest payload (if newer), then restarts the engine. */
     AsyncFunction("update") {
       EngineService.send(context, EngineService.ACTION_UPDATE)
+    }
+
+    /** Idempotent; OnCreate already installs it. Kept for an early call from JS. */
+    Function("installCrashHandler") {
+      appContext.reactContext?.applicationContext?.let { CrashCapture.install(it) }
+      Unit
     }
 
     Function("status") {

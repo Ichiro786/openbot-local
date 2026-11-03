@@ -83,6 +83,15 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.animations.colorOSMotion": "ColorOS motion",
   "mobile.settings.animations.colorOSMotionFooter":
     "Buttons press in with a spring and a light glow, menus grow from where you tap with frosted glass, and chats zoom open. When motion is reduced, only the glow and haptics stay.",
+  "mobile.settings.crash.lastTitle": "OpenBot closed unexpectedly last time",
+  "mobile.settings.crash.lastBody":
+    "A crash log was saved on this phone. Copy it and send it to whoever helps you fix the app.",
+  "mobile.settings.crash.boundaryTitle": "Something went wrong",
+  "mobile.settings.crash.boundaryBody": "This screen hit an error. Copy the crash log, then try again.",
+  "mobile.settings.crash.copy": "Copy crash log",
+  "mobile.settings.crash.copied": "Copied",
+  "mobile.settings.crash.dismiss": "Dismiss",
+  "mobile.settings.crash.retry": "Try again",
   "mobile.settings.feedback.footer": "Touch feedback for actions in the app on this device.",
   "mobile.settings.feedback.haptics": "Haptics",
   "mobile.settings.feedback.retry": "Retry saving haptics setting",

@@ -42,6 +42,7 @@ declare class OpenBotEngineNative extends NativeModule<OpenBotEngineEvents> {
   openLiveUpdateSettings(): void;
   getSdkInt(): number;
   getDynamicColors(): Record<string, string> | null;
+  installCrashHandler(): void;
 }
 
 /** `modules/openbot-engine`. Null on iOS, web and Expo Go, which have no local engine. */
