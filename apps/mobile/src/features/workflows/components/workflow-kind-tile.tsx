@@ -5,6 +5,7 @@ import Bot from "lucide-react-native/icons/bot";
 import Clock from "lucide-react-native/icons/clock";
 import File from "lucide-react-native/icons/file";
 import GitBranch from "lucide-react-native/icons/git-branch";
+import GitPullRequest from "lucide-react-native/icons/git-pull-request";
 import Image from "lucide-react-native/icons/image";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import MessageSquareText from "lucide-react-native/icons/message-square-text";
