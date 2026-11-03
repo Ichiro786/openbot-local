@@ -56,8 +56,11 @@ const refocusNameField = isAndroid
     }
   : undefined;
 
-/** The longest a zoom-pushed chat keeps its native animation off, if its transition end never comes. */
-const ZOOM_RELEASE_MS = 500;
+/**
+ * The longest a zoom-pushed chat keeps its native animation off, if its transition end never comes.
+ * Long enough that a slow push is on screen before its slide comes back (review R12-1).
+ */
+const ZOOM_RELEASE_MS = 2000;
 
 /**
  * Build 10 (ColorOS zoom-open): once a zoom-pushed chat has appeared, its animation override is

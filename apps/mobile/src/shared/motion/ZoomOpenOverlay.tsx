@@ -12,7 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { create } from "zustand";
 import { zoom } from "./tokens";
-import { armZoomPush } from "./zoomPush";
+import { armZoomPush, disarmZoomPush } from "./zoomPush";
 
 export type ZoomRect = { x: number; y: number; width: number; height: number };
 
@@ -26,14 +26,17 @@ type ZoomRequest = {
 const useZoomStore = create<{ request: ZoomRequest | null }>(() => ({ request: null }));
 let nextKey = 1;
 let hostMounted = false;
-/** The longest an overlay may stay up, whatever happens to its animations. */
+/** The latest the push runs, whatever happens to the spring. */
 const SAFETY_MS = 1200;
+/** The longest the surface waits for the pushed screen to appear before it uncovers anyway. */
+const SHOWN_SAFETY_MS = 1500;
 
 /**
  * Opens a bot or chat with the ColorOS zoom: a surface grows out of the source rect to the full
  * screen on a spring while the screen behind dims. The route is pushed once the surface covers 90%,
- * then the surface fades off the new screen. Nothing behind is scaled or blurred, so no screen can be
- * left shrunk. Returns false when no host is mounted, so the caller navigates directly.
+ * and the surface fades off the new screen once that screen has appeared (at most SHOWN_SAFETY_MS).
+ * Nothing behind is scaled or blurred, so no screen can be left shrunk. Returns false when no host
+ * is mounted, so the caller navigates directly.
  */
 export function zoomOpen(rect: ZoomRect, navigate: () => void, radius = 16): boolean {
   if (!hostMounted) return false;
@@ -45,6 +48,7 @@ export function zoomOpen(rect: ZoomRect, navigate: () => void, radius = 16): boo
 }
 
 function clear() {
+  disarmZoomPush();
   useZoomStore.setState({ request: null });
 }
 
@@ -72,20 +76,28 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   const [passThrough, setPassThrough] = useState(false);
   const { rect, radius, navigate } = request;
 
+  const uncovered = useRef(false);
+  const shownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fade the surface off the new screen once it is on screen (review R12-1: fading on push showed the
+  // screen behind while a slow chat was still being built).
+  const uncover = () => {
+    if (uncovered.current) return;
+    uncovered.current = true;
+    if (shownTimer.current) clearTimeout(shownTimer.current);
+    // Clear whether or not the fade completes (an interrupted animation reports finished=false).
+    cover.value = withTiming(0, { duration: 220 }, () => {
+      runOnJS(clear)();
+    });
+  };
+
   const finish = () => {
     if (done.current) return;
     done.current = true;
     setPassThrough(true);
-    try {
-      // Build 10: the pushed chat takes no native slide under the fading surface (one open animation).
-      armZoomPush();
-      navigate();
-    } finally {
-      // Clear whether or not the fade completes (an interrupted animation reports finished=false).
-      cover.value = withTiming(0, { duration: 220 }, () => {
-        runOnJS(clear)();
-      });
-    }
+    shownTimer.current = setTimeout(uncover, SHOWN_SAFETY_MS);
+    // Build 10: the pushed chat takes no native slide under the surface (one open animation).
+    armZoomPush(uncover);
+    navigate();
   };
 
   // Mount-only: the overlay is keyed per request, and finish reads refs.
@@ -94,9 +106,11 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     p.value = withSpring(1, zoom.openSpring);
     const safety = setTimeout(() => {
       if (!done.current) finish();
-      clear();
     }, SAFETY_MS);
-    return () => clearTimeout(safety);
+    return () => {
+      clearTimeout(safety);
+      if (shownTimer.current) clearTimeout(shownTimer.current);
+    };
   }, []);
 
   useAnimatedReaction(
