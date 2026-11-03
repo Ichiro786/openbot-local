@@ -24,5 +24,32 @@ src = src.replace(
                       }}
                     />`,
 );
+// Build 10+: the zoom-open chat stand-in, with the stack options the real chat routes use (zoomPush).
+if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
+  cpSync(".github/e2e/harness-b10/app", "apps/mobile/src/app", { recursive: true });
+  src = `import { isZoomPush as __e2eIsZoomPush, releaseZoomPush as __e2eReleaseZoomPush, zoomPushAnimation as __e2eZoomPushAnimation } from "@/shared/motion/zoomPush";\n${src}`;
+  src = src.replace(
+    anchor,
+    `${anchor}
+                    <Stack.Screen
+                      name="e2e-chat"
+                      options={({ route }) => ({ animation: __e2eZoomPushAnimation(route.key, "slide_from_right"), headerShown: false })}
+                      listeners={({ navigation, route }) => {
+                        const release = () => {
+                          if (__e2eReleaseZoomPush(route.key)) navigation.setOptions({});
+                        };
+                        return {
+                          transitionEnd: (event) => {
+                            if (!event.data?.closing) release();
+                          },
+                          focus: () => {
+                            if (__e2eIsZoomPush(route.key)) setTimeout(release, 500);
+                          },
+                        };
+                      }}
+                    />`,
+  );
+  console.log("build 10 harness variant applied");
+}
 writeFileSync(path, src);
 console.log("harness applied");

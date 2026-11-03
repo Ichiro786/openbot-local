@@ -93,75 +93,145 @@ close_menu_if_open() { # $1 name
   if [ "$(menu_open_kind "$1")" != none ]; then adb shell input keyevent 4; sleep 1; check "$1-close-leftover-menu" || true; fi
 }
 
-scenario() { # $1 name $2 expected colorOS (ON|OFF)
-  local n=$1 xy kind st
-  log "== scenario $n (expect colorOS=$2)"
-  ensure_running "$n"
-  xy=$(wait_for "Chat options" 30 "$n-0-home") || { log "FAIL $n: Chat options not found"; shot "$n-0-home"; FAIL=1; return; }
-  st=$(grep -o 'colorOS=[A-Z]*' "$OUT/$n-0-home.xml" | head -1); log "  state: $st"
-  [ "$st" = "colorOS=$2" ] || { log "FAIL $n: wrong state $st"; FAIL=1; }
-  shot "$n-0-home"
-  adb shell input tap $xy; sleep 1.2; check "$n-open-menu" || return
-  dump "$n-1-menu"; kind=$(menu_open_kind "$n-1-menu"); shot "$n-1-menu"; log "  menu kind: $kind"
-  xy=$(menu_row "Add agent" "$n-1-menu") || { log "FAIL $n: menu did not open"; FAIL=1; return; }
-  log "  Add agent at $xy via $(cat "$OUT/.how")"
-  if [ "$(cat "$OUT/.how")" = geometry ]; then sleep 2; dump "$n-1b-menu-later"; log "  a11y rows after 2 s: $([ -n "$(find_node "$OUT/$n-1b-menu-later.xml" "Add agent")" ] && echo present || echo absent)"; fi
-  adb shell input tap $xy
-  sleep 0.15; shot "$n-2-closing"
-  sleep 2.5
-  check "$n-add-agent" || { shot "$n-3-crash"; return; }
-  if wait_for "E2E SHEET OPEN" 8 "$n-3-sheet" >/dev/null; then log "ok $n: sheet opened"; else log "FAIL $n: sheet did not open"; FAIL=1; fi
-  shot "$n-3-sheet"
-  adb shell input keyevent 4; sleep 1.5
-  check "$n-sheet-back" || return
-  xy=$(wait_for "Toggle ColorOS" 10 "$n-4-back") || { log "FAIL $n: did not return to harness"; FAIL=1; return; }
-  [ "$(menu_open_kind "$n-4-back")" = none ] || { log "FAIL $n: a menu/backdrop is still up after the sheet closed"; FAIL=1; }
-  shot "$n-4-back"
-  # Rapid: open, tap outside, open, back key, open, Add agent.
-  xy=$(wait_for "Chat options" 5 "$n-5") && adb shell input tap $xy; sleep 0.8; check "$n-rapid-open1" || return
-  dump "$n-5b"; log "  rapid open1 menu: $(menu_open_kind "$n-5b")"; shot "$n-5b"
-  adb shell input tap 60 1500; sleep 0.8; check "$n-rapid-outside-tap" || return
-  sleep 0.6; dump "$n-5c"; kind=$(menu_open_kind "$n-5c"); log "  after outside tap menu: $kind"; [ "$kind" = none ] || { log "FAIL $n: outside tap did not close"; FAIL=1; }
-  xy=$(wait_for "Chat options" 5 "$n-6") && adb shell input tap $xy; sleep 0.8; check "$n-rapid-open2" || return
-  dump "$n-6b"; log "  rapid open2 menu: $(menu_open_kind "$n-6b")"
-  adb shell input keyevent 4; sleep 0.8; check "$n-rapid-back-key" || return
-  sleep 0.6; dump "$n-6c"; kind=$(menu_open_kind "$n-6c"); log "  after back key menu: $kind"; [ "$kind" = none ] || { log "FAIL $n: back key did not close"; FAIL=1; }
-  dump "$n-6d"; [ -n "$(find_node "$OUT/$n-6d.xml" "Chat options")" ] || { log "FAIL $n: back key left the harness screen"; FAIL=1; }
-  xy=$(wait_for "Chat options" 5 "$n-7") && adb shell input tap $xy; sleep 0.8; check "$n-rapid-open3" || return
-  xy=$(menu_row "Add agent" "$n-8") && { log "  rapid Add agent via $(cat "$OUT/.how")"; adb shell input tap $xy; }
-  sleep 2.5
-  check "$n-rapid-add-agent" || { shot "$n-9-crash"; return; }
-  wait_for "E2E SHEET OPEN" 8 "$n-9-sheet" >/dev/null && log "ok $n: rapid sequence sheet opened" || { log "FAIL $n: rapid sequence no sheet"; FAIL=1; }
-  shot "$n-9-sheet"
-  # Very fast double tap on the anchor, then a row while the spring is still running.
-  adb shell input keyevent 4; sleep 1.5; check "$n-rapid-sheet-back" || return
-  xy=$(wait_for "Chat options" 5 "$n-10") && { adb shell input tap $xy; sleep 0.1; adb shell input tap $xy; }
-  sleep 0.3; check "$n-double-tap-anchor" || return
-  close_menu_if_open "$n-10b"; check "$n-after-double-tap" || return
+# ---------------- build 10 smoke (v3) ----------------
+count() { python3 - "$1" "$2" <<'PY'
+import re,sys
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();l=sys.argv[2];c=0
+for n in re.findall(r'<node [^>]*>',xml):
+    t=re.search(r' text="([^"]*)"',n);d=re.search(r' content-desc="([^"]*)"',n)
+    if (t and t.group(1)==l) or (d and d.group(1)==l): c+=1
+print(c)
+PY
 }
-toggle_to() { # $1 name $2 expected after toggle
-  ensure_running "$1"; close_menu_if_open "$1-pre"
+edit_xy() { python3 - "$1" <<'PY'
+import re,sys
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
+for n in re.findall(r'<node [^>]*>',xml):
+    if 'class="android.widget.EditText"' in n:
+        x1,y1,x2,y2=map(int,re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n).groups()); print((x1+x2)//2,(y1+y2)//2,y2); break
+PY
+}
+hold() { adb shell input swipe $1 $2 $1 $2 900; }
+tapl() { # $1 label $2 timeout $3 dumpname -> taps, returns 1 if missing
+  local xy; xy=$(wait_for "$1" "$2" "$3") || { log "  missing: $1"; return 1; }
+  adb shell input tap $xy; return 0
+}
+expect_text() { # $1 substring $2 timeout $3 name
+  if wait_for "$1" "$2" "$3" >/dev/null; then log "ok: $1"; else log "FAIL: expected '$1'"; shot "$3"; FAIL=1; fi
+}
+home() { # back to the harness home
+  local i; for i in 1 2 3; do dump hm; [ -n "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && [ "$(menu_open_kind hm)" = none ] && return 0; adb shell input keyevent 4; sleep 1.2; done
+}
+
+menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> back
+  local n=$1 xy
+  xy=$(wait_for "Chat options" 20 "$n-0") || { log "FAIL $n: no ••• "; FAIL=1; return; }
+  adb shell input tap $xy; sleep 1.2; check "$n-open" || return
+  dump "$n-1"; log "  ••• menu kind: $(menu_open_kind "$n-1")"; shot "$n-1-dots"
+  xy=$(menu_row "Add agent" "$n-1") || { log "FAIL $n: ••• menu did not open"; FAIL=1; return; }
+  adb shell input tap $xy; sleep 2.5; check "$n-add-agent" || return
+  expect_text "E2E SHEET OPEN" 8 "$n-2-sheet"; adb shell input keyevent 4; sleep 1.5; check "$n-sheet-back" || return
+  home
+}
+row_scn() { # agent-row long-press menu: every item, the sub-menus, back row, back key, outside tap
+  local n=$1 rxy item
+  for item in "Mark unread:mark-unread" "Pin:pin" "Hide:hide" "Info:info"; do
+    rxy=$(wait_for "E2E Bot row" 10 "$n-r") || { log "FAIL $n: no row"; FAIL=1; return; }
+    hold $rxy; sleep 1; check "$n-hold-${item#*:}" || return
+    dump "$n-rm"; shot "$n-rowmenu"; log "  row menu kind: $(menu_open_kind "$n-rm")"
+    tapl "${item%%:*}" 3 "$n-rm2" || { FAIL=1; continue; }
+    sleep 1.5; check "$n-chose-${item#*:}" || return
+    expect_text "LAST=${item#*:}" 5 "$n-last-${item#*:}"
+  done
+  # sub-menu: Move to folder -> Folder Beta
+  rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; check "$n-hold-sub" || return
+  tapl "Move to folder" 3 "$n-s1" || FAIL=1; sleep 0.8; check "$n-sub-open" || return
+  dump "$n-s2"; shot "$n-submenu"
+  tapl "Folder Beta" 3 "$n-s3" || FAIL=1; sleep 1.5; check "$n-sub-chose" || return
+  expect_text "LAST=folder-b" 5 "$n-last-folder"
+  # sub-menu More -> back row -> Pin ; then back key in a sub-menu goes up one level, then closes
+  rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1
+  tapl "More" 3 "$n-m1" || FAIL=1; sleep 0.8
+  if [ "$2" = ON ]; then
+    tapl "Back, More" 3 "$n-m2" || { log "FAIL $n: no back row"; FAIL=1; }; sleep 0.8
+    tapl "Pin" 3 "$n-m3" || FAIL=1; sleep 1.5; check "$n-back-row-pin" || return
+    expect_text "LAST=pin" 5 "$n-last-pin2"
+    rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; tapl "More" 3 "$n-m4"; sleep 0.8
+    adb shell input keyevent 4; sleep 0.8; dump "$n-m5"; [ -n "$(find_node "$OUT/$n-m5.xml" "Mark unread")" ] && log "ok: back key left the sub-menu" || { log "FAIL $n: back key did not return to the first level"; FAIL=1; }
+  fi
+  adb shell input keyevent 4; sleep 1; check "$n-backkey-close" || return
+  dump "$n-m6"; [ "$(menu_open_kind "$n-m6")" = none ] && [ -n "$(find_node "$OUT/$n-m6.xml" "Toggle ColorOS")" ] && log "ok: back key closed the row menu" || { log "FAIL $n: row menu not closed by back"; FAIL=1; home; }
+  rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; adb shell input tap 540 2200; sleep 1; check "$n-outside" || return
+  dump "$n-m7"; [ "$(menu_open_kind "$n-m7")" = none ] && log "ok: outside tap closed" || { log "FAIL $n: outside tap"; FAIL=1; home; }
+}
+zoom_scn() { # tap the zoom row, record the transition, then back
+  local n=$1 xy
+  xy=$(wait_for "E2E Zoom chat" 10 "$n-z0") || { log "FAIL $n: no zoom row"; FAIL=1; return; }
+  adb shell "screenrecord --time-limit 4 --bit-rate 8000000 /sdcard/$n-zoom.mp4" & local rec=$!
+  sleep 0.6; adb shell input tap $xy; sleep 3.6; wait $rec 2>/dev/null
+  adb pull /sdcard/$n-zoom.mp4 "$OUT/$n-zoom.mp4" >/dev/null 2>&1
+  check "$n-zoom" || return
+  expect_text "E2E CHAT OPEN" 8 "$n-z1"; shot "$n-chat"
+}
+chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
+  local n=$1 xy e
+  xy=$(wait_for "E2E agent message" 10 "$n-c0") || { log "FAIL $n: no agent message"; FAIL=1; return; }
+  dump "$n-c0"; log "  rows (menu closed): Reply=$(count "$OUT/$n-c0.xml" Reply) Add reaction=$(count "$OUT/$n-c0.xml" "Add reaction") Copy message=$(count "$OUT/$n-c0.xml" "Copy message") Select text=$(count "$OUT/$n-c0.xml" "Select text")"
+  if [ "$2" = ON ]; then
+    [ "$(count "$OUT/$n-c0.xml" Reply)" = 0 ] && [ "$(count "$OUT/$n-c0.xml" "Add reaction")" = 0 ] && [ "$(count "$OUT/$n-c0.xml" "Select text")" = 0 ] && [ "$(count "$OUT/$n-c0.xml" "Copy message")" = 1 ] && log "ok: rows trimmed (agent keeps Copy; own row empty)" || { log "FAIL $n: action rows not as specified"; FAIL=1; }
+    hold $xy; sleep 1.2; check "$n-hold-agent" || return
+    dump "$n-c1"; shot "$n-msgmenu"
+    log "  quick: $(for e in 👍 👎 ❤️ 😂 🎉; do printf '%s=%s ' $e $(count "$OUT/$n-c1.xml" "React with $e"); done) plus=$(count "$OUT/$n-c1.xml" "More emoji")"
+    tapl "React with 👍" 3 "$n-c2" || FAIL=1; sleep 1.5; check "$n-quick-react" || return
+    expect_text "REACTED a1 👍 valid=true" 5 "$n-c3"
+    hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c4" || FAIL=1; sleep 1; check "$n-plus" || return
+    shot "$n-picker"; tapl "React with 🚀" 3 "$n-c5" || FAIL=1; sleep 1.5; check "$n-grid-react" || return
+    expect_text "REACTED a1 🚀 valid=true" 5 "$n-c6"
+    hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c7"; sleep 0.8; adb shell input keyevent 4; sleep 0.8; dump "$n-c8"
+    [ -n "$(find_node "$OUT/$n-c8.xml" "React with 👍")" ] && log "ok: back key left the emoji grid" || log "note: grid back state unclear"
+    adb shell input keyevent 4; sleep 1; check "$n-grid-back" || return
+    hold $xy; sleep 1.2; tapl "Copy message" 3 "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
+    expect_text "COPY a1" 5 "$n-c10"
+    xy=$(wait_for "E2E own message" 5 "$n-c11"); hold $xy; sleep 1.2; check "$n-hold-own" || return
+    tapl "Reply" 3 "$n-c12" || FAIL=1; sleep 1.5; expect_text "REPLY u1" 5 "$n-c13"
+  else
+    [ "$(count "$OUT/$n-c0.xml" Reply)" -ge 2 ] && log "ok: OFF keeps build 9 rows" || { log "FAIL $n: OFF rows differ from build 9"; FAIL=1; }
+    hold $xy; sleep 1.2; check "$n-hold-off" || return
+    expect_text "SELECT a1" 5 "$n-c1"; dump "$n-c1b"; [ "$(menu_open_kind "$n-c1b")" = none ] || { log "FAIL $n: OFF opened a glass menu"; FAIL=1; }
+  fi
+  # composer: multiline + send
+  dump "$n-k0"; set -- $(edit_xy "$OUT/$n-k0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return; }
+  local fy=$3; adb shell input tap $1 $2; sleep 1.8; check "$n-focus" || return
+  adb shell input text "line1"; adb shell input keyevent 66; adb shell input text "line2"; adb shell input keyevent 66; adb shell input text "line3"; sleep 1
+  dump "$n-k1"; shot "$n-composer-kb"
+  adb shell dumpsys window InputMethod 2>/dev/null | grep -oE "(mFrame|mGivenContentInsets|touchableRegion)[^ ]*" | head -4 >> "$OUT/$n-ime.txt"
+  log "  field before ${fy}, with keyboard: $(edit_xy "$OUT/$n-k1.xml")  ime: $(head -2 "$OUT/$n-ime.txt" | tr '\n' ' ')"
+  tapl "Send message" 3 "$n-k2" || { log "FAIL $n: no send button"; FAIL=1; }; sleep 1.5; check "$n-send" || return
+  expect_text 'SENT=line1\nline2\nline3' 5 "$n-k3"
+  adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1.5; check "$n-chat-back" || return
+  dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
+}
+toggle_to() { # $1 name $2 expected
+  ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
-  local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"
-  [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle did not reach $2"; FAIL=1; }
+  local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; menu_scn "$1-dots" $2; row_scn "$1-row" $2; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; }
 
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
 adb shell settings put global window_animation_scale 1
+adb shell settings put global transition_animation_scale 1
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 if ! wait_for "E2E READY" 120 "00-launch" >/dev/null; then log "FAIL: harness never showed"; shot "00-launch"; FAIL=1; fi
-shot "00-launch"
-grep -o 'E2E READY[a-z ]*colorOS=[A-Z]*' "$OUT/00-launch.xml" | head -1 | tee -a "$OUT/steps.txt"
+shot "00-launch"; grep -o 'E2E READY[a-z ]*colorOS=[A-Z]*' "$OUT/00-launch.xml" | head -1 | tee -a "$OUT/steps.txt"
 check launch || true
-
-scenario on1 ON
-toggle_to t1 OFF   # live, no restart
-scenario off OFF
+round on1 ON
+toggle_to t1 OFF
+round off OFF
 toggle_to t2 ON
-scenario on2 ON
-
+round on2 ON
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
 adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
 log "final pid: $(adb shell pidof $PKG | tr -d '\r')"

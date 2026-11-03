@@ -1,6 +1,6 @@
 name: E2E emulator smoke (review)
 
-# Reviewer-owned smoke test for OpenBot Local build 9. Lives only on branch build9-review-ci.
+# Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build10-review-ci.
 # It builds an x86_64 release APK of the commit named in .github/e2e/target-ref (the APK that ships is
 # arm64-v8a; the JS and the Java/Kotlin are the same) with a signed-out E2E harness route that drives
 # the real MenuView / GlassMenu from a native-stack headerRight and pushes a formSheet (like Add agent),
@@ -8,7 +8,7 @@ name: E2E emulator smoke (review)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build9-review-ci]
+    branches: [build10-review-ci]
 
 permissions:
   contents: read
