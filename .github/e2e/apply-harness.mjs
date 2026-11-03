@@ -157,7 +157,14 @@ function __e2eMark(name: string, at: number) {
     },
   );
   const surfaceStyle = useAnimatedStyle(() => {`);
+    f = f.replace("  __e2eZ.tap = Date.now();", "  __e2eZ.tap = Date.now();\n  (globalThis as { __e2eTap?: number }).__e2eTap = __e2eZ.tap as number;");
     writeFileSync(ov, f);
+    const zp = "apps/mobile/src/shared/motion/zoomPush.ts";
+    let z = readFileSync(zp, "utf8");
+    const za = "export function markZoomContentReady(routeKey: string): void {";
+    if (!z.includes(za)) throw new Error("markZoomContentReady anchor missing");
+    z = z.replace(za, `${za}\n  {\n    const tap = (globalThis as { __e2eTap?: number }).__e2eTap ?? 0;\n    console.log(\`E2EREADY sinceTap=\${Date.now() - tap} match=\${routeKey === shownKey} armed=\${onShown !== null}\`);\n  }`);
+    writeFileSync(zp, z);
     console.log("zoom timing marks applied");
   }
   // Item 7: the stand-in chat's composer gets real attachments (so the + shows) and a Use-skill action.

@@ -4,11 +4,14 @@
 import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
 import { ScrollView, Text, View } from "react-native";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
+import { FakeWorkspace } from "@/e2e/fake-workspace";
 
 const MOODS: AvatarMood[] = ["idle", "working", "waiting", "failed", "responded", "connecting", "asleep"];
 
 export default function E2EPlush() {
+  // AgentPhoto (upstream) reads the workspace: run 41726795282 hit its provider error without this.
   return (
+    <FakeWorkspace>
     <ScrollView style={{ flex: 1, backgroundColor: "#101418" }} contentContainerStyle={{ padding: 16, paddingTop: 80 }}>
       <Text style={{ color: "#fff", fontSize: 16 }}>E2E PLUSH OPEN</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 12 }}>
@@ -20,5 +23,6 @@ export default function E2EPlush() {
         ))}
       </View>
     </ScrollView>
+    </FakeWorkspace>
   );
 }

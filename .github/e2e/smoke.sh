@@ -237,7 +237,7 @@ row_scn() { # agent-row long-press menu: every item, the sub-menus, back row, ba
   rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; check "$n-hold-sub" || return
   tapl "Move to folder" 3 "$n-s1" || FAIL=1; sleep 1.8; check "$n-sub-open" || return
   dump "$n-s2"; shot "$n-submenu"
-  tapl "Folder Beta" 3 "$n-s3" || FAIL=1; sleep 1.5; check "$n-sub-chose" || return
+  sleep 1; tapl "Folder Beta" 3 "$n-s3" || FAIL=1; sleep 1.5; check "$n-sub-chose" || return
   expect_text "LAST=folder-b" 5 "$n-last-folder"
   # sub-menu More -> back row -> Pin ; then back key in a sub-menu goes up one level, then closes
   rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1
@@ -264,12 +264,13 @@ zoom_open() { # $1 name: one recorded zoom open with frame stats; leaves the cha
   adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
   check "$n" || return 1
   expect_text "E2E CHAT OPEN" 8 "$n-z1"
-  zoom_timing "$n" "$n-z1"
+  if [ "${2:-ON}" = ON ]; then zoom_timing "$n" "$n-z1"; else log "  zoom timing ($n): OFF (no zoom)"; fi
 }
 zoom_timing() { # $1 name $2 dump: the harness's ZOOMT marks (ms after zoomOpen) -> hold and tap->settled gates
   local z; z=$(grep -oE 'ZOOMT[^"&]*' "$OUT/$2.xml" | head -1)
   [ -n "$z" ] || { sleep 0.5; dump "$2t"; z=$(grep -oE 'ZOOMT[^"&]*' "$OUT/$2t.xml" | head -1); }
   [ -n "$z" ] || { z=$(adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'ZOOMT[^"]*' | tail -1); }
+  log "  ready signal ($1): $(adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'E2EREADY.*' | tail -1) load $(adb shell cat /proc/loadavg | cut -d' ' -f1-3)"
   if [ -z "$z" ]; then log "FAIL $1: no ZOOMT timing marks"; FAIL=1; return; fi
   local r; r=$(python3 - "$z" <<'PYZ'
 import sys,re
@@ -291,11 +292,11 @@ PYZ
 zoom_scn() { # three opens (spec gate: 3 recorded opens + 3 backs with framestats); the third stays in the chat
   local n=$1 i
   for i in 1 2; do
-    zoom_open "$n$i" || return
+    zoom_open "$n$i" "$2" || return
     shot "$n$i-chat"; gfx_reset; adb shell input keyevent 4; sleep 1.6; gfx "$n$i-back"; check "$n$i-back" || return
     dump "$n$i-home"; [ -n "$(find_node "$OUT/$n$i-home.xml" "Toggle ColorOS")" ] || { log "FAIL $n$i: back did not return home"; FAIL=1; home; }
   done
-  zoom_open "$n"3; shot "$n-chat"
+  zoom_open "$n"3 "$2"; shot "$n-chat"
 }
 chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
   local n=$1 xy e
@@ -462,7 +463,8 @@ round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_
 # JS timers seconds late): wait for it (max 240 s) and let the system settle before the app starts.
 for i in $(seq 1 120); do adb logcat -d 2>/dev/null | grep -q "Finished processing BOOT_COMPLETED" && break; sleep 2; done
 echo "[$(date +%T)] boot settle: BOOT_COMPLETED processed after ~$((i*2)) s; load $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
-sleep 20
+# 41726795282 still ran at load ~24 (every frame > 250 ms): wait for the 1-min load to fall under 8 (max 300 s).
+for i in $(seq 1 60); do l=$(adb shell cat /proc/loadavg | cut -d' ' -f1 | cut -d. -f1); [ "${l:-99}" -lt 8 ] && break; sleep 5; done
 echo "[$(date +%T)] load before start $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
