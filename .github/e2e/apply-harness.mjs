@@ -88,6 +88,15 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
     src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-plush" options={{ headerShown: false }} />`);
     console.log("plush route applied");
   }
+  if (existsSync("apps/mobile/src/features/servers/screens/whatsapp-screen.tsx") && existsSync(index)) {
+    cpSync(".github/e2e/harness-b11/app/e2e-whatsapp.tsx", "apps/mobile/src/app/e2e-whatsapp.tsx");
+    let f = readFileSync(index, "utf8");
+    const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
+    f = f.replace(toggle, `${toggle}\n        <View style={{ flexDirection: "row", marginHorizontal: 24, marginTop: 8, gap: 8 }}><Pressable accessibilityRole="button" accessibilityLabel="E2E WhatsApp" onPress={() => router.push("/e2e-whatsapp?serverId=e2e-server&cap=1")} style={{ padding: 10, backgroundColor: "#25d366", borderRadius: 12 }}><Text style={{ color: "#000" }}>WA</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="E2E WhatsApp none" onPress={() => router.push("/e2e-whatsapp?serverId=e2e-server&cap=0")} style={{ padding: 10, backgroundColor: "#555", borderRadius: 12 }}><Text style={{ color: "#fff" }}>WA none</Text></Pressable></View>`);
+    writeFileSync(index, f);
+    src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-whatsapp" options={{ headerShown: false }} />`);
+    console.log("whatsapp route applied");
+  }
 }
 writeFileSync(path, src);
 console.log("harness applied");

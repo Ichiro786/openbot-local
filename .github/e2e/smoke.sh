@@ -367,13 +367,32 @@ plush_scn() { # upstream v0.60 plush avatars, all moods, animating
   [ "$(md5sum < "$OUT/$n-a.png")" != "$(md5sum < "$OUT/$n-b.png")" ] && log "ok: plush frames change" || log "note $n: two plush screenshots identical (still faces?)"
   adb shell input keyevent 4; sleep 1.2; check "$n-back" || return
 }
+whatsapp_scn() { # the real WhatsApp page over a fake whatsapp-mobile-v1 engine; then a host without it
+  local n=$1 xy
+  tapl "E2E WhatsApp" 5 "$n-w0" || { log "note $n: no WhatsApp route (target has no page)"; return; }
+  sleep 2; check "$n-open" || return
+  expect_text "E2E WHATSAPP OPEN cap=1" 8 "$n-w1"
+  expect_text "Get pairing code" 8 "$n-w2"; shot "$n-page"
+  dump "$n-w3"; set -- $(edit_xy "$OUT/$n-w3.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no phone field"; FAIL=1; return; }
+  adb shell input tap $1 $2; sleep 1; adb shell input text "+15551234567"; sleep 0.8; adb shell input keyevent 111; sleep 0.8
+  tapl "Get pairing code" 5 "$n-w4" || { FAIL=1; return; }; sleep 1; check "$n-start" || return
+  expect_text "WA link/start" 4 "$n-w5"
+  expect_text "ABCD-1234" 8 "$n-w6"; shot "$n-code"
+  expect_text "Number linked" 14 "$n-w7"
+  expect_text "+15551234567" 10 "$n-w8"; shot "$n-linked"
+  adb shell input keyevent 4; sleep 1.2; check "$n-back" || return; home
+  tapl "E2E WhatsApp none" 5 "$n-x0" || { FAIL=1; return; }; sleep 2; check "$n-none" || return
+  expect_text "doesn't support WhatsApp from the phone" 8 "$n-x1"; shot "$n-none"
+  [ -z "$(find_node "$OUT/$n-x1.xml" "Get pairing code")" ] && log "ok: no link UI without the capability" || { log "FAIL $n: link UI shown without whatsapp-mobile-v1"; FAIL=1; }
+  adb shell input keyevent 4; sleep 1.2; check "$n-none-back" || return; home
+}
 toggle_to() { # $1 name $2 expected
   ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
   local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
-round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; retry_infra plush_scn "$1-plush"; }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
 
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
