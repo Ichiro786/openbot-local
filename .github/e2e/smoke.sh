@@ -193,6 +193,8 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     adb shell input keyevent 4; sleep 1; check "$n-grid-back" || return
     hold $xy; sleep 1.2; tapl "Copy message" 3 "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
     expect_text "COPY a1" 5 "$n-c10"
+    hold $xy; sleep 1.2; tapl "Select text" 3 "$n-c9s" || FAIL=1; sleep 1.5; check "$n-select" || return
+    expect_text "SELECT a1" 5 "$n-c10s"
     xy=$(wait_for "E2E own message" 5 "$n-c11"); hold $xy; sleep 1.2; check "$n-hold-own" || return
     tapl "Reply" 3 "$n-c12" || FAIL=1; sleep 1.5; expect_text "REPLY u1" 5 "$n-c13"
   else
