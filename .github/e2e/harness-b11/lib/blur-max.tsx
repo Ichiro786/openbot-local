@@ -15,7 +15,8 @@ function read() {
       tag = m[3] ?? "";
     }
   }
-  return `BLURMAX=${max} ${tag}`;
+  const zoom = (globalThis as { __e2eZoomLast?: string }).__e2eZoomLast;
+  return `BLURMAX=${max} ${tag}${zoom ? `\n${zoom}` : ""}`;
 }
 
 export function E2EBlurMax() {

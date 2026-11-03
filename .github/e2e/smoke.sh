@@ -249,6 +249,29 @@ zoom_open() { # $1 name: one recorded zoom open with frame stats; leaves the cha
   adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
   check "$n" || return 1
   expect_text "E2E CHAT OPEN" 8 "$n-z1"
+  zoom_timing "$n" "$n-z1"
+}
+zoom_timing() { # $1 name $2 dump: the harness's ZOOMT marks (ms after zoomOpen) -> hold and tap->settled gates
+  local z; z=$(grep -oE 'ZOOMT[^"&]*' "$OUT/$2.xml" | head -1)
+  [ -n "$z" ] || { sleep 0.5; dump "$2t"; z=$(grep -oE 'ZOOMT[^"&]*' "$OUT/$2t.xml" | head -1); }
+  [ -n "$z" ] || { z=$(adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'ZOOMT[^"]*' | tail -1); }
+  if [ -z "$z" ]; then log "FAIL $1: no ZOOMT timing marks"; FAIL=1; return; fi
+  local r; r=$(python3 - "$z" <<'PYZ'
+import sys,re
+d={k:v for k,v in re.findall(r"(\w+)=([\w-]+)",sys.argv[1])}
+g=lambda k:int(d[k]) if d.get(k,"-1").lstrip("-").isdigit() else -1
+op,sk,pu,un,cl=g("opaque"),g("skel"),g("push"),g("uncover"),g("clear")
+feat=max(0,(min(sk,un) if sk>=0 else un)-op) if op>=0 else -1
+print(f"hold_featureless={feat} skeleton_hold={un-pu} tap_settled={cl} push={pu} uncover={un} via={d.get('via','?')}")
+PYZ
+)
+  log "  zoom timing ($1): $z -> $r"; echo "$1 $r" >> "$OUT/zoom-timing.txt"
+  local feat set; feat=$(echo "$r" | sed -E 's/.*hold_featureless=(-?[0-9]+).*/\1/'); set=$(echo "$r" | sed -E 's/.*tap_settled=(-?[0-9]+).*/\1/')
+  [ "$feat" -ge 0 ] && [ "$feat" -le 120 ] && log "ok: featureless hold ${feat} ms (<=120)" || { log "FAIL $1: featureless hold ${feat} ms (>120)"; FAIL=1; }
+  if [ "$set" -lt 0 ] || [ "$set" -gt 700 ]; then log "FAIL $1: tap->settled ${set} ms (emulator gate 700)"; FAIL=1
+  elif [ "$set" -gt 450 ]; then log "WARN $1: tap->settled ${set} ms (<=700 emulator gate, >450 device target)"
+  else log "ok: tap->settled ${set} ms (<=450)"; fi
+  echo "$r" | grep -q "via=fallback" && log "WARN $1: uncover came from the 600 ms fallback, not the ready signal"
 }
 zoom_scn() { # three opens (spec gate: 3 recorded opens + 3 backs with framestats); the third stays in the chat
   local n=$1 i
@@ -335,6 +358,7 @@ PYY
       adb shell input keyevent 4; sleep 1.5; check "$n-dots-back" || return; expect_text "E2E CHAT OPEN" 6 "$n-d2"
     else log "FAIL $n: no ••• node"; FAIL=1; fi
   fi
+  [ "$2" = ON ] && { plus_menu_scn "$n-plus" || return; }
   # composer: multiline + send
   dump "$n-k0"; set -- $(edit_xy "$OUT/$n-k0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return; }
   local fy=$3; adb shell input tap $1 $2; sleep 1.8; check "$n-focus" || return
@@ -346,6 +370,27 @@ PYY
   expect_text 'SENT=line1\nline2\nline3' 5 "$n-k3"
   adb shell input keyevent 4; sleep 1.2; dump "$n-kb"; if [ -n "$(find_node "$OUT/$n-kb.xml" "E2E CHAT OPEN")" ]; then adb shell input keyevent 4; sleep 1.5; fi; check "$n-chat-back" || return
   dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
+}
+plus_menu_scn() { # item 7: composer + -> GlassMenu (rows, blur count, framestats), back / outside close, an action
+  local n=$1 xy rows i
+  xy=$(wait_for "Add attachment" 5 "$n-0") || { log "FAIL $n: no + (Add attachment) in the composer"; FAIL=1; return 0; }
+  for i in 1 2 3; do
+    gfx_reset; adb shell input tap $xy; sleep 1.2; check "$n-open$i" || return 1
+    dump "$n-o$i"; [ $i = 1 ] && shot "$n-open"
+    rows="$(for r in "Use skill or app" Files Photos Camera; do printf '%s=%s ' "$r" "$(count "$OUT/$n-o$i.xml" "$r")"; done)"
+    log "  + menu open $i: kind=$(menu_open_kind "$n-o$i") rows: $rows"
+    gfx "$n-open$i"; blur_max "$n-open$i"
+    for r in "Use skill or app" Files Photos Camera; do [ "$(count "$OUT/$n-o$i.xml" "$r")" -ge 1 ] || { log "FAIL $n: + menu row '$r' missing"; FAIL=1; }; done
+    case $i in
+      1) gfx_reset; adb shell input keyevent 4; sleep 1; gfx "$n-close-back" ;;
+      2) gfx_reset; adb shell input tap 540 520; sleep 1; gfx "$n-close-outside" ;;
+      3) tapl "Use skill or app" 3 "$n-o3t" || FAIL=1; sleep 1.2; check "$n-skill" || return 1; expect_text "USE SKILL" 5 "$n-skill" ;;
+    esac
+    check "$n-close$i" || return 1
+    dump "$n-c$i"
+    if [ "$(count "$OUT/$n-c$i.xml" "Use skill or app")" = 0 ] && [ -n "$(find_node "$OUT/$n-c$i.xml" "E2E CHAT OPEN")" ]; then log "ok: + menu closed ($i)"; else log "FAIL $n: + menu not closed ($i)"; FAIL=1; close_menu_if_open "$n-left$i"; fi
+  done
+  return 0
 }
 press_drag() { # $1 name $2 "x y" : press, drag 0.33 D down-left while held (recorded), release; then 20 fast press-drag-cancels
   local n=$1 x y i; set -- $2; x=$1; y=$2

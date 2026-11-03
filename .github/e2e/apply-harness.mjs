@@ -110,5 +110,69 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
     console.log("whatsapp route applied");
   }
 }
+
+// Build 11 review: timing marks in the zoom overlay (tap = zoomOpen, opaque = surface fill done (p 0.55),
+// skel = skeleton half in (p 0.675), push, uncover (ready or fallback), clear = dissolve done). Wall-clock ms
+// relative to tap, shown on screen as "ZOOMT ..." by the blur-max text and logged as "E2EZOOM ...".
+{
+  const ov = "apps/mobile/src/shared/motion/ZoomOpenOverlay.tsx";
+  if (existsSync(ov) && readFileSync(ov, "utf8").includes("DISSOLVE_MS")) {
+    let f = readFileSync(ov, "utf8");
+    const rep = (a, b) => {
+      if (!f.includes(a)) throw new Error(`zoom timing anchor missing: ${a.slice(0, 60)}`);
+      f = f.replace(a, b);
+    };
+    rep("let nextKey = 1;", `let nextKey = 1;
+// E2E timing marks (review harness only).
+const __e2eZ: Record<string, number | string> = {};
+function __e2eMark(name: string, at: number) {
+  if (__e2eZ[name] === undefined) __e2eZ[name] = at;
+  if (name === "clear" && typeof __e2eZ.tap === "number") {
+    const r = (k: string) => (typeof __e2eZ[k] === "number" ? (__e2eZ[k] as number) - (__e2eZ.tap as number) : -1);
+    const text = \`ZOOMT tap=0 opaque=\${r("opaque")} skel=\${r("skel")} push=\${r("push")} uncover=\${r("uncover")} clear=\${r("clear")} via=\${__e2eZ.via ?? "?"}\`;
+    (globalThis as { __e2eZoomLast?: string }).__e2eZoomLast = text;
+    console.log(\`E2EZOOM \${text}\`);
+  }
+}`);
+    rep("useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });", `for (const k of Object.keys(__e2eZ)) delete __e2eZ[k];
+  __e2eZ.tap = Date.now();
+  useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });`);
+    rep("function clear() {", "function clear() {\n  if (__e2eZ.uncover !== undefined) __e2eMark(\"clear\", Date.now());");
+    rep("    uncovered.current = true;", "    uncovered.current = true;\n    __e2eMark(\"uncover\", Date.now());\n    if (__e2eZ.via === undefined) __e2eZ.via = \"ready\";");
+    rep("    done.current = true;", "    done.current = true;\n    __e2eMark(\"push\", Date.now());");
+    rep("shownTimer.current = setTimeout(uncover, SHOWN_SAFETY_MS);", "shownTimer.current = setTimeout(() => {\n      if (!uncovered.current) __e2eZ.via = \"fallback\";\n      uncover();\n    }, SHOWN_SAFETY_MS);");
+    rep("  const surfaceStyle = useAnimatedStyle(() => {", `  const __opq = useSharedValue(false);
+  const __skel = useSharedValue(false);
+  useAnimatedReaction(
+    () => p.value,
+    (value) => {
+      if (!__opq.value && value >= zoom.fillFade[1]) {
+        __opq.value = true;
+        runOnJS(__e2eMark)("opaque", Date.now());
+      }
+      if (!__skel.value && value >= 0.675) {
+        __skel.value = true;
+        runOnJS(__e2eMark)("skel", Date.now());
+      }
+    },
+  );
+  const surfaceStyle = useAnimatedStyle(() => {`);
+    writeFileSync(ov, f);
+    console.log("zoom timing marks applied");
+  }
+  // Item 7: the stand-in chat's composer gets real attachments (so the + shows) and a Use-skill action.
+  const chat = "apps/mobile/src/app/e2e-chat.tsx";
+  if (existsSync(chat) && readFileSync("apps/mobile/src/features/chat/components/chat-composer.tsx", "utf8").includes("onUseSkill?: () => void")) {
+    let f = readFileSync(chat, "utf8");
+    const a1 = 'const [draft, setDraft] = useState("");';
+    const a2 = "onCancelReply={() => undefined}";
+    if (!f.includes(a1) || !f.includes(a2)) throw new Error("plus-menu anchors missing in e2e-chat");
+    f = `import { useChatAttachments as __useChatAttachments } from "@/features/chat/components/use-chat-attachments";\n${f}`
+      .replace(a1, `${a1}\n  const __files = __useChatAttachments();`)
+      .replace(a2, `${a2}\n          attachments={__files}\n          onUseSkill={() => setLog("USE SKILL")}`);
+    writeFileSync(chat, f);
+    console.log("composer + menu applied");
+  }
+}
 writeFileSync(path, src);
 console.log("harness applied");
