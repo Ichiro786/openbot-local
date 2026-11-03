@@ -14,8 +14,8 @@ export const unstable_settings = { anchor: "index" };
 export default function AgentInfoLayout() {
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
-  // Build 10: the full-screen agent page (ColorOS) draws its own top bar, and its sub-pages' headers
-  // sit under the status bar, so they keep the native top inset a sheet removes.
+  // Build 10: the full-screen agent page (ColorOS) is under the status bar, so its headers keep the
+  // native top inset a sheet removes.
   const full = agentPageFullScreen(useRoute().key);
   return (
     <AgentPageFullContext value={full}>
@@ -35,7 +35,8 @@ export default function AgentInfoLayout() {
           contentStyle: { backgroundColor: background },
         })}
       >
-        <Stack.Screen name="index" options={{ title: t("mobile.agent.menu.info"), headerShown: !full }} />
+        {/* The full-screen agent page keeps an untitled bar: its hero names the agent. */}
+        <Stack.Screen name="index" options={{ title: full ? "" : t("mobile.agent.menu.info") }} />
         <Stack.Screen name="profile" options={{ title: t("mobile.agent.route.profile") }} />
         <Stack.Screen name="appearance" options={{ title: t("mobile.agent.route.appearance") }} />
         <Stack.Screen name="usage" options={{ title: t("mobile.agent.info.usage.title") }} />

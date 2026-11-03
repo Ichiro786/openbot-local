@@ -1,6 +1,5 @@
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
-import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Brain from "lucide-react-native/icons/brain";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import File from "lucide-react-native/icons/file";
@@ -9,11 +8,9 @@ import Pencil from "lucide-react-native/icons/pencil";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCSSVariable } from "uniwind";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { useBrowserFeature } from "@/features/browser/components/use-browser-feature";
-import { ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { haptics } from "@/shared/lib/haptics";
@@ -34,8 +31,9 @@ function openSubPage(agent: MobileAgent, page: keyof typeof SUB_PAGES) {
 }
 
 /**
- * Build 10 (ColorOS motion, Android): the top of the agent page, in the Manus Cue layout. A glass
- * Back, the agent's big avatar (Appearance), its name and title, Edit (the profile form, moved off
+ * Build 10 (ColorOS motion, Android): the top of the agent page, in the Manus Cue layout, under the
+ * stack's own header (an untitled bar with Back, so Back stays on screen while the page scrolls). The
+ * agent's big avatar (Appearance), its name and title, Edit (the profile form, moved off
  * the page so the page is not a form), the agent's live browser (it left the chat header for the
  * header's •••), and three tiles for what the agent knows. The groups below stay the agent info's.
  */
@@ -51,7 +49,6 @@ export function AgentPageHero({
   available: boolean;
 }) {
   const { t } = useText();
-  const insets = useSafeAreaInsets();
   const [foreground, muted, field] = useCSSVariable([
     "--openbot-text-primary",
     "--openbot-text-muted",
@@ -61,20 +58,7 @@ export function AgentPageHero({
   const browserView = useMobileWorkspaceSelector((current) => current.browserViewSupport(agent.serverId).view);
   const browserShown = useBrowserFeature() && browserView && available;
   return (
-    <View style={[styles.hero, { paddingTop: insets.top + 8 }]}>
-      <View style={styles.topBar}>
-        <ChatGlassIconButton
-          accessibilityLabel={t("common.back")}
-          fallbackBackground={String(field)}
-          liquidGlassAvailable={false}
-          onPress={() => {
-            void haptics.impact("soft");
-            router.back();
-          }}
-        >
-          <ArrowLeft color={iconColor} size={24} strokeWidth={2} />
-        </ChatGlassIconButton>
-      </View>
+    <View style={styles.hero}>
       <Pressable
         className="self-center"
         accessibilityRole="button"
@@ -163,8 +147,7 @@ function Tile({ label, icon, onPress }: { label: string; icon: ReactNode; onPres
 }
 
 const styles = StyleSheet.create({
-  hero: { gap: 20 },
-  topBar: { flexDirection: "row", marginBottom: -8 },
+  hero: { gap: 20, paddingTop: 8 },
   identity: { alignItems: "center", gap: 6 },
   name: { fontSize: 24, lineHeight: 30, textAlign: "center" },
   title: { fontSize: 14, lineHeight: 19, textAlign: "center" },

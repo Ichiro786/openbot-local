@@ -1,3 +1,5 @@
+import { routeMemo } from "./routeMemo";
+
 /**
  * Build 10: the route that a ColorOS zoom-open pushes gets no native push animation.
  *
@@ -13,10 +15,8 @@
 const ARM_MS = 1000;
 
 let armedUntil = 0;
-/** Route keys that the stack's options have seen, so an existing route is never taken. */
-const seen = new Set<string>();
-/** Routes pushed by a zoom that still have their animation turned off. */
-const zoomed = new Set<string>();
+/** For each route the stack has seen: true while it is a zoom push that still has its animation off. */
+const pushes = routeMemo<boolean>();
 
 /** Called by the zoom overlay right before it runs the navigation. */
 export function armZoomPush(): void {
@@ -25,31 +25,30 @@ export function armZoomPush(): void {
 
 /**
  * For the options of a chat-like route: "none" while this route is a zoom push, else `fallback`.
- * A route key seen for the first time while armed is the pushed one.
+ * A route key seen for the first time while armed is the pushed one; an existing route is never taken.
  */
 export function zoomPushAnimation<T extends string>(routeKey: string | undefined, fallback: T): T | "none" {
   if (routeKey === undefined) return fallback;
-  if (!seen.has(routeKey)) {
-    seen.add(routeKey);
-    if (Date.now() < armedUntil) {
-      armedUntil = 0;
-      zoomed.add(routeKey);
-    }
-  }
-  return zoomed.has(routeKey) ? "none" : fallback;
-}
-
-/** The route has closed: forget its key, so the set holds only routes that are on a stack. */
-export function forgetZoomRoute(routeKey: string): void {
-  seen.delete(routeKey);
-  zoomed.delete(routeKey);
+  const zoomed = pushes.get(routeKey, () => {
+    if (Date.now() >= armedUntil) return false;
+    armedUntil = 0;
+    return true;
+  });
+  return zoomed ? "none" : fallback;
 }
 
 export function isZoomPush(routeKey: string): boolean {
-  return zoomed.has(routeKey);
+  return pushes.peek(routeKey) === true;
 }
 
 /** The route has appeared: its pop takes the normal animation again. True when it was a zoom push. */
 export function releaseZoomPush(routeKey: string): boolean {
-  return zoomed.delete(routeKey);
+  if (pushes.peek(routeKey) !== true) return false;
+  pushes.set(routeKey, false);
+  return true;
+}
+
+/** The route has closed: forget its key, so the memo holds only routes that are on a stack. */
+export function forgetZoomRoute(routeKey: string): void {
+  pushes.forget(routeKey);
 }

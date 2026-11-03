@@ -200,9 +200,9 @@ type Entry = GlassMenuItem & { back?: boolean };
 type Row = { top: number; index: number };
 
 const BACK_ID = "glass-menu-back";
-/** Reaction bar: one 44 dp slot per emoji and for "+", in a 52 dp capsule. */
-const BAR_SLOT = 44;
-const BAR_HEIGHT = 52;
+/** Reaction bar: one 48 dp slot (M3 touch target) per emoji and for "+", in a 56 dp capsule. */
+const BAR_SLOT = 48;
+const BAR_HEIGHT = 56;
 const BAR_PAD = 4;
 const BAR_GAP = 8;
 const PICKER_COLUMNS = 6;

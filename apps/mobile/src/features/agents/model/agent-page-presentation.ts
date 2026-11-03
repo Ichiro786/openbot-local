@@ -1,5 +1,6 @@
 import { createContext } from "react";
 import { isAndroid } from "@/shared/lib/platform";
+import { routeMemo } from "@/shared/motion/routeMemo";
 import { colorOSMotionEnabled } from "@/shared/motion/useColorOSMotion";
 
 /**
@@ -8,21 +9,16 @@ import { colorOSMotionEnabled } from "@/shared/motion/useColorOSMotion";
  * route instance, when the stack first sees it, so turning ColorOS motion on or off never changes a
  * mounted screen. The root stack's options and the route's own layout read the same answer.
  */
-const choices = new Map<string, boolean>();
+const choices = routeMemo<boolean>();
+const decide = () => isAndroid && colorOSMotionEnabled();
 
 export function agentPageFullScreen(routeKey: string | undefined): boolean {
-  if (routeKey === undefined) return isAndroid && colorOSMotionEnabled();
-  let full = choices.get(routeKey);
-  if (full === undefined) {
-    full = isAndroid && colorOSMotionEnabled();
-    choices.set(routeKey, full);
-  }
-  return full;
+  return routeKey === undefined ? decide() : choices.get(routeKey, decide);
 }
 
 /** The route has closed; its answer is not needed again. */
 export function forgetAgentPage(routeKey: string | undefined): void {
-  if (routeKey !== undefined) choices.delete(routeKey);
+  if (routeKey !== undefined) choices.forget(routeKey);
 }
 
 /** Provided by the agent info route's layout: whether this route instance is the full-screen page. */

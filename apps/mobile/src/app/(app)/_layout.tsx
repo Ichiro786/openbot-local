@@ -116,6 +116,17 @@ function AuthenticatedStack() {
   const { t } = useText();
   const background = useThemeColor("background");
   const sheetBackground = String(useCSSVariable("--openbot-bg-sheet") ?? background);
+  // The chat, task and channel routes open alike.
+  const chatRouteOptions = ({ route }: { route: { key?: string } }) => ({
+    // Build 10: a ColorOS zoom-open push has no native slide of its own (zoomPush.ts).
+    animation: zoomPushAnimation(route.key, chatAnimation),
+    contentStyle: { backgroundColor: background },
+    // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
+    // reply: react-native-screens is patched so that the back swipe waits for it.
+    fullScreenGestureEnabled: true,
+    gestureEnabled: true,
+    ...nativeBarOptions,
+  });
   // iOS shows the native bar over a chat and the browser, so its bar items morph with the items of the
   // screen under it. The screen fills the bar with Back, the title and the buttons. Android draws them.
   const nativeBarOptions = {
@@ -242,33 +253,11 @@ function AuthenticatedStack() {
         })}
       >
         <Stack.Screen name="connected" options={{ animation: "fade", gestureEnabled: false, title: "" }} />
-        <Stack.Screen
-          name="chat/[agentId]"
-          options={({ route }) => ({
-            // Build 10: a ColorOS zoom-open push has no native slide of its own (zoomPush.ts).
-            animation: zoomPushAnimation(route.key, chatAnimation),
-            contentStyle: { backgroundColor: background },
-            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
-            // reply: react-native-screens is patched so that the back swipe waits for it.
-            fullScreenGestureEnabled: true,
-            gestureEnabled: true,
-            ...nativeBarOptions,
-          })}
-          listeners={zoomPushListeners}
-        />
+        <Stack.Screen name="chat/[agentId]" options={chatRouteOptions} listeners={zoomPushListeners} />
         <Stack.Screen
           name="task/[taskId]"
           // A task is a chat of its own, so it opens as the agent's chat does.
-          options={({ route }) => ({
-            // Build 10: a ColorOS zoom-open push has no native slide of its own (zoomPush.ts).
-            animation: zoomPushAnimation(route.key, chatAnimation),
-            contentStyle: { backgroundColor: background },
-            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
-            // reply: react-native-screens is patched so that the back swipe waits for it.
-            fullScreenGestureEnabled: true,
-            gestureEnabled: true,
-            ...nativeBarOptions,
-          })}
+          options={chatRouteOptions}
           listeners={zoomPushListeners}
         />
         <Stack.Screen
@@ -318,20 +307,7 @@ function AuthenticatedStack() {
             sheetGrabberVisible: true,
           }}
         />
-        <Stack.Screen
-          name="channel/[channelId]"
-          options={({ route }) => ({
-            // Build 10: a ColorOS zoom-open push has no native slide of its own (zoomPush.ts).
-            animation: zoomPushAnimation(route.key, chatAnimation),
-            contentStyle: { backgroundColor: background },
-            // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
-            // reply: react-native-screens is patched so that the back swipe waits for it.
-            fullScreenGestureEnabled: true,
-            gestureEnabled: true,
-            ...nativeBarOptions,
-          })}
-          listeners={zoomPushListeners}
-        />
+        <Stack.Screen name="channel/[channelId]" options={chatRouteOptions} listeners={zoomPushListeners} />
         <Stack.Screen
           name="channel-info/[channelId]"
           options={{
