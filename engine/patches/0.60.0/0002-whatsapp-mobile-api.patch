@@ -1,0 +1,367 @@
+diff --git a/packages/contracts/package.json b/packages/contracts/package.json
+index a3865f5..c59ce62 100644
+--- a/packages/contracts/package.json
++++ b/packages/contracts/package.json
+@@ -138,6 +138,7 @@
+     "./team-protocol/custom-provider-harness-v1": "./src/team-protocol/custom-provider-harness-v1.ts",
+     "./team-protocol/provider-default-v1": "./src/team-protocol/provider-default-v1.ts",
+     "./team-protocol/discord-access-v1": "./src/team-protocol/discord-access-v1.ts",
++    "./team-protocol/whatsapp-mobile-v1": "./src/team-protocol/whatsapp-mobile-v1.ts",
+     "./team-protocol/agent-import-v1": "./src/team-protocol/agent-import-v1.ts",
+     "./team-protocol/instance-transfer-v1": "./src/team-protocol/instance-transfer-v1.ts",
+     "./team-protocol/agent-install-v1": "./src/team-protocol/agent-install-v1.ts",
+diff --git a/packages/contracts/src/team-protocol/current.ts b/packages/contracts/src/team-protocol/current.ts
+index 3d5c505..d300513 100644
+--- a/packages/contracts/src/team-protocol/current.ts
++++ b/packages/contracts/src/team-protocol/current.ts
+@@ -121,6 +121,7 @@ import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
+ import { WORKFLOWS_GITHUB_CAPABILITY } from "./workflows-github-v1";
+ import { WORKFLOWS_CAPABILITY } from "./workflows-v1";
+ import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
++import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
+ 
+ export const TEAM_SEMANTIC_TAGS_CAPABILITY = "installed-skills";
+ export const TEAM_AGENT_ACTIVITY_CAPABILITY = "agent-activity";
+@@ -279,6 +280,7 @@ export {
+   WEBHOOK_TESTS_CAPABILITY,
+   WORKFLOWS_CAPABILITY,
+   WORKFLOWS_GITHUB_CAPABILITY,
++  WHATSAPP_MOBILE_CAPABILITY,
+   WORKSPACE_DIRECTORY_CAPABILITY,
+ };
+ 
+@@ -422,6 +424,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
+   COMPUTER_ACTIVITY_CAPABILITY,
+   MODEL_VISIBILITY_CAPABILITY,
+   AGENT_THREAD_REPLIES_CAPABILITY,
++  WHATSAPP_MOBILE_CAPABILITY,
+ ] as const;
+ 
+ export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
+@@ -579,7 +582,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
+     capability !== LOCAL_SERVERS_CAPABILITY &&
+     capability !== COMPUTER_ACTIVITY_CAPABILITY &&
+     capability !== MODEL_VISIBILITY_CAPABILITY &&
+-    capability !== AGENT_THREAD_REPLIES_CAPABILITY,
++    capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
++    capability !== WHATSAPP_MOBILE_CAPABILITY,
+ );
+ /**
+  * The capabilities that only a protocol 9 peer sends and gets. Protocols 7 and 8 read at most 128
+@@ -613,6 +617,7 @@ export const TEAM_PROTOCOL_V9_ONLY_CAPABILITIES: ReadonlySet<string> = new Set<T
+   COMPUTER_ACTIVITY_CAPABILITY,
+   MODEL_VISIBILITY_CAPABILITY,
+   AGENT_THREAD_REPLIES_CAPABILITY,
++  WHATSAPP_MOBILE_CAPABILITY,
+ ]);
+ // A v8 host reads at most 128 capabilities, so a client sends the protocol 9 ones only after it
+ // negotiates protocol 9.
+@@ -729,6 +734,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
+       capability !== LOCAL_SERVERS_CAPABILITY &&
+       capability !== COMPUTER_ACTIVITY_CAPABILITY &&
+       capability !== MODEL_VISIBILITY_CAPABILITY &&
+-      capability !== AGENT_THREAD_REPLIES_CAPABILITY,
++      capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
++      capability !== WHATSAPP_MOBILE_CAPABILITY,
+   );
+ }
+diff --git a/packages/contracts/src/team-protocol/optional-routes.ts b/packages/contracts/src/team-protocol/optional-routes.ts
+index 12aabe6..3559bd4 100644
+--- a/packages/contracts/src/team-protocol/optional-routes.ts
++++ b/packages/contracts/src/team-protocol/optional-routes.ts
+@@ -96,6 +96,7 @@ import { WORKFLOWS_CODECS } from "./workflows-v1";
+ import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
+ 
+ export type { OptionalRouteCodec } from "./admin-wire";
++import { WHATSAPP_MOBILE_CODECS } from "./whatsapp-mobile-v1";
+ 
+ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+   ...AGENT_ADMIN_CODECS,
+@@ -190,6 +191,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+   ...BROWSER_SECRET_VAULT_CODECS,
+   ...VAULT_IMPORT_CODECS,
+   ...VAULT_V2_CODECS,
++  ...WHATSAPP_MOBILE_CODECS,
+ ]);
+ 
+ export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {
+diff --git a/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts b/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts
+new file mode 100644
+index 0000000..4d031b6
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts
+@@ -0,0 +1,104 @@
++// OpenBot Local optional whatsapp-mobile-v1 wire contract (fork patch, not upstream).
++//
++// What it grants: an owner or admin of a server manages the WhatsApp numbers linked as devices of that
++// host from another device, the same operations the host's own Connectors > WhatsApp page runs. On
++// OpenBot Local the host is a headless engine on the user's phone, so the phone that links is the
++// same one that runs it and cannot scan its own QR code: `linkStart` with `method: "code"` answers an
++// 8-character pairing code to type in WhatsApp > Linked devices > Link with phone number. A QR link
++// answers the QR text instead, which changes about every 20 seconds. The client reads `linkState`
++// again (about every 2 seconds) while its link screen is open, as the host's own page does.
++// A member cannot use any route; `requireAdmin` on the host is the only gate. No route carries a key.
++import {
++  adminRoute,
++  boolean,
++  empty,
++  fields,
++  identifier,
++  list,
++  nullable,
++  type OptionalRouteCodec,
++  oneOf,
++  string,
++} from "./admin-wire";
++
++export const WHATSAPP_MOBILE_CAPABILITY = "whatsapp-mobile-v1";
++
++export const WHATSAPP_MOBILE_ROUTES = {
++  overview: "/v1/admin/connectors/whatsapp/overview",
++  linkStart: "/v1/admin/connectors/whatsapp/link/start",
++  linkState: "/v1/admin/connectors/whatsapp/link/state",
++  linkCancel: "/v1/admin/connectors/whatsapp/link/cancel",
++  disconnect: "/v1/admin/connectors/whatsapp/disconnect",
++  reconnect: "/v1/admin/connectors/whatsapp/reconnect",
++  enabled: "/v1/admin/connectors/whatsapp/enabled",
++  orchestrator: "/v1/admin/connectors/whatsapp/orchestrator",
++  groups: "/v1/admin/connectors/whatsapp/groups",
++  senderAdd: "/v1/admin/connectors/whatsapp/senders/add",
++  senderRemove: "/v1/admin/connectors/whatsapp/senders/remove",
++  requestAnswer: "/v1/admin/connectors/whatsapp/requests/answer",
++  ownNumber: "/v1/admin/connectors/whatsapp/own-number",
++} as const;
++
++const workspace = fields({ workspaceId: identifier });
++const sender = fields({ id: string(64), kind: oneOf("contact", "group"), name: string(256) });
++// `state` and `credentials` are text, so a later host state does not break an older client.
++const connection = fields({
++  workspaceId: identifier,
++  platform: string(32),
++  enabled: boolean,
++  state: string(64),
++  workspaceName: string(256),
++  botUserId: nullable(string(256)),
++  missingScopes: list(string(64), 32),
++  retryAt: nullable(string(64)),
++  credentials: string(64),
++  orchestratorAgentId: nullable(identifier),
++});
++const account = fields({
++  workspaceId: identifier,
++  ownNumber: boolean,
++  allowedSenders: list(sender, 200),
++  pendingRequests: list(fields({ code: string(16), senderId: string(64), name: string(256), expiresAt: string(64) }), 3),
++});
++const overview = fields({ connections: list(connection, 64), accounts: list(account, 64) });
++const linkState = fields({
++  status: string(32),
++  qr: nullable(string(1_024)),
++  code: nullable(string(16)),
++  workspaceId: nullable(identifier),
++  error: nullable(string(32)),
++});
++
++export const WHATSAPP_MOBILE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
++  [WHATSAPP_MOBILE_ROUTES.overview, adminRoute(empty, overview)],
++  [
++    WHATSAPP_MOBILE_ROUTES.linkStart,
++    adminRoute(
++      fields({ method: oneOf("qr", "code"), phoneNumber: nullable(string(32)), ownNumber: boolean }),
++      linkState,
++    ),
++  ],
++  [WHATSAPP_MOBILE_ROUTES.linkState, adminRoute(empty, linkState)],
++  [WHATSAPP_MOBILE_ROUTES.linkCancel, adminRoute(empty, empty)],
++  [WHATSAPP_MOBILE_ROUTES.disconnect, adminRoute(workspace, empty)],
++  [WHATSAPP_MOBILE_ROUTES.reconnect, adminRoute(workspace, empty)],
++  [WHATSAPP_MOBILE_ROUTES.enabled, adminRoute(fields({ workspaceId: identifier, enabled: boolean }), empty)],
++  [
++    WHATSAPP_MOBILE_ROUTES.orchestrator,
++    adminRoute(
++      fields({}, { provider: string(128), model: string(256), reasoningEffort: string(32) }),
++      fields({ agentId: identifier, sectionId: nullable(identifier) }),
++    ),
++  ],
++  [
++    WHATSAPP_MOBILE_ROUTES.groups,
++    adminRoute(workspace, fields({ groups: list(fields({ id: string(80), name: string(256) }), 500) })),
++  ],
++  [WHATSAPP_MOBILE_ROUTES.senderAdd, adminRoute(fields({ workspaceId: identifier, sender }), empty)],
++  [WHATSAPP_MOBILE_ROUTES.senderRemove, adminRoute(fields({ workspaceId: identifier, senderId: string(80) }), empty)],
++  [
++    WHATSAPP_MOBILE_ROUTES.requestAnswer,
++    adminRoute(fields({ workspaceId: identifier, code: string(16), approve: boolean }), empty),
++  ],
++  [WHATSAPP_MOBILE_ROUTES.ownNumber, adminRoute(fields({ workspaceId: identifier, ownNumber: boolean }), empty)],
++]);
+diff --git a/src/main/team-api-server.ts b/src/main/team-api-server.ts
+index e87f285..cadc156 100644
+--- a/src/main/team-api-server.ts
++++ b/src/main/team-api-server.ts
+@@ -68,6 +68,7 @@ import {
+   COMPUTER_ACTIVITY_CAPABILITY,
+   CONNECTORS_CAPABILITY,
+   DISCORD_ACCESS_CAPABILITY,
++  WHATSAPP_MOBILE_CAPABILITY,
+   EVENTS_CAPABILITY,
+   FOCUS_USE_CAPABILITY,
+   HOST_ADMIN_CAPABILITY,
+@@ -262,6 +263,7 @@ import { routeConversationFiles } from "./team-api/route-conversation-files";
+ import { routeCustomAgents } from "./team-api/route-custom-agents";
+ import { routeDirect } from "./team-api/route-direct";
+ import { routeDiscordAccess } from "./team-api/route-discord-access";
++import { routeWhatsApp } from "./team-api/route-whatsapp";
+ import { routeEvents } from "./team-api/route-events";
+ import { routeFiles } from "./team-api/route-files";
+ import { routeFocusUse } from "./team-api/route-focus-use";
+@@ -1006,6 +1008,7 @@ export class TeamApiServer {
+         return;
+       if ((await routeConnectors(context, this.#options.connectors)) === "handled") return;
+       if ((await routeDiscordAccess(context, this.#options.connectors)) === "handled") return;
++      if ((await routeWhatsApp(context, this.#options.connectors)) === "handled") return;
+       if ((await routeOnePasswordConnector(context, this.#options.onePasswordConnector)) === "handled") return;
+       if ((await routeBitwardenConnector(context, this.#options.bitwardenConnector)) === "handled") return;
+       if ((await routeVault(context, this.#options.vault)) === "handled") return;
+@@ -2156,6 +2159,7 @@ export class TeamApiServer {
+             );
+           if (capability === CONNECTORS_CAPABILITY) return this.#options.connectors !== undefined;
+           if (capability === DISCORD_ACCESS_CAPABILITY) return this.#options.connectors !== undefined;
++          if (capability === WHATSAPP_MOBILE_CAPABILITY) return this.#options.connectors !== undefined;
+           if (capability === ONEPASSWORD_CONNECTOR_CAPABILITY) return this.#options.onePasswordConnector !== undefined;
+           if (capability === BITWARDEN_CONNECTOR_CAPABILITY) return this.#options.bitwardenConnector !== undefined;
+           if (capability === VAULT_CAPABILITY) return this.#options.vault !== undefined;
+diff --git a/src/main/team-api/dependencies.ts b/src/main/team-api/dependencies.ts
+index 5c48d4a..ea53ed2 100644
+--- a/src/main/team-api/dependencies.ts
++++ b/src/main/team-api/dependencies.ts
+@@ -209,6 +209,18 @@ export interface TeamApiConnectors {
+     | "discordAccess"
+     | "listDiscordRoles"
+     | "setDiscordAccess"
++    // OpenBot Local: `whatsapp-mobile-v1`.
++    | "whatsappOverview"
++    | "whatsappLinkState"
++    | "startWhatsAppLink"
++    | "cancelWhatsAppLink"
++    | "disconnectWhatsAppNumber"
++    | "addWhatsAppOrchestrator"
++    | "listWhatsAppGroups"
++    | "addWhatsAppSender"
++    | "removeWhatsAppSender"
++    | "answerWhatsAppRequest"
++    | "setWhatsAppOwnNumber"
+   >;
+ }
+ 
+diff --git a/src/main/team-api/route-whatsapp.ts b/src/main/team-api/route-whatsapp.ts
+new file mode 100644
+index 0000000..8f3fc07
+--- /dev/null
++++ b/src/main/team-api/route-whatsapp.ts
+@@ -0,0 +1,105 @@
++import {
++  WHATSAPP_MOBILE_CAPABILITY,
++  WHATSAPP_MOBILE_ROUTES,
++} from "@openbot/contracts/team-protocol/whatsapp-mobile-v1";
++import { sourceText } from "@openbot/i18n/source";
++import { runCauseEffect } from "../../backend/effect-boundary";
++import {
++  parseAddTelegramOrchestratorInput,
++  parseAnswerWhatsAppRequestInput,
++  parseMessagingWorkspaceInput,
++  parseRemoveWhatsAppSenderInput,
++  parseSetMessagingEnabledInput,
++  parseSetWhatsAppOwnNumberInput,
++  parseStartWhatsAppLinkInput,
++  parseWhatsAppSenderInput,
++} from "../ipc/messaging-inputs";
++import type { TeamApiConnectors } from "./dependencies";
++import { HttpError } from "./http-error";
++import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
++import { readJson, requireAdmin } from "./request-helpers";
++
++const ROUTES: ReadonlySet<string> = new Set(Object.values(WHATSAPP_MOBILE_ROUTES));
++
++/** The host's own IPC parsers check each body, so a route accepts exactly what the host's page sends. */
++function parsed<T>(parse: (value: unknown) => T, value: unknown): T {
++  try {
++    return parse(value);
++  } catch {
++    throw new HttpError(400, "A WhatsApp request is invalid.");
++  }
++}
++
++/**
++ * OpenBot Local: the WhatsApp numbers linked to this host, managed from another device of an owner or
++ * admin (`whatsapp-mobile-v1`). Each route runs the same `MessagingService` operation as the host's
++ * own WhatsApp page. `requireAdmin` runs on every route.
++ */
++export async function routeWhatsApp(
++  context: TeamApiRequestContext,
++  connectors: TeamApiConnectors | undefined,
++): Promise<RouteOutcome> {
++  const { method, url, capabilities, member, request, json } = context;
++  if (method !== "POST" || !ROUTES.has(url.pathname)) return "unmatched";
++  if (!connectors || !capabilities.has(WHATSAPP_MOBILE_CAPABILITY))
++    throw new HttpError(400, sourceText("error.team.connectorsUnsupported"));
++  requireAdmin(member);
++  // `readJson` has already run the body through the `whatsapp-mobile-v1` codec.
++  const body = await readJson(request);
++  const { messaging } = connectors;
++  switch (url.pathname) {
++    case WHATSAPP_MOBILE_ROUTES.overview:
++      return json(200, messaging.whatsappOverview());
++    case WHATSAPP_MOBILE_ROUTES.linkStart:
++      return json(200, await runCauseEffect(messaging.startWhatsAppLink(parsed(parseStartWhatsAppLinkInput, body))));
++    case WHATSAPP_MOBILE_ROUTES.linkState:
++      return json(200, messaging.whatsappLinkState());
++    case WHATSAPP_MOBILE_ROUTES.linkCancel:
++      await runCauseEffect(messaging.cancelWhatsAppLink());
++      return json(200, {});
++    case WHATSAPP_MOBILE_ROUTES.disconnect:
++      await runCauseEffect(messaging.disconnectWhatsAppNumber(parsed(parseMessagingWorkspaceInput, body).workspaceId));
++      return json(200, {});
++    case WHATSAPP_MOBILE_ROUTES.reconnect:
++      await runCauseEffect(
++        messaging.reconnect("whatsapp", parsed(parseMessagingWorkspaceInput, body).workspaceId, false),
++      );
++      return json(200, {});
++    case WHATSAPP_MOBILE_ROUTES.enabled: {
++      const { workspaceId, enabled } = parsed(parseSetMessagingEnabledInput, body);
++      await runCauseEffect(messaging.setEnabled("whatsapp", workspaceId, enabled));
++      return json(200, {});
++    }
++    case WHATSAPP_MOBILE_ROUTES.orchestrator:
++      // Absent, the provider and model are a new agent's default, as the host picks it.
++      return json(
++        200,
++        await runCauseEffect(messaging.addWhatsAppOrchestrator(parsed(parseAddTelegramOrchestratorInput, body))),
++      );
++    case WHATSAPP_MOBILE_ROUTES.groups:
++      return json(
++        200,
++        await runCauseEffect(messaging.listWhatsAppGroups(parsed(parseMessagingWorkspaceInput, body).workspaceId)),
++      );
++    case WHATSAPP_MOBILE_ROUTES.senderAdd: {
++      const { workspaceId, sender } = parsed(parseWhatsAppSenderInput, body);
++      await runCauseEffect(messaging.addWhatsAppSender(workspaceId, sender));
++      return json(200, {});
++    }
++    case WHATSAPP_MOBILE_ROUTES.senderRemove: {
++      const { workspaceId, senderId } = parsed(parseRemoveWhatsAppSenderInput, body);
++      await runCauseEffect(messaging.removeWhatsAppSender(workspaceId, senderId));
++      return json(200, {});
++    }
++    case WHATSAPP_MOBILE_ROUTES.requestAnswer: {
++      const { workspaceId, code, approve } = parsed(parseAnswerWhatsAppRequestInput, body);
++      await runCauseEffect(messaging.answerWhatsAppRequest(workspaceId, code, approve));
++      return json(200, {});
++    }
++    default: {
++      const { workspaceId, ownNumber } = parsed(parseSetWhatsAppOwnNumberInput, body);
++      await runCauseEffect(messaging.setWhatsAppOwnNumber(workspaceId, ownNumber));
++      return json(200, {});
++    }
++  }
++}
