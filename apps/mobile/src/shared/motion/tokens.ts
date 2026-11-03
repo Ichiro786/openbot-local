@@ -141,7 +141,6 @@ export const composerFrost = {
   /** expo-blur intensity, as the home pill (24). */
   intensity: 24,
   fadeInMs: 180,
-  fadeOutMs: 140,
 } as const;
 
 /** 5. Zoom open (spec §4). */

@@ -34,12 +34,13 @@ export function ComposerFrost({
   const [ready, setReady] = useState(false);
   const visible = useSharedValue(0);
   const on = ready && shown && ANDROID_BLUR;
-  // Paused = not blurring at once (build 9 rule 8, without waiting for the fade): the blur is hidden
-  // and set to `none` in the same commit, while the glass fill and rim fade out over the solid fill.
-  // So a menu that takes this frost's place never runs alongside it, even during the fade.
+  // Paused = not blurring at once (build 9 rule 8): the blur is hidden and set to `none` in the same
+  // commit and the glass goes with it (the solid fill takes its place), so a menu that takes this
+  // frost's place never runs alongside it and no unblurred glass fill is ever seen.
   const live = useBlurLive(on);
   useEffect(() => {
-    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : composerFrost.fadeOutMs }));
+    // Paused: the glass goes at once with its blur (fading the fill alone would show unblurred text).
+    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : 0 }));
   }, [on, visible]);
   const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
   const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));

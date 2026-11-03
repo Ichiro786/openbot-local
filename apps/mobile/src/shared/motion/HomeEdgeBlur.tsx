@@ -73,7 +73,8 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
           height,
           opacity: shown ? 1 : 0,
           transitionProperty: "opacity",
-          transitionDuration: edges.homeFadeMs,
+          // Under a menu the zone goes at once with its blur (no scrim fading over unblurred rows).
+          transitionDuration: menuOpen ? 0 : edges.homeFadeMs,
         },
       ]}
     >
