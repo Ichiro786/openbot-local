@@ -124,6 +124,18 @@ for n in re.findall(r'<node [^>]*>',xml):
 PY
 }
 hold() { [ $# -ge 2 ] || { log "  hold: no target"; FAIL=1; return 1; }; adb shell input swipe $1 $2 $1 $2 900; }
+tapl_last() { # $1 label $2 dumpname: taps the LAST node whose content-desc equals the label
+  dump "$2"; local xy; xy=$(python3 - "$OUT/$2.xml" "$1" <<'PYY'
+import re,sys,html
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();last=""
+for n in re.findall(r'<node [^>]*>',xml):
+    d=re.search(r' content-desc="([^"]*)"',n)
+    if d and html.unescape(d.group(1))==sys.argv[2]:
+        x1,y1,x2,y2=map(int,re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n).groups()); last=f"{(x1+x2)//2} {(y1+y2)//2}"
+print(last)
+PYY
+); [ -n "$xy" ] || { log "  missing: $1"; return 1; }; adb shell input tap $xy
+}
 tapl() { # $1 label $2 timeout $3 dumpname -> taps, returns 1 if missing
   local xy; xy=$(wait_for "$1" "$2" "$3") || { log "  missing: $1"; return 1; }
   adb shell input tap $xy; return 0
@@ -158,7 +170,7 @@ row_scn() { # agent-row long-press menu: every item, the sub-menus, back row, ba
   done
   # sub-menu: Move to folder -> Folder Beta
   rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; check "$n-hold-sub" || return
-  tapl "Move to folder" 3 "$n-s1" || FAIL=1; sleep 0.8; check "$n-sub-open" || return
+  tapl "Move to folder" 3 "$n-s1" || FAIL=1; sleep 1.8; check "$n-sub-open" || return
   dump "$n-s2"; shot "$n-submenu"
   tapl "Folder Beta" 3 "$n-s3" || FAIL=1; sleep 1.5; check "$n-sub-chose" || return
   expect_text "LAST=folder-b" 5 "$n-last-folder"
@@ -211,7 +223,7 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c7"; sleep 0.8; adb shell input keyevent 4; sleep 0.8; dump "$n-c8"
     [ -n "$(find_node "$OUT/$n-c8.xml" "React with 👍")" ] && log "ok: back key left the emoji grid" || log "note: grid back state unclear"
     adb shell input keyevent 4; sleep 1; check "$n-grid-back" || return
-    close_menu_if_open "$n-pre-copy"; hold $xy; sleep 1.2; tapl "Copy message" 3 "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
+    close_menu_if_open "$n-pre-copy"; hold $xy; sleep 1.2; tapl_last "Copy message" "$n-c9" || FAIL=1; sleep 1.5; check "$n-copy" || return
     expect_text "COPY a1" 5 "$n-c10"
     hold $xy; sleep 1.2; tapl "Select text" 3 "$n-c9s" || FAIL=1; sleep 1.5; check "$n-select" || return
     expect_text "SELECT a1" 5 "$n-c10s"
@@ -267,7 +279,7 @@ PYY
   log "  field before ${fy}, with keyboard: $(edit_xy "$OUT/$n-k1.xml")  ime: $(head -2 "$OUT/$n-ime.txt" | tr '\n' ' ')"
   tapl "Send message" 3 "$n-k2" || { log "FAIL $n: no send button"; FAIL=1; }; sleep 1.5; check "$n-send" || return
   expect_text 'SENT=line1\nline2\nline3' 5 "$n-k3"
-  adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1.5; check "$n-chat-back" || return
+  adb shell input keyevent 4; sleep 1.2; dump "$n-kb"; if [ -n "$(find_node "$OUT/$n-kb.xml" "E2E CHAT OPEN")" ]; then adb shell input keyevent 4; sleep 1.5; fi; check "$n-chat-back" || return
   dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
 }
 toggle_to() { # $1 name $2 expected
