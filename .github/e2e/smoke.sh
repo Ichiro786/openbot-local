@@ -94,6 +94,18 @@ close_menu_if_open() { # $1 name
 }
 
 # ---------------- build 10 smoke (v3) ----------------
+blurs() { # $1 name: mounted blur views in the window (upper bound of running blurs; info only)
+  adb shell dumpsys activity top > "$OUT/$1-viewtree.txt" 2>/dev/null
+  log "  blur views mounted ($1): $(grep -ciE 'BlurView|BlurTarget' "$OUT/$1-viewtree.txt") [$(grep -oiE '[A-Za-z.]*Blur[A-Za-z]*' "$OUT/$1-viewtree.txt" | sort | uniq -c | tr -s ' ' | tr '\n' ';')]"
+}
+selected_of() { python3 - "$1" "$2" <<'PYY'
+import re,sys
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
+for n in re.findall(r'<node [^>]*>',xml):
+    d=re.search(r' content-desc="([^"]*)"',n)
+    if d and d.group(1)==sys.argv[2]: print(re.search(r' selected="([a-z]*)"',n).group(1)); break
+PYY
+}
 count() { python3 - "$1" "$2" <<'PY'
 import re,sys
 xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();l=sys.argv[2];c=0
@@ -127,7 +139,7 @@ menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> b
   local n=$1 xy
   xy=$(wait_for "Chat options" 20 "$n-0") || { log "FAIL $n: no ••• "; FAIL=1; return; }
   adb shell input tap $xy; sleep 1.2; check "$n-open" || return
-  dump "$n-1"; log "  ••• menu kind: $(menu_open_kind "$n-1")"; shot "$n-1-dots"
+  dump "$n-1"; log "  ••• menu kind: $(menu_open_kind "$n-1")"; shot "$n-1-dots"; blurs "$n-homemenu"
   xy=$(menu_row "Add agent" "$n-1") || { log "FAIL $n: ••• menu did not open"; FAIL=1; return; }
   if [ "$2" = ON ] && [ "$(cat "$OUT/.how" 2>/dev/null)" = geometry ]; then log "FAIL $n: glass rows not in the a11y tree (card not laid out?)"; FAIL=1; fi
   adb shell input tap $xy; sleep 2.5; check "$n-add-agent" || return
@@ -185,9 +197,17 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     log "  quick: $(for e in 👍 👎 ❤️ 😂 🎉; do printf '%s=%s ' $e $(count "$OUT/$n-c1.xml" "React with $e"); done) plus=$(count "$OUT/$n-c1.xml" "More emoji")"
     tapl "React with 👍" 3 "$n-c2" || FAIL=1; sleep 1.5; check "$n-quick-react" || return
     expect_text "REACTED a1 👍 valid=true" 5 "$n-c3"
+    # saved: the row shows the reader's reaction; picking it again in the bar removes it (reviewer-3)
+    expect_text "Remove your reaction 👍" 5 "$n-c3r"
+    hold $xy; sleep 1.2; dump "$n-c3s"; blurs "$n-msgmenu"; log "  bar 👍 selected=$(selected_of "$OUT/$n-c3s.xml" "React with 👍")"
+    tapl "React with 👍" 3 "$n-c3t" || FAIL=1; sleep 1.5; check "$n-quick-unreact" || return
+    expect_text "REACTED a1 null valid=true" 5 "$n-c3u"
+    [ "$(count "$OUT/$n-c3u.xml" "Remove your reaction 👍")" = 0 ] && log "ok: reaction removed from the row" || { log "FAIL $n: 👍 still on the row after removal"; FAIL=1; }
     hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c4" || FAIL=1; sleep 1; check "$n-plus" || return
     shot "$n-picker"; tapl "React with 🚀" 3 "$n-c5" || FAIL=1; sleep 1.5; check "$n-grid-react" || return
     expect_text "REACTED a1 🚀 valid=true" 5 "$n-c6"
+    tapl "Remove your reaction 🚀" 5 "$n-c6r" || FAIL=1; sleep 1.2; check "$n-row-unreact" || return
+    expect_text "REACTED a1 null valid=true" 5 "$n-c6u"
     hold $xy; sleep 1.2; tapl "More emoji" 3 "$n-c7"; sleep 0.8; adb shell input keyevent 4; sleep 0.8; dump "$n-c8"
     [ -n "$(find_node "$OUT/$n-c8.xml" "React with 👍")" ] && log "ok: back key left the emoji grid" || log "note: grid back state unclear"
     adb shell input keyevent 4; sleep 1; check "$n-grid-back" || return
@@ -218,6 +238,25 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
     expect_text "E2E CHAT OPEN" 6 "$n-a3"
     tapl "E2E Open agent page" 3 "$n-a4"; sleep 1.5; adb shell input keyevent 4; sleep 1.5; check "$n-agent-backkey" || return
     expect_text "E2E CHAT OPEN" 6 "$n-a5"
+    local cap; for cap in "Edit appearance" "Edit" "Open browser" "Memories" "Skills" "Files"; do
+      [ "$(count "$OUT/$n-a1.xml" "$cap")" -ge 1 ] || { log "FAIL $n: agent page hero lacks '$cap'"; FAIL=1; }
+    done
+  fi
+  if [ "$2" = ON ]; then # the real ••• pill (last 'Info for E2E Agent' node) pushes /agent-info/[id]
+    local dx; dx=$(python3 - "$OUT/$n-h0.xml" <<'PYY'
+import re,sys
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();last=""
+for n in re.findall(r'<node [^>]*>',xml):
+    if 'content-desc="Info for E2E Agent"' in n:
+        x1,y1,x2,y2=map(int,re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n).groups()); last=f"{(x1+x2)//2} {(y1+y2)//2}"
+print(last)
+PYY
+)
+    if [ -n "$dx" ]; then adb shell input tap $dx; sleep 2; check "$n-dots-agentpage" || return; dump "$n-d1"; shot "$n-dots-agentpage"
+      log "  ••• → page: chat still on top=$(count "$OUT/$n-d1.xml" "E2E agent message: hold me to react.") NavUp=$(count "$OUT/$n-d1.xml" "Navigate up") Memories=$(count "$OUT/$n-d1.xml" Memories)"
+      [ "$(count "$OUT/$n-d1.xml" "E2E agent message: hold me to react.")" = 0 ] && log "ok: ••• pushed a page" || { log "FAIL $n: ••• did not open the agent page"; FAIL=1; }
+      adb shell input keyevent 4; sleep 1.5; check "$n-dots-back" || return; expect_text "E2E CHAT OPEN" 6 "$n-d2"
+    else log "FAIL $n: no ••• node"; FAIL=1; fi
   fi
   # composer: multiline + send
   dump "$n-k0"; set -- $(edit_xy "$OUT/$n-k0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return; }
