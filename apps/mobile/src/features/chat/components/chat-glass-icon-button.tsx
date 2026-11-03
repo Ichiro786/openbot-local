@@ -2,6 +2,7 @@ import { type GlassColorScheme, GlassView } from "expo-glass-effect";
 import type { PropsWithChildren } from "react";
 import { type AccessibilityValue, Pressable, type ViewStyle } from "react-native";
 import Animated, { type CSSTransitionProperties, cubicBezier } from "react-native-reanimated";
+import { StretchShell } from "@/shared/motion/PressableStretch";
 
 const FADE: CSSTransitionProperties = {
   transitionProperty: "opacity",
@@ -44,60 +45,63 @@ export function ChatGlassButton({
   width,
 }: ChatGlassButtonProps) {
   return (
-    <GlassView
-      glassEffectStyle={{
-        style: liquidGlassAvailable && !hidden ? "regular" : "none",
-        animate: true,
-        animationDuration: 0.2,
-      }}
-      colorScheme={colorScheme}
-      isInteractive={liquidGlassAvailable && !disabled && !hidden}
-      pointerEvents={hidden ? "none" : "auto"}
-      style={{
-        backgroundColor: "transparent",
-        borderCurve: "continuous",
-        borderRadius: height / 2,
-        height,
-        overflow: "hidden",
-        opacity: disabled ? 0.45 : 1,
-        width,
-      }}
-    >
-      {liquidGlassAvailable ? null : (
-        // The solid stand-in for glass, a layer of its own so it can fade with the icon.
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundColor: fallbackBackground,
-            opacity: hidden ? 0 : 1,
-            ...FADE,
-          }}
-        />
-      )}
-      <Pressable
-        accessibilityLabel={accessibilityLabel}
-        accessibilityValue={accessibilityValue}
-        accessibilityElementsHidden={hidden}
-        importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        className={className}
-        hitSlop={4}
-        style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}
-        onPress={onPress}
+    // ColorOS motion: the floating capsule swells and follows the finger; its Pressable keeps the tap.
+    <StretchShell>
+      <GlassView
+        glassEffectStyle={{
+          style: liquidGlassAvailable && !hidden ? "regular" : "none",
+          animate: true,
+          animationDuration: 0.2,
+        }}
+        colorScheme={colorScheme}
+        isInteractive={liquidGlassAvailable && !disabled && !hidden}
+        pointerEvents={hidden ? "none" : "auto"}
+        style={{
+          backgroundColor: "transparent",
+          borderCurve: "continuous",
+          borderRadius: height / 2,
+          height,
+          overflow: "hidden",
+          opacity: disabled ? 0.45 : 1,
+          width,
+        }}
       >
-        {/* Only a caller that hides the button gets the fading wrapper, so a row of icon and label
-            laid out by `className` stays a direct child of the pressable everywhere else. */}
-        {hidden === undefined ? (
-          children
-        ) : (
-          <Animated.View style={{ opacity: hidden ? 0 : 1, ...FADE }}>{children}</Animated.View>
+        {liquidGlassAvailable ? null : (
+          // The solid stand-in for glass, a layer of its own so it can fade with the icon.
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: fallbackBackground,
+              opacity: hidden ? 0 : 1,
+              ...FADE,
+            }}
+          />
         )}
-      </Pressable>
-    </GlassView>
+        <Pressable
+          accessibilityLabel={accessibilityLabel}
+          accessibilityValue={accessibilityValue}
+          accessibilityElementsHidden={hidden}
+          importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}
+          accessibilityRole="button"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          className={className}
+          hitSlop={4}
+          style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}
+          onPress={onPress}
+        >
+          {/* Only a caller that hides the button gets the fading wrapper, so a row of icon and label
+            laid out by `className` stays a direct child of the pressable everywhere else. */}
+          {hidden === undefined ? (
+            children
+          ) : (
+            <Animated.View style={{ opacity: hidden ? 0 : 1, ...FADE }}>{children}</Animated.View>
+          )}
+        </Pressable>
+      </GlassView>
+    </StretchShell>
   );
 }
 

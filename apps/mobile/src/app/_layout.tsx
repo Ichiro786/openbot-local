@@ -13,7 +13,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 import { useCSSVariable, useUniwind, withUniwind } from "uniwind";
-
 import { MobileAnalyticsLifecycle } from "@/features/analytics/lifecycle";
 import { AppLockOverlay } from "@/features/app-lock/components/app-lock-overlay";
 import { installAppLock } from "@/features/app-lock/model/app-lock";
@@ -49,6 +48,8 @@ import { queryClient } from "@/shared/lib/query-client";
 import { useText } from "@/shared/lib/text";
 import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
+import { ColorOSMotionRoot } from "@/shared/motion/ColorOSMotionRoot";
+import { ZoomOpenHost } from "@/shared/motion/ZoomOpenOverlay";
 
 import { installLocalEngine } from "../../modules/openbot-engine";
 
@@ -149,44 +150,46 @@ function RootNavigator() {
         >
           {!loading && preferencesReady ? (
             <View className="flex-1" onLayout={session || pathname !== "/" ? reportContentReady : undefined}>
-              <Stack
-                screenOptions={{
-                  headerBackButtonDisplayMode: "minimal",
-                  ...headerFontOptions,
-                  headerShadowVisible: false,
-                  headerTransparent: isIOS,
-                }}
-              >
-                {/* A blocked route redirects. Without `redirectTo`, Expo Router uses the first open route, the
+              <ColorOSMotionRoot overlay={<ZoomOpenHost />}>
+                <Stack
+                  screenOptions={{
+                    headerBackButtonDisplayMode: "minimal",
+                    ...headerFontOptions,
+                    headerShadowVisible: false,
+                    headerTransparent: isIOS,
+                  }}
+                >
+                  {/* A blocked route redirects. Without `redirectTo`, Expo Router uses the first open route, the
                     `(app)` group, whose URL is `/`, and `/` is the blocked sign-in screen. */}
-                <Stack.Protected guard={!session} redirectTo="/connected">
-                  {/* Signing out goes back, so it fades like signing in instead of sliding forward. */}
-                  <Stack.Screen
-                    name="index"
-                    options={{ animation: "fade", animationDuration: SESSION_FADE_MS, headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="scan-qr-code"
-                    options={{
-                      animation: reducedMotion ? "fade" : "slide_from_right",
-                      title: t("mobile.app.route.scanQrCode"),
-                    }}
-                  />
-                </Stack.Protected>
-                <Stack.Protected guard={Boolean(session)} redirectTo="/">
-                  <Stack.Screen
-                    name="(app)"
-                    options={{
-                      animation: "fade",
-                      animationDuration: SESSION_FADE_MS,
-                      gestureEnabled: false,
-                      headerShown: false,
-                    }}
-                  />
-                </Stack.Protected>
-                <Stack.Screen name="incoming-link" options={{ headerShown: false }} />
-                <Stack.Screen name="incoming-share" options={{ headerShown: false }} />
-              </Stack>
+                  <Stack.Protected guard={!session} redirectTo="/connected">
+                    {/* Signing out goes back, so it fades like signing in instead of sliding forward. */}
+                    <Stack.Screen
+                      name="index"
+                      options={{ animation: "fade", animationDuration: SESSION_FADE_MS, headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="scan-qr-code"
+                      options={{
+                        animation: reducedMotion ? "fade" : "slide_from_right",
+                        title: t("mobile.app.route.scanQrCode"),
+                      }}
+                    />
+                  </Stack.Protected>
+                  <Stack.Protected guard={Boolean(session)} redirectTo="/">
+                    <Stack.Screen
+                      name="(app)"
+                      options={{
+                        animation: "fade",
+                        animationDuration: SESSION_FADE_MS,
+                        gestureEnabled: false,
+                        headerShown: false,
+                      }}
+                    />
+                  </Stack.Protected>
+                  <Stack.Screen name="incoming-link" options={{ headerShown: false }} />
+                  <Stack.Screen name="incoming-share" options={{ headerShown: false }} />
+                </Stack>
+              </ColorOSMotionRoot>
             </View>
           ) : null}
         </View>

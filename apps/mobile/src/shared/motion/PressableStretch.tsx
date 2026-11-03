@@ -19,6 +19,8 @@ type Props = {
   radius?: number;
   onPress?: () => void;
   accessibilityLabel?: string;
+  disabled?: boolean;
+  hitSlop?: number;
 };
 
 const soft = (d: number) => {
@@ -31,7 +33,15 @@ const soft = (d: number) => {
  * Header/floating button: swells on touch, follows the finger with a capped soft offset,
  * stretches slightly along the drag axis, springs back on release. Transforms only.
  */
-export function PressableStretch({ children, style, radius = 0, onPress, accessibilityLabel }: Props) {
+export function PressableStretch({
+  children,
+  style,
+  radius = 0,
+  onPress,
+  accessibilityLabel,
+  disabled = false,
+  hitSlop,
+}: Props) {
   const { enabled, reduceMotion } = useColorOSMotion();
   const scale = useSharedValue(1);
   const tx = useSharedValue(0);
@@ -40,7 +50,9 @@ export function PressableStretch({ children, style, radius = 0, onPress, accessi
   const animate = enabled && !reduceMotion;
 
   const gesture = Gesture.Pan()
+    .enabled(!disabled)
     .minDistance(0)
+    .hitSlop(hitSlop ?? 0)
     .onBegin(() => {
       if (enabled) {
         light.value = withTiming(press.highlightOpacity, { duration: press.highlightInMs });
@@ -81,6 +93,8 @@ export function PressableStretch({ children, style, radius = 0, onPress, accessi
         accessible
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled }}
+        onAccessibilityTap={disabled ? undefined : onPress}
         style={[style, body]}
       >
         {children}
@@ -91,6 +105,65 @@ export function PressableStretch({ children, style, radius = 0, onPress, accessi
           />
         ) : null}
       </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/**
+ * The stretch of PressableStretch for a control that keeps its own pressable (a glass capsule): a
+ * manual gesture that never activates, so the inner Pressable still gets the tap, drives the swell,
+ * the soft follow and the axis stretch from the raw touches.
+ */
+export function StretchShell({ children, style }: { children?: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { enabled, reduceMotion } = useColorOSMotion();
+  const animate = enabled && !reduceMotion;
+  const scale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const origin = useSharedValue({ x: 0, y: 0 });
+
+  const gesture = Gesture.Manual()
+    .enabled(animate)
+    .onTouchesDown((e) => {
+      const touch = e.allTouches[0];
+      if (!touch) return;
+      origin.value = { x: touch.absoluteX, y: touch.absoluteY };
+      scale.value = withSpring(stretch.swell, stretch.returnSpring);
+    })
+    .onTouchesMove((e) => {
+      const touch = e.allTouches[0];
+      if (!touch) return;
+      tx.value = soft(touch.absoluteX - origin.value.x);
+      ty.value = soft(touch.absoluteY - origin.value.y);
+    })
+    .onTouchesUp(() => {
+      scale.value = withSpring(1, stretch.returnSpring);
+      tx.value = withSpring(0, stretch.returnSpring);
+      ty.value = withSpring(0, stretch.returnSpring);
+    })
+    .onTouchesCancelled(() => {
+      scale.value = withSpring(1, stretch.returnSpring);
+      tx.value = withSpring(0, stretch.returnSpring);
+      ty.value = withSpring(0, stretch.returnSpring);
+    });
+
+  const body = useAnimatedStyle(() => {
+    const sx = 1 + Math.min(stretch.maxAlong, (Math.abs(tx.value) / stretch.maxOffset) * stretch.maxAlong);
+    const sy = 1 + Math.min(stretch.maxAlong, (Math.abs(ty.value) / stretch.maxOffset) * stretch.maxAlong);
+    return {
+      transform: [
+        { translateX: tx.value },
+        { translateY: ty.value },
+        { scaleX: scale.value * sx },
+        { scaleY: scale.value * sy },
+      ],
+    };
+  });
+
+  if (!enabled) return <>{children}</>;
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.View style={[style, body]}>{children}</Animated.View>
     </GestureDetector>
   );
 }

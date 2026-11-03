@@ -20,12 +20,14 @@ import Animated, {
   ZoomOut,
 } from "react-native-reanimated";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
+import { useMotionPreferences } from "@/features/settings/model/motion";
 import { toggleReadAloud, useReadingAloud } from "@/features/voice/model/message-reading";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
 import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { useText } from "@/shared/lib/text";
+import { press as colorOSPress } from "@/shared/motion/tokens";
 import { useCopyMessage } from "./use-copy-message";
 import { useHistoryShown } from "./use-history-shown";
 
@@ -52,6 +54,8 @@ const PICKER_IN = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
 const PICKER_OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
 const ICON_SIZE = 18;
 const PRESSED = { transform: [{ scale: 0.94 }] };
+/** ColorOS motion: the 0.96 press of the spec, still static (no animated values per button). */
+const COLOROS_PRESSED = { transform: [{ scale: colorOSPress.scale }] };
 
 /**
  * A button of the row under a message, with the size and look of a small ghost HeroUI `Button`. It
@@ -59,6 +63,10 @@ const PRESSED = { transform: [{ scale: 0.94 }] };
  * animated pressable with about nine shared values and four animated styles, which made the chat
  * lag while it scrolled. The press shows at once, without an animation.
  */
+function pressInTick() {
+  void haptics.impact("light");
+}
+
 function ActionButton({
   accessibilityLabel,
   accessibilityState,
@@ -78,6 +86,8 @@ function ActionButton({
   // An icon draws only once the chat shows its history. The button keeps its size without it, so
   // the row does not move, and a chat that opens does not wait for the icons of every row.
   const historyShown = useHistoryShown();
+  // One store read per button; the press stays a plain style swap plus a light tick on press-in.
+  const colorOS = useMotionPreferences((s) => s.colorOSMotion);
   return (
     <Pressable
       accessibilityRole="button"
@@ -85,7 +95,8 @@ function ActionButton({
       accessibilityState={accessibilityState}
       onPress={onPress}
       className={`h-10 items-center justify-center rounded-full active:bg-default-hover/30 ${label ? "px-2" : "w-10"} ${selected ? "bg-default" : ""}`}
-      style={({ pressed }) => (pressed ? PRESSED : undefined)}
+      onPressIn={colorOS ? pressInTick : undefined}
+      style={({ pressed }) => (pressed ? (colorOS ? COLOROS_PRESSED : PRESSED) : undefined)}
     >
       {historyShown || label ? children : null}
     </Pressable>

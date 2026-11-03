@@ -59,6 +59,8 @@ import { BackHandler, Pressable, StyleSheet, useWindowDimensions, View, type Vie
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCSSVariable } from "uniwind";
+import { GlassMenu, type GlassMenuAnchor, type GlassMenuItem } from "@/shared/motion/GlassMenu";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export type { MenuAction, MenuComponentRef } from "@expo/ui/community/menu";
 
@@ -304,6 +306,10 @@ function OpenedMenu({
   const [room, setRoom] = useState<{ placement: "top" | "bottom"; height: number } | null>(null);
   // A second call in the same tick must see the new state before React applies it.
   const openRef = useRef(false);
+  // ColorOS motion draws a flat menu (no sub-menu, up to 10 rows) as the frosted GlassMenu.
+  const { enabled: colorOS } = useColorOSMotion();
+  const glassItems = colorOS ? toGlassItems(actions, colors) : null;
+  const [glassAnchor, setGlassAnchor] = useState<GlassMenuAnchor | null>(null);
 
   const onOpenChange = useCallback(
     (next: boolean) => {
@@ -322,23 +328,28 @@ function OpenedMenu({
       trigger.current?.open();
       return;
     }
-    view.measureInWindow((_x, y, _width, buttonHeight) => {
+    view.measureInWindow((x, y, width, buttonHeight) => {
+      if (glassItems) {
+        setGlassAnchor({ x, y, width, height: buttonHeight });
+        onOpenChange(true);
+        return;
+      }
       const above = y - safeArea.top - 12;
       const below = height - y - buttonHeight - safeArea.bottom - 12;
       setRoom(above > below ? { placement: "top", height: above } : { placement: "bottom", height: below });
       trigger.current?.open();
     });
-  }, [anchor, height, safeArea.top, safeArea.bottom]);
+  }, [anchor, height, safeArea.top, safeArea.bottom, glassItems, onOpenChange]);
   useImperativeHandle(ref, () => ({ show: open }), [open]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || glassItems) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       onOpenChange(false);
       return true;
     });
     return () => subscription.remove();
-  }, [isOpen, onOpenChange]);
+  }, [isOpen, onOpenChange, glassItems]);
 
   const items = groups(actions).map((group, index) => (
     <Fragment key={group.map(actionId).join("|")}>
@@ -356,37 +367,79 @@ function OpenedMenu({
   const scrolls = !visible(actions).some((action) => action.subactions?.length && !action.displayInline);
 
   return (
-    <Menu isOpen={isOpen} onOpenChange={onOpenChange} pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {/* The trigger covers the anchor and only measures it. The anchor opens the menu on a tap or a long press. */}
-      <Menu.Trigger
-        ref={trigger}
-        isDisabled
-        accessible={false}
-        aria-disabled={false}
+    <>
+      {glassItems ? (
+        <GlassMenu
+          visible={isOpen}
+          anchor={glassAnchor}
+          title={title || undefined}
+          items={glassItems}
+          onSelect={(id) => onPressAction?.({ nativeEvent: { event: id } })}
+          onClose={() => onOpenChange(false)}
+        />
+      ) : null}
+      <Menu
+        isOpen={glassItems ? false : isOpen}
+        onOpenChange={onOpenChange}
+        pointerEvents="none"
         style={StyleSheet.absoluteFill}
-        onLayout={() => {
-          if (takePendingOpen()) open();
-        }}
-      />
-      <Menu.Portal>
-        <Menu.Overlay />
-        <Menu.Content
-          presentation="popover"
-          placement={room?.placement ?? "bottom"}
-          align="start"
-          // A fixed width. With a content width, Android sizes the menu with each title on one line and
-          // then wraps a long title, so the menu is shorter than its items and the last item goes out.
-          className="w-52"
-          style={scrolls ? { maxHeight: room?.height ?? height - safeArea.top - safeArea.bottom - 24 } : undefined}
-        >
-          {title ? (
-            <Menu.Label className="mb-1" numberOfLines={3} style={{ color: colors.muted }}>
-              {title}
-            </Menu.Label>
-          ) : null}
-          {scrolls ? <ScrollView>{items}</ScrollView> : items}
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu>
+      >
+        {/* The trigger covers the anchor and only measures it. The anchor opens the menu on a tap or a long press. */}
+        <Menu.Trigger
+          ref={trigger}
+          isDisabled
+          accessible={false}
+          aria-disabled={false}
+          style={StyleSheet.absoluteFill}
+          onLayout={() => {
+            if (takePendingOpen()) open();
+          }}
+        />
+        <Menu.Portal>
+          <Menu.Overlay />
+          <Menu.Content
+            presentation="popover"
+            placement={room?.placement ?? "bottom"}
+            align="start"
+            // A fixed width. With a content width, Android sizes the menu with each title on one line and
+            // then wraps a long title, so the menu is shorter than its items and the last item goes out.
+            className="w-52"
+            style={scrolls ? { maxHeight: room?.height ?? height - safeArea.top - safeArea.bottom - 24 } : undefined}
+          >
+            {title ? (
+              <Menu.Label className="mb-1" numberOfLines={3} style={{ color: colors.muted }}>
+                {title}
+              </Menu.Label>
+            ) : null}
+            {scrolls ? <ScrollView>{items}</ScrollView> : items}
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    </>
   );
+}
+
+/** The flat GlassMenu rows of a menu, or null when it needs the HeroUI menu (a sub-menu, or a long list). */
+function toGlassItems(actions: MenuAction[], colors: MenuColors): GlassMenuItem[] | null {
+  const list = groups(actions);
+  const items: GlassMenuItem[] = [];
+  for (const [groupIndex, group] of list.entries()) {
+    for (const [index, action] of group.entries()) {
+      if (action.subactions?.length) return null;
+      const destructive = Boolean(action.attributes?.destructive);
+      const Icon = typeof action.image === "string" ? ICONS[action.image] : undefined;
+      const color = action.imageColor ? String(action.imageColor) : destructive ? colors.danger : colors.text;
+      const fill = typeof action.image === "string" && action.image.endsWith(".fill") ? color : "none";
+      items.push({
+        id: actionId(action),
+        title: action.title,
+        icon: Icon ? <Icon size={18} strokeWidth={2} color={color} fill={fill} /> : undefined,
+        destructive,
+        disabled: action.attributes?.disabled,
+        selected: action.state === "on",
+        separatorBefore: groupIndex > 0 && index === 0,
+      });
+    }
+  }
+  return items.length > 0 && items.length <= 10 ? items : null;
 }

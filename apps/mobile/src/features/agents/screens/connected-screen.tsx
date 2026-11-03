@@ -97,6 +97,7 @@ import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
 import { useStableMap } from "@/shared/lib/use-stable-map";
+import { ProgressiveEdgeBlur } from "@/shared/motion/ProgressiveEdgeBlur";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const ONBOARDING_EXIT = FadeOut.duration(220).easing(EASE_OUT);
@@ -862,6 +863,15 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
           ) : null}
         </HomeSearchList>
       </SearchBlurTarget>
+
+      {/* ColorOS motion: the progressive edge under the search field (the bar keeps its own top blur). */}
+      {onboarding.active || !searchShows ? null : (
+        <ProgressiveEdgeBlur
+          edge="bottom"
+          height={insets.bottom + HOME_SEARCH_HEIGHT + 24}
+          blurTarget={searchBlurTarget}
+        />
+      )}
 
       {/* The list scrolls under the transparent header, which gets the blur of the chat header. iOS 27
           shows no native scroll edge effect here. The native top edge is hidden to avoid two effects. */}

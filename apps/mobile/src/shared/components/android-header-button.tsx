@@ -11,6 +11,8 @@ import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { PressableStretch } from "@/shared/motion/PressableStretch";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /** The 40 dp round state layer of a Material icon button. */
 const ICON_RIPPLE = { borderless: true, radius: 20 } as const;
@@ -44,6 +46,7 @@ export function AndroidHeaderButton({
 } & ({ icon: LucideIcon; text?: undefined } | { icon?: undefined; text: string })) {
   const foreground = String(useThemeColor("foreground"));
   const glass = useChromeGlass();
+  const { enabled: colorOS } = useColorOSMotion();
   const press = useRef(onPress);
   useLayoutEffect(() => {
     press.current = onPress;
@@ -51,31 +54,53 @@ export function AndroidHeaderButton({
   const options = useMemo(() => {
     const button = hidden
       ? undefined
-      : () => (
-          <AnimatedPressable
-            accessibilityRole="button"
-            accessibilityLabel={accessibilityLabel}
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            // A Material tonal icon button: a 40 dp filled circle in a 48 dp target, or a text button.
-            android_ripple={text ? TEXT_RIPPLE : ICON_RIPPLE}
-            className={`${text ? "h-10 overflow-hidden px-3" : "size-12"} items-center justify-center rounded-full`}
-            style={{ opacity: disabled ? 0.38 : 1 }}
-            onPress={() => press.current()}
-          >
-            {Icon ? (
-              <GlassCircle glass={hasGlass ? glass : undefined}>
+      : colorOS && Icon && hasGlass
+        ? () => (
+            // ColorOS motion: the glass circle swells, follows the finger and springs back.
+            <PressableStretch
+              accessibilityLabel={accessibilityLabel}
+              disabled={disabled}
+              radius={20}
+              hitSlop={4}
+              style={{
+                width: 48,
+                height: 48,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: disabled ? 0.38 : 1,
+              }}
+              onPress={() => press.current()}
+            >
+              <GlassCircle glass={glass}>
                 <Icon color={foreground} size={22} strokeWidth={2} />
               </GlassCircle>
-            ) : (
-              <Typography.Paragraph weight="medium" style={{ color: foreground }}>
-                {text}
-              </Typography.Paragraph>
-            )}
-          </AnimatedPressable>
-        );
+            </PressableStretch>
+          )
+        : () => (
+            <AnimatedPressable
+              accessibilityRole="button"
+              accessibilityLabel={accessibilityLabel}
+              accessibilityState={{ disabled }}
+              disabled={disabled}
+              // A Material tonal icon button: a 40 dp filled circle in a 48 dp target, or a text button.
+              android_ripple={text ? TEXT_RIPPLE : ICON_RIPPLE}
+              className={`${text ? "h-10 overflow-hidden px-3" : "size-12"} items-center justify-center rounded-full`}
+              style={{ opacity: disabled ? 0.38 : 1 }}
+              onPress={() => press.current()}
+            >
+              {Icon ? (
+                <GlassCircle glass={hasGlass ? glass : undefined}>
+                  <Icon color={foreground} size={22} strokeWidth={2} />
+                </GlassCircle>
+              ) : (
+                <Typography.Paragraph weight="medium" style={{ color: foreground }}>
+                  {text}
+                </Typography.Paragraph>
+              )}
+            </AnimatedPressable>
+          );
     return placement === "left" ? { headerLeft: button } : { headerRight: button };
-  }, [Icon, accessibilityLabel, disabled, foreground, glass, hasGlass, hidden, placement, text]);
+  }, [Icon, accessibilityLabel, colorOS, disabled, foreground, glass, hasGlass, hidden, placement, text]);
   return <Stack.Screen options={options} />;
 }
 
@@ -84,6 +109,25 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
   const { t } = useText();
   const foreground = useThemeColor("foreground");
   const glass = useChromeGlass();
+  const { enabled: colorOS } = useColorOSMotion();
+  if (colorOS && hasGlass) {
+    return (
+      <PressableStretch
+        accessibilityLabel={t("common.back")}
+        radius={20}
+        hitSlop={4}
+        style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}
+        onPress={() => {
+          void haptics.impact("soft");
+          onPress();
+        }}
+      >
+        <GlassCircle glass={glass}>
+          <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
+        </GlassCircle>
+      </PressableStretch>
+    );
+  }
   return (
     <AnimatedPressable
       accessibilityRole="button"
