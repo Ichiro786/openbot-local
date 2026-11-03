@@ -2,9 +2,11 @@
 // so an emulator without an OpenBot account can drive the real MenuView / GlassMenu code from a
 // native-stack headerRight, exactly as home does, and push a formSheet like Add agent.
 import { router, Stack } from "expo-router";
+import { useContext, useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useMotionPreferences } from "@/features/settings/model/motion";
 import { MenuView } from "@/shared/components/menu-view";
+import { SplashContentReadyContext } from "@/shared/lib/use-splash-gate";
 
 const ACTIONS = [
   {
@@ -21,6 +23,11 @@ const ACTIONS = [
 
 export default function E2EHarness() {
   const colorOS = useMotionPreferences((s) => s.colorOSMotion);
+  // The sign-in screen this replaces reports readiness, which lifts the launch loader over the app.
+  const reportContentReady = useContext(SplashContentReadyContext);
+  useEffect(() => {
+    reportContentReady();
+  }, [reportContentReady]);
   return (
     <View style={{ flex: 1, backgroundColor: "#1d2b3a", paddingTop: 120 }}>
       <Stack.Screen
