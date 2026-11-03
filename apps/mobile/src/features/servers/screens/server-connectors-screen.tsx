@@ -16,6 +16,7 @@ import {
   workspaceOrchestrator,
 } from "@/features/servers/model/connectors";
 import { useServerConnectors } from "@/features/servers/model/use-server-connectors";
+import { useWhatsApp } from "@/features/servers/model/use-whatsapp";
 import {
   SettingsContent,
   SettingsNote,
@@ -77,7 +78,9 @@ export function ServerConnectorsScreen() {
     onePassword,
     bitwarden,
   } = useServerConnectors(serverId, "all");
-  if (!server || !(connectors || onePasswordAvailable || bitwardenAvailable))
+  // OpenBot Local (build 11): WhatsApp on an engine that serves `whatsapp-mobile-v1`.
+  const whatsapp = useWhatsApp(serverId);
+  if (!server || !(connectors || onePasswordAvailable || bitwardenAvailable || whatsapp.available))
     return (
       <SettingsContent>
         <SettingsNote>{t(server ? "mobile.server.connectors.unavailable" : "mobile.server.unavailable")}</SettingsNote>
@@ -212,9 +215,28 @@ export function ServerConnectorsScreen() {
       <Typography.Paragraph>{t(CONNECTOR_TITLE_KEYS[entry.id])}</Typography.Paragraph>
     </SettingsRow>
   );
+  const whatsappCount = whatsapp.overview.data?.connections.length ?? 0;
+  const whatsappRow = whatsapp.available ? (
+    <SettingsRow
+      key="whatsapp"
+      leading={<ConnectorLogo id="whatsapp" />}
+      supportingText={
+        whatsappCount > 0
+          ? whatsapp.overview.data?.connections.map((item) => `+${item.workspaceId}`).join(", ")
+          : t("mobile.server.connectors.whatsapp.summary")
+      }
+      trailing={
+        whatsappCount > 0 ? <TrailingValue value={t("mobile.server.connectors.whatsapp.state.connected")} /> : undefined
+      }
+      onPress={() => router.push({ pathname: "/server-settings/whatsapp", params: { serverId } })}
+    >
+      <Typography.Paragraph>{t("mobile.server.connectors.whatsapp.title")}</Typography.Paragraph>
+    </SettingsRow>
+  ) : null;
   return (
     <SettingsContent>
       {loading ? <SettingsNote>{t("mobile.server.connectors.loading")}</SettingsNote> : null}
+      {whatsappRow ? <SettingsSection>{whatsappRow}</SettingsSection> : null}
       {active.length > 0 ? (
         <SettingsSection title={t("mobile.server.connectors.onServer", { name: server.name })}>
           {active.map(item)}

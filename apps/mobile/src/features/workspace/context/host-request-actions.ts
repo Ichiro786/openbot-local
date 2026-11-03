@@ -126,6 +126,7 @@ import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { VAULT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-import-v1";
 import { VAULT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v1";
 import { VAULT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v2";
+import { WHATSAPP_MOBILE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-mobile-v1";
 import { WORKFLOWS_GITHUB_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-github-v1";
 import { WORKFLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-v1";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
@@ -394,6 +395,7 @@ type HostRequestActions = Pick<
   | "loadAgentBrowserProfile"
   | "updateAgentBrowserProfile"
   | "loadMessagingConnections"
+  | "whatsappRequest"
   | "connectMessaging"
   | "completeMessagingInstall"
   | "reconnectMessaging"
@@ -684,6 +686,13 @@ export function createHostRequestActions({
       runTeamRequest(getHostAgentBrowserProfile(browserProfilesAdmin(serverId), agentId)),
     updateAgentBrowserProfile: async (input, serverId) =>
       runTeamRequest(updateHostAgentBrowserProfile(browserProfilesAdmin(serverId), input)),
+    whatsappRequest: async (serverId, route, body) =>
+      capabilityApi(serverId, WHATSAPP_MOBILE_CAPABILITY, "mobile.server.connectors.unsupported")(
+        "POST",
+        route,
+        (value: unknown) => value,
+        body,
+      ),
     loadMessagingConnections: async (platform, serverId) =>
       runTeamRequest(messagingConnectorOverview(connectorsAdmin(serverId), { platform })),
     connectMessaging: async (input, serverId) =>

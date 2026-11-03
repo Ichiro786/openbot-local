@@ -4,6 +4,7 @@ import { type ReactNode, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ConnectorLogo } from "@/features/servers/components/connector-logo";
 import { SettingsNote, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { Button } from "@/shared/components/button";
@@ -48,6 +49,7 @@ export function MarketplaceScreen() {
   const [focused, setFocused] = useState(false);
   const catalog = useMarketplaceCatalog({ query, filter });
   const installed = useMarketplaceInstalled(serverId);
+  const whatsappAvailable = useMobileWorkspaceSelector((workspace) => workspace.canManageWhatsApp(serverId));
   const title = t("mobile.app.route.marketplace");
   const listing = (item: MarketplaceListing) => {
     // The name goes along, so the sheet has its title before the listing loads.
@@ -99,6 +101,11 @@ export function MarketplaceScreen() {
         installed={installed}
         onOpen={listing}
         onShowAll={showAll}
+        onWhatsApp={
+          whatsappAvailable
+            ? () => router.push({ pathname: "/server-settings/whatsapp", params: { serverId } })
+            : undefined
+        }
       />
     );
 
@@ -165,6 +172,29 @@ function SectionHeader({ title, onShowAll }: { title: string; onShowAll?: () => 
 }
 
 /** A listing's installs. Apps have no install count. */
+/** OpenBot Local: the WhatsApp tile of the apps grid; it opens Server settings › Connectors › WhatsApp. */
+function WhatsAppTile({ onPress }: { onPress: () => void }) {
+  const { t } = useText();
+  const name = t("mobile.server.connectors.whatsapp.title");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      className="w-1/4 items-center gap-1.5 py-2"
+      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+      onPress={() => {
+        void haptics.impact("soft");
+        onPress();
+      }}
+    >
+      <ConnectorLogo id="whatsapp" size={54} />
+      <Typography.Paragraph numberOfLines={1} align="center" style={typeScale.small}>
+        {name}
+      </Typography.Paragraph>
+    </Pressable>
+  );
+}
+
 function installsOf(listing: MarketplaceListing): number {
   return listing.kind === "app" ? 0 : listing.installs;
 }
@@ -175,9 +205,12 @@ function Overview({
   installed,
   onOpen,
   onShowAll,
+  onWhatsApp,
 }: {
   listings: MarketplaceListing[];
   pending: boolean;
+  /** OpenBot Local (build 11): WhatsApp, on an engine that serves `whatsapp-mobile-v1`. */
+  onWhatsApp?: () => void;
   installed: MarketplaceInstalled;
   onOpen: (listing: MarketplaceListing) => void;
   onShowAll: (kind: MarketplaceKind) => void;
@@ -222,7 +255,8 @@ function Overview({
       <View className="gap-1">
         <SectionHeader title={t("mobile.marketplace.overview.apps")} onShowAll={() => onShowAll("app")} />
         <View className="flex-row flex-wrap px-2">
-          {apps.slice(0, OVERVIEW_APPS).map((item) => (
+          {onWhatsApp ? <WhatsAppTile onPress={onWhatsApp} /> : null}
+          {apps.slice(0, onWhatsApp ? OVERVIEW_APPS - 1 : OVERVIEW_APPS).map((item) => (
             <AppTile key={item.id} listing={item} installed={installed.installed(item)} onPress={() => onOpen(item)} />
           ))}
         </View>

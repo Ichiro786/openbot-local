@@ -11,7 +11,7 @@ export function ConnectorHeader({
   attention = false,
   description,
 }: {
-  id: MobileConnectorId;
+  id: MobileConnectorId | "whatsapp";
   status: string | null;
   attention?: boolean;
   description: string;
@@ -21,7 +21,7 @@ export function ConnectorHeader({
     <View className="items-center gap-2 px-4">
       <ConnectorLogo id={id} size={64} />
       <Typography.Heading type="h4" align="center" className="mt-1">
-        {t(CONNECTOR_TITLE_KEYS[id])}
+        {t(id === "whatsapp" ? "mobile.server.connectors.whatsapp.title" : CONNECTOR_TITLE_KEYS[id])}
       </Typography.Heading>
       {status ? (
         <Typography.Paragraph

@@ -159,6 +159,7 @@ import type {
   WebhookSecret,
 } from "@openbot/contracts/ipc-events";
 import type { QueueEditRequest } from "@openbot/contracts/team-protocol/queue-edit-v1";
+import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { RemoteConnectionFailure, RemoteRecoveryStatus, RemoteTeamDirectoryClient } from "@openbot/team-client";
 import type { PlanLimits } from "@openbot/team-client/plan-limits";
 import type { RemoteFileUpload } from "@openbot/team-client/remote-peer";
@@ -447,6 +448,8 @@ export interface MobileWorkspaceContextValue {
    * GitHub connections. The host checks the role again.
    */
   canManageConnectors: (serverId: string) => boolean;
+  /** OpenBot Local: an owner or admin of a host that serves `whatsapp-mobile-v1` (engine 0.60.0-2+). */
+  canManageWhatsApp: (serverId: string) => boolean;
   /** The same for the host's 1Password connection (`onepassword-connector-v1`). */
   canManageOnePasswordConnector: (serverId: string) => boolean;
   /** The same for the host's Bitwarden connection (`bitwarden-connector-v1`). */
@@ -527,6 +530,8 @@ export interface MobileWorkspaceContextValue {
   /** The host closes the open tabs of the agent. */
   updateAgentBrowserProfile: (input: UpdateAgentBrowserProfileInput, serverId: string) => Promise<AgentBrowserProfile>;
   loadMessagingConnections: (platform: ConnectorMessagingPlatform, serverId: string) => Promise<MessagingOverview>;
+  /** OpenBot Local (`whatsapp-mobile-v1`): one WhatsApp admin route of the host; the answer is checked by the caller. */
+  whatsappRequest: (serverId: string, route: string, body: TeamProtocolV2Json) => Promise<unknown>;
   /** The platform's page that the phone opens. The host opens no page. */
   connectMessaging: (input: HostMessagingConnectInput, serverId: string) => Promise<MessagingConnectorPage>;
   /** Sends the sealed grant of a Slack or Discord install to the host that started it. */
@@ -1011,6 +1016,7 @@ type MobileWorkspaceStateKey =
   | "canReadServerAudit"
   | "hasAgentAccessLimits"
   | "canManageConnectors"
+  | "canManageWhatsApp"
   | "canManageOnePasswordConnector"
   | "canManageBitwardenConnector"
   | "canManageVault"

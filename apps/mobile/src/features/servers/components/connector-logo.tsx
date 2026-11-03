@@ -4,6 +4,7 @@ import {
   ONEPASSWORD_MARK_PATH,
   SLACK_MARK_PATH,
   TELEGRAM_MARK_PATH,
+  WHATSAPP_MARK_PATH,
 } from "@openbot/brand/connector-mark-shape";
 import { useThemeColor } from "heroui-native/hooks";
 import Lock from "lucide-react-native/icons/lock";
@@ -11,16 +12,18 @@ import { View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import type { MobileConnectorId } from "@/features/servers/model/connectors";
 
-const MARK_PATHS: Record<Exclude<MobileConnectorId, "bitwarden">, string> = {
+const MARK_PATHS: Record<Exclude<MobileConnectorId | "whatsapp", "bitwarden">, string> = {
   slack: SLACK_MARK_PATH,
   discord: DISCORD_MARK_PATH,
   telegram: TELEGRAM_MARK_PATH,
   github: GITHUB_MARK_PATH,
   onepassword: ONEPASSWORD_MARK_PATH,
+  // OpenBot Local (build 11): WhatsApp on mobile.
+  whatsapp: WHATSAPP_MARK_PATH,
 };
 
 /** The connector's mark on a tile, as desktop Server settings › Connectors shows it. */
-export function ConnectorLogo({ id, size = 32 }: { id: MobileConnectorId; size?: number }) {
+export function ConnectorLogo({ id, size = 32 }: { id: MobileConnectorId | "whatsapp"; size?: number }) {
   const foreground = useThemeColor("foreground");
   const mark = Math.round(size * 0.55);
   return (

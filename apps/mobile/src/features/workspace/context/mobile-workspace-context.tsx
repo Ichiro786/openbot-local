@@ -63,6 +63,7 @@ import { decodeTeamProtocolSupportV9 } from "@openbot/contracts/team-protocol/v9
 import { VAULT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-import-v1";
 import { VAULT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v1";
 import { VAULT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v2";
+import { WHATSAPP_MOBILE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-mobile-v1";
 import { sourceText } from "@openbot/i18n/source";
 import {
   createRemoteAccountRefresh,
@@ -2182,6 +2183,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         );
       },
       canManageConnectors: (serverId) => administers(serverId, CONNECTORS_CAPABILITY),
+      canManageWhatsApp: (serverId) => administers(serverId, WHATSAPP_MOBILE_CAPABILITY),
       canManageOnePasswordConnector: (serverId) => administers(serverId, ONEPASSWORD_CONNECTOR_CAPABILITY),
       canManageBitwardenConnector: (serverId) => administers(serverId, BITWARDEN_CONNECTOR_CAPABILITY),
       canManageVault: (serverId) => administers(serverId, VAULT_CAPABILITY),

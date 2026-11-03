@@ -47,6 +47,7 @@ export default function ServerSettingsLayout() {
       <Stack.Screen name="connectors" options={{ title: t("mobile.server.route.connectors") }} />
       {/* The page names its connector. */}
       <Stack.Screen name="connector" options={{ title: t("mobile.server.route.connectors") }} />
+      <Stack.Screen name="whatsapp" options={{ title: t("mobile.server.connectors.whatsapp.title") }} />
       <Stack.Screen
         name="github-repositories"
         options={{ title: t("mobile.server.connectors.github.repositoriesTitle") }}
