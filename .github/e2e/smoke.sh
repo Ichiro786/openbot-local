@@ -119,8 +119,8 @@ tapl() { # $1 label $2 timeout $3 dumpname -> taps, returns 1 if missing
 expect_text() { # $1 substring $2 timeout $3 name
   if wait_for "$1" "$2" "$3" >/dev/null; then log "ok: $1"; else log "FAIL: expected '$1'"; shot "$3"; FAIL=1; fi
 }
-home() { # back to the harness home
-  local i; for i in 1 2 3; do dump hm; [ -n "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && [ "$(menu_open_kind hm)" = none ] && return 0; adb shell input keyevent 4; sleep 1.2; done
+home() { # back to the harness home (relaunches the app if a back key left it)
+  local i; for i in 1 2 3; do dump hm; if [ -z "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && ! adb shell dumpsys window | grep -q "mCurrentFocus.*$PKG"; then log "  app not in front: relaunch (pid=$(adb shell pidof $PKG | tr -d '\r'))"; adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 6; continue; fi; [ -n "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && [ "$(menu_open_kind hm)" = none ] && return 0; adb shell input keyevent 4; sleep 1.2; done
 }
 
 menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> back
@@ -130,7 +130,7 @@ menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> b
   dump "$n-1"; log "  ••• menu kind: $(menu_open_kind "$n-1")"; shot "$n-1-dots"
   xy=$(menu_row "Add agent" "$n-1") || { log "FAIL $n: ••• menu did not open"; FAIL=1; return; }
   adb shell input tap $xy; sleep 2.5; check "$n-add-agent" || return
-  expect_text "E2E SHEET OPEN" 8 "$n-2-sheet"; adb shell input keyevent 4; sleep 1.5; check "$n-sheet-back" || return
+  if wait_for "E2E SHEET OPEN" 8 "$n-2-sheet" >/dev/null; then log "ok: E2E SHEET OPEN"; adb shell input keyevent 4; sleep 1.5; check "$n-sheet-back" || return; else log "FAIL $n: Add agent did not open the sheet (LAST=$(grep -o 'LAST=[a-z-]*' "$OUT/$n-2-sheet.xml" | head -1))"; shot "$n-2-nosheet"; FAIL=1; fi
   home
 }
 row_scn() { # agent-row long-press menu: every item, the sub-menus, back row, back key, outside tap
