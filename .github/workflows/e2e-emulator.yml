@@ -1,0 +1,187 @@
+name: E2E emulator smoke (review)
+
+# Reviewer-owned smoke test for OpenBot Local build 9. Lives only on branch build9-review-ci.
+# It builds an x86_64 release APK of the commit named in .github/e2e/target-ref (the APK that ships is
+# arm64-v8a; the JS and the Java/Kotlin are the same) with a signed-out E2E harness route that drives
+# the real MenuView / GlassMenu from a native-stack headerRight and pushes a formSheet (like Add agent),
+# then runs it on a KVM x86_64 emulator: ColorOS ON, live toggle OFF, back ON; logcat crash check.
+# .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
+on:
+  push:
+    branches: [build9-review-ci]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: e2e-emulator
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      target: ${{ steps.p.outputs.target }}
+      reuse: ${{ steps.p.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: p
+        run: |
+          echo "target=$(tr -d '[:space:]' < .github/e2e/target-ref)" >> "$GITHUB_OUTPUT"
+          echo "reuse=$( [ -f .github/e2e/apk-run-id ] && tr -d '[:space:]' < .github/e2e/apk-run-id || true)" >> "$GITHUB_OUTPUT"
+          cat .github/e2e/target-ref
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.reuse == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_APP_ENV: production
+      NODE_ENV: production
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+    steps:
+      - name: Check out target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.target }}
+          persist-credentials: false
+      - name: Check out harness
+        uses: actions/checkout@v4
+        with:
+          path: review
+          sparse-checkout: .github
+          persist-credentials: false
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/Python /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/go /opt/hostedtoolcache/Ruby \
+            /usr/local/share/powershell /usr/share/swift /opt/az /opt/microsoft /opt/google /usr/local/julia* \
+            /usr/local/share/chromium /usr/local/aws-cli /usr/local/aws-sam-cli || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+      - name: Apply E2E harness
+        run: |
+          rm -rf .github/e2e && cp -r review/.github/e2e .github/e2e && rm -rf review
+          node .github/e2e/apply-harness.mjs
+          git rev-parse HEAD > target-sha.txt
+      - uses: ./.github/actions/setup-bun
+        with:
+          install: none
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Gradle memory + swap
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.workers.max=2' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          sudo fallocate -l 8G /mnt/swapfile-build && sudo chmod 600 /mnt/swapfile-build && sudo mkswap /mnt/swapfile-build && sudo swapon /mnt/swapfile-build
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: ccache
+        id: ccache
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ccache patchelf >/dev/null
+          mkdir -p "$CCACHE_DIR"
+          echo "rn=$(node -p 'require("./apps/mobile/node_modules/react-native/package.json").version' 2>/dev/null || node -p 'require("react-native/package.json").version' 2>/dev/null || echo x)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}
+          restore-keys: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-
+      - name: Fetch proot (module expects its jniLibs)
+        working-directory: apps/mobile/modules/openbot-engine
+        run: bash scripts/fetch-proot.sh || echo "::warning::fetch-proot failed"
+      - name: Expo prebuild
+        working-directory: apps/mobile
+        run: bunx expo prebuild --platform android --clean --no-install
+      - name: Assemble release (x86_64)
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.ccache
+          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}
+      - run: cp "$(ls apps/mobile/android/app/build/outputs/apk/release/*.apk | head -n1)" e2e.apk && ls -la e2e.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-apk
+          path: |
+            e2e.apk
+            target-sha.txt
+          retention-days: 3
+
+  emulator:
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: APK from this run
+        if: needs.plan.outputs.reuse == ''
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-apk
+          path: apk
+      - name: APK from an earlier run
+        if: needs.plan.outputs.reuse != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-apk
+          path: apk
+          run-id: ${{ needs.plan.outputs.reuse }}
+          github-token: ${{ github.token }}
+      - run: ls -la apk && cat apk/target-sha.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Smoke test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APK: ${{ github.workspace }}/apk/e2e.apk
+          OUT: ${{ github.workspace }}/e2e-out
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash .github/e2e/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-out
+          path: e2e-out
+          retention-days: 3
