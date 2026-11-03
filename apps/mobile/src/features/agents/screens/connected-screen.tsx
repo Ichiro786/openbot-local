@@ -106,6 +106,7 @@ import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
 import { useStableMap } from "@/shared/lib/use-stable-map";
+import { useFrostTarget } from "@/shared/motion/frostTarget";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const ONBOARDING_EXIT = FadeOut.duration(220).easing(EASE_OUT);
@@ -395,6 +396,8 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   // The Android header buttons have the glass of the search field.
   const buttonGlass = useChromeGlass();
   const searchBlurTarget = useRef<ViewInstance>(null);
+  // ColorOS glass menus opened while home has focus frost this same list target (build 9).
+  useFrostTarget(searchBlurTarget, isAndroid);
   const iconColor = String(foreground);
   const mutedColor = String(muted);
   const hasSelectedServer = servers.some((server) => server.id === activeServer.id);

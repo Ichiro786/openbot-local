@@ -41,7 +41,9 @@ import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/compon
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
 import { BloubStageProvider, useBloubStageRequest } from "@/shared/components/bloub-stage/bloub-stage-context";
 import { BLOUB_PRIORITY } from "@/shared/components/bloub-stage/bloub-stage-store";
+import { CrashScreen, LastCrashNotice } from "@/shared/components/crash-notice";
 import { headerFontOptions, navigationFonts } from "@/shared/lib/app-font";
+import { installCrashCapture } from "@/shared/lib/crash-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { nativeSplash } from "@/shared/lib/native-splash";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
@@ -50,6 +52,7 @@ import { useText } from "@/shared/lib/text";
 import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
 import { ColorOSMotionRoot } from "@/shared/motion/ColorOSMotionRoot";
+import { GlassMenuHost } from "@/shared/motion/GlassMenu";
 import { ZoomOpenHost } from "@/shared/motion/ZoomOpenOverlay";
 
 import { installLocalEngine } from "../../modules/openbot-engine";
@@ -58,7 +61,14 @@ export const unstable_settings = {
   anchor: "index",
 };
 
+/** Any render error of the app lands here instead of closing it: the log is saved and can be copied. */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  return <CrashScreen error={error} retry={retry} />;
+}
+
 installSupportLog();
+// Build 9: the last JS or native crash is saved and offered with "Copy crash log" on the next launch.
+installCrashCapture();
 installQuickActions();
 installAppLock();
 installNotificationHandler();
@@ -153,7 +163,14 @@ function RootNavigator() {
         >
           {!loading && preferencesReady ? (
             <View className="flex-1" onLayout={session || pathname !== "/" ? reportContentReady : undefined}>
-              <ColorOSMotionRoot overlay={<ZoomOpenHost />}>
+              <ColorOSMotionRoot
+                overlay={
+                  <>
+                    <GlassMenuHost />
+                    <ZoomOpenHost />
+                  </>
+                }
+              >
                 <Stack
                   screenOptions={{
                     headerBackButtonDisplayMode: "minimal",
@@ -267,6 +284,7 @@ export default function RootLayout() {
                   <AppLoadingOverlayProvider>
                     <RootNavigator />
                   </AppLoadingOverlayProvider>
+                  <LastCrashNotice />
                 </MobileSessionProvider>
               </BloubStageProvider>
             </ThemeProvider>

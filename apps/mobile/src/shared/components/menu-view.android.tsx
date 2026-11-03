@@ -59,7 +59,7 @@ import { BackHandler, Pressable, StyleSheet, useWindowDimensions, View, type Vie
 import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCSSVariable } from "uniwind";
-import { GlassMenu, type GlassMenuAnchor, type GlassMenuItem } from "@/shared/motion/GlassMenu";
+import { closeGlassMenu, type GlassMenuItem, openGlassMenu } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export type { MenuAction, MenuComponentRef } from "@expo/ui/community/menu";
@@ -306,10 +306,18 @@ function OpenedMenu({
   const [room, setRoom] = useState<{ placement: "top" | "bottom"; height: number } | null>(null);
   // A second call in the same tick must see the new state before React applies it.
   const openRef = useRef(false);
-  // ColorOS motion draws a flat menu (no sub-menu, up to 10 rows) as the frosted GlassMenu.
+  // ColorOS motion draws a flat menu (no sub-menu, up to 10 rows) as the GlassMenu. It opens in the
+  // root GlassMenuHost (in the app window), never as a child of this anchor in the header.
   const { enabled: colorOS } = useColorOSMotion();
   const glassItems = colorOS ? toGlassItems(actions, colors) : null;
-  const [glassAnchor, setGlassAnchor] = useState<GlassMenuAnchor | null>(null);
+  const glassKey = useRef<number | null>(null);
+  // A menu still open when its opener unmounts (its screen was popped) closes without an action.
+  useEffect(
+    () => () => {
+      if (glassKey.current !== null) closeGlassMenu(glassKey.current);
+    },
+    [],
+  );
 
   const onOpenChange = useCallback(
     (next: boolean) => {
@@ -330,22 +338,37 @@ function OpenedMenu({
     }
     view.measureInWindow((x, y, width, buttonHeight) => {
       if (glassItems) {
+        // One open at a time: a second tap on the anchor while the menu is up does nothing.
+        if (openRef.current) return;
         // A detached anchor measures as undefined/NaN: open from the middle instead of NaN frames.
         const measured = [x, y, width, buttonHeight].every(Number.isFinite);
-        setGlassAnchor(measured ? { x, y, width, height: buttonHeight } : null);
-        onOpenChange(true);
-        return;
+        const key = openGlassMenu({
+          anchor: measured ? { x, y, width, height: buttonHeight } : null,
+          title: title || undefined,
+          items: glassItems,
+          onSelect: (id) => onPressAction?.({ nativeEvent: { event: id } }),
+          onClose: () => {
+            glassKey.current = null;
+            onOpenChange(false);
+          },
+        });
+        if (key !== null) {
+          glassKey.current = key;
+          onOpenChange(true);
+          return;
+        }
+        // No host (should not happen): fall through to the HeroUI menu.
       }
       const above = y - safeArea.top - 12;
       const below = height - y - buttonHeight - safeArea.bottom - 12;
       setRoom(above > below ? { placement: "top", height: above } : { placement: "bottom", height: below });
       trigger.current?.open();
     });
-  }, [anchor, height, safeArea.top, safeArea.bottom, glassItems, onOpenChange]);
+  }, [anchor, height, safeArea.top, safeArea.bottom, glassItems, onOpenChange, title, onPressAction]);
   useImperativeHandle(ref, () => ({ show: open }), [open]);
 
   useEffect(() => {
-    if (!isOpen || glassItems) return;
+    if (!isOpen || glassItems || glassKey.current !== null) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       onOpenChange(false);
       return true;
@@ -369,55 +392,43 @@ function OpenedMenu({
   const scrolls = !visible(actions).some((action) => action.subactions?.length && !action.displayInline);
 
   return (
-    <>
-      {glassItems ? (
-        <GlassMenu
-          visible={isOpen}
-          anchor={glassAnchor}
-          title={title || undefined}
-          items={glassItems}
-          onSelect={(id) => onPressAction?.({ nativeEvent: { event: id } })}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
-      <Menu
-        isOpen={glassItems ? false : isOpen}
-        onOpenChange={onOpenChange}
-        pointerEvents="none"
+    <Menu
+      isOpen={glassItems || glassKey.current !== null ? false : isOpen}
+      onOpenChange={onOpenChange}
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+    >
+      {/* The trigger covers the anchor and only measures it. The anchor opens the menu on a tap or a long press. */}
+      <Menu.Trigger
+        ref={trigger}
+        isDisabled
+        accessible={false}
+        aria-disabled={false}
         style={StyleSheet.absoluteFill}
-      >
-        {/* The trigger covers the anchor and only measures it. The anchor opens the menu on a tap or a long press. */}
-        <Menu.Trigger
-          ref={trigger}
-          isDisabled
-          accessible={false}
-          aria-disabled={false}
-          style={StyleSheet.absoluteFill}
-          onLayout={() => {
-            if (takePendingOpen()) open();
-          }}
-        />
-        <Menu.Portal>
-          <Menu.Overlay />
-          <Menu.Content
-            presentation="popover"
-            placement={room?.placement ?? "bottom"}
-            align="start"
-            // A fixed width. With a content width, Android sizes the menu with each title on one line and
-            // then wraps a long title, so the menu is shorter than its items and the last item goes out.
-            className="w-52"
-            style={scrolls ? { maxHeight: room?.height ?? height - safeArea.top - safeArea.bottom - 24 } : undefined}
-          >
-            {title ? (
-              <Menu.Label className="mb-1" numberOfLines={3} style={{ color: colors.muted }}>
-                {title}
-              </Menu.Label>
-            ) : null}
-            {scrolls ? <ScrollView>{items}</ScrollView> : items}
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
-    </>
+        onLayout={() => {
+          if (takePendingOpen()) open();
+        }}
+      />
+      <Menu.Portal>
+        <Menu.Overlay />
+        <Menu.Content
+          presentation="popover"
+          placement={room?.placement ?? "bottom"}
+          align="start"
+          // A fixed width. With a content width, Android sizes the menu with each title on one line and
+          // then wraps a long title, so the menu is shorter than its items and the last item goes out.
+          className="w-52"
+          style={scrolls ? { maxHeight: room?.height ?? height - safeArea.top - safeArea.bottom - 24 } : undefined}
+        >
+          {title ? (
+            <Menu.Label className="mb-1" numberOfLines={3} style={{ color: colors.muted }}>
+              {title}
+            </Menu.Label>
+          ) : null}
+          {scrolls ? <ScrollView>{items}</ScrollView> : items}
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   );
 }
 
