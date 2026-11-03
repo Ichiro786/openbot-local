@@ -207,6 +207,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Nie udało się utworzyć odgałęzienia czatu.",
   "mobile.chat.message.actions": "Akcje wiadomości",
   "mobile.chat.message.copy": "Kopiuj wiadomość",
+  "mobile.chat.message.copied": "Skopiowano wiadomość",
   "mobile.chat.message.readAloud": "Czytaj na głos",
   "mobile.chat.message.stopReading": "Zatrzymaj czytanie",
   "mobile.chat.message.readAloudFailed": "Nie można odczytać wiadomości na głos",

@@ -36,6 +36,7 @@ import {
 import {
   AccessibilityInfo,
   type GestureResponderEvent,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,

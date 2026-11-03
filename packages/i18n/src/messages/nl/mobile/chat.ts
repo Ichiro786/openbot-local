@@ -174,6 +174,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Kan de chat niet aftakken.",
   "mobile.chat.message.actions": "Berichtacties",
   "mobile.chat.message.copy": "Kopieer bericht",
+  "mobile.chat.message.copied": "Bericht gekopieerd",
   "mobile.chat.message.readAloud": "Voorlezen",
   "mobile.chat.message.stopReading": "Stoppen met voorlezen",
   "mobile.chat.message.readAloudFailed": "Kan het bericht niet voorlezen",

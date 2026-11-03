@@ -204,6 +204,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Impossibile ramificare la chat.",
   "mobile.chat.message.actions": "Azioni del messaggio",
   "mobile.chat.message.copy": "Copia messaggio",
+  "mobile.chat.message.copied": "Messaggio copiato",
   "mobile.chat.message.readAloud": "Leggi ad alta voce",
   "mobile.chat.message.stopReading": "Interrompi lettura",
   "mobile.chat.message.readAloudFailed": "Impossibile leggere il messaggio ad alta voce",

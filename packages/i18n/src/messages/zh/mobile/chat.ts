@@ -195,6 +195,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "无法为聊天创建分支。",
   "mobile.chat.message.actions": "消息操作",
   "mobile.chat.message.copy": "复制消息",
+  "mobile.chat.message.copied": "消息已复制",
   "mobile.chat.message.readAloud": "朗读",
   "mobile.chat.message.stopReading": "停止朗读",
   "mobile.chat.message.readAloudFailed": "无法朗读消息",

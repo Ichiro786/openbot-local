@@ -205,6 +205,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Der Chat konnte nicht abgezweigt werden.",
   "mobile.chat.message.actions": "Nachrichtenaktionen",
   "mobile.chat.message.copy": "Nachricht kopieren",
+  "mobile.chat.message.copied": "Nachricht kopiert",
   "mobile.chat.message.readAloud": "Vorlesen",
   "mobile.chat.message.stopReading": "Vorlesen beenden",
   "mobile.chat.message.readAloudFailed": "Nachricht konnte nicht vorgelesen werden",

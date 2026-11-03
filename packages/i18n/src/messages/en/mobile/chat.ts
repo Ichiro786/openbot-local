@@ -200,6 +200,7 @@ export const messages = defineMessages("mobile.chat", {
   "mobile.chat.message.branchFailed": "Could not branch the chat.",
   "mobile.chat.message.actions": "Message actions",
   "mobile.chat.message.copy": "Copy message",
+  "mobile.chat.message.copied": "Message copied",
   "mobile.chat.message.readAloud": "Read aloud",
   "mobile.chat.message.stopReading": "Stop reading",
   "mobile.chat.message.readAloudFailed": "Could not read the message aloud",

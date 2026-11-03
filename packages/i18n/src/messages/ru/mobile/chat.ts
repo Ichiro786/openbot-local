@@ -206,6 +206,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Не удалось создать ответвление чата.",
   "mobile.chat.message.actions": "Действия с сообщением",
   "mobile.chat.message.copy": "Копировать сообщение",
+  "mobile.chat.message.copied": "Сообщение скопировано",
   "mobile.chat.message.readAloud": "Прочитать вслух",
   "mobile.chat.message.stopReading": "Остановить чтение",
   "mobile.chat.message.readAloudFailed": "Не удалось прочитать сообщение вслух",

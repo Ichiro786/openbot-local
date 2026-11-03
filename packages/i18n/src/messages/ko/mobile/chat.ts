@@ -200,6 +200,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "채팅을 분기할 수 없어요.",
   "mobile.chat.message.actions": "메시지 작업",
   "mobile.chat.message.copy": "메시지 복사",
+  "mobile.chat.message.copied": "메시지를 복사했어요",
   "mobile.chat.message.readAloud": "소리 내어 읽기",
   "mobile.chat.message.stopReading": "읽기 중지",
   "mobile.chat.message.readAloudFailed": "메시지를 읽을 수 없습니다",

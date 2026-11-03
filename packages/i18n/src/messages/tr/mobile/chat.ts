@@ -202,6 +202,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Sohbet dallandırılamadı.",
   "mobile.chat.message.actions": "Mesaj eylemleri",
   "mobile.chat.message.copy": "Mesajı kopyala",
+  "mobile.chat.message.copied": "Mesaj kopyalandı",
   "mobile.chat.message.readAloud": "Sesli oku",
   "mobile.chat.message.stopReading": "Okumayı durdur",
   "mobile.chat.message.readAloudFailed": "Mesaj sesli okunamadı",

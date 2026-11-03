@@ -59,7 +59,7 @@ const androidLiveUpdates: AgentLiveActivityNative = {
   setSealKeys: () => undefined,
   saveAvatar: () => null,
   hasAvatar: () => false,
-  renderBloub: () => null,
+  renderBloub: async () => "",
   removeAvatars: () => undefined,
 };
 

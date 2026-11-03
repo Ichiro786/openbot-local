@@ -206,6 +206,7 @@ export const messages = {
   "mobile.chat.message.branchFailed": "Impossible de dériver le chat.",
   "mobile.chat.message.actions": "Actions sur le message",
   "mobile.chat.message.copy": "Copier le message",
+  "mobile.chat.message.copied": "Message copié",
   "mobile.chat.message.readAloud": "Lire à voix haute",
   "mobile.chat.message.stopReading": "Arrêter la lecture",
   "mobile.chat.message.readAloudFailed": "Impossible de lire le message à voix haute",
