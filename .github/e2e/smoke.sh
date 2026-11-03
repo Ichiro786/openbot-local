@@ -129,6 +129,7 @@ menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> b
   adb shell input tap $xy; sleep 1.2; check "$n-open" || return
   dump "$n-1"; log "  ••• menu kind: $(menu_open_kind "$n-1")"; shot "$n-1-dots"
   xy=$(menu_row "Add agent" "$n-1") || { log "FAIL $n: ••• menu did not open"; FAIL=1; return; }
+  if [ "$2" = ON ] && [ "$(cat "$OUT/.how" 2>/dev/null)" = geometry ]; then log "FAIL $n: glass rows not in the a11y tree (card not laid out?)"; FAIL=1; fi
   adb shell input tap $xy; sleep 2.5; check "$n-add-agent" || return
   if wait_for "E2E SHEET OPEN" 8 "$n-2-sheet" >/dev/null; then log "ok: E2E SHEET OPEN"; adb shell input keyevent 4; sleep 1.5; check "$n-sheet-back" || return; else log "FAIL $n: Add agent did not open the sheet (LAST=$(grep -o 'LAST=[a-z-]*' "$OUT/$n-2-sheet.xml" | head -1))"; shot "$n-2-nosheet"; FAIL=1; fi
   home
