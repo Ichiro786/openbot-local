@@ -11,9 +11,18 @@ mkdir -p "$OUT"
 FAIL=0
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/steps.txt"; }
 
-dump() { # $1 name
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
-  adb pull /sdcard/ui.xml "$OUT/$1.xml" >/dev/null 2>&1 || echo "<none/>" > "$OUT/$1.xml"
+dump() { # $1 name. An emulator "Process system isn't responding" dialog (package android) is dismissed
+  # with Wait and logged; one covered the whole baseline run 41635693145.
+  local i
+  for i in 1 2 3; do
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    adb pull /sdcard/ui.xml "$OUT/$1.xml" >/dev/null 2>&1 || echo "<none/>" > "$OUT/$1.xml"
+    grep -q "isn&apos;t responding\|isn't responding" "$OUT/$1.xml" || return 0
+    local who; who=$(grep -o 'text="[^"]*responding"' "$OUT/$1.xml" | head -1)
+    echo "[$(date +%T)] system dialog: $who -> Wait" >> "$OUT/steps.txt"
+    case "$who" in *OpenBot*|*openbot*) echo "[$(date +%T)] FAIL: app ANR dialog" >> "$OUT/steps.txt"; echo 1 > "$OUT/.anr";; esac
+    local xy; xy=$(find_node "$OUT/$1.xml" "Wait"); [ -n "$xy" ] && adb shell input tap $xy; sleep 1
+  done
 }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null; }
 # $1 xml $2 label (substring of text or content-desc) $3 mode: c = centre "x y", b = bounds "x1 y1 x2 y2"
@@ -156,5 +165,6 @@ scenario on2 ON
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
 adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
 log "final pid: $(adb shell pidof $PKG | tr -d '\r')"
+[ -f "$OUT/.anr" ] && FAIL=1
 log "RESULT FAIL=$FAIL"
 exit $FAIL
