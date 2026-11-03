@@ -88,6 +88,18 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
     src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-plush" options={{ headerShown: false }} />`);
     console.log("plush route applied");
   }
+  // Build 11 item 3: the stand-in chat tells the zoom it has painted (as ChatView does), one frame after mount.
+  if (existsSync(chat) && readFileSync("apps/mobile/src/shared/motion/zoomPush.ts", "utf8").includes("export function markZoomContentReady")) {
+    let f = readFileSync(chat, "utf8");
+    const marker = 'function E2EChat() {\n  "use no memo";';
+    if (!f.includes(marker)) throw new Error("e2e-chat marker missing");
+    f = `import { useRoute as __useRoute } from "expo-router/react-navigation";\nimport { useEffect as __useEffect } from "react";\nimport { markZoomContentReady as __markReady } from "@/shared/motion/zoomPush";\n${f}`.replace(
+      marker,
+      `${marker}\n  const __routeKey = __useRoute().key;\n  __useEffect(() => {\n    const frame = requestAnimationFrame(() => __markReady(__routeKey));\n    return () => cancelAnimationFrame(frame);\n  }, [__routeKey]);`,
+    );
+    writeFileSync(chat, f);
+    console.log("zoom ready signal applied");
+  }
   if (existsSync("apps/mobile/src/features/servers/screens/whatsapp-screen.tsx") && existsSync(index)) {
     cpSync(".github/e2e/harness-b11/app/e2e-whatsapp.tsx", "apps/mobile/src/app/e2e-whatsapp.tsx");
     let f = readFileSync(index, "utf8");
