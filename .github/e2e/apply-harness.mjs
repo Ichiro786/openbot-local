@@ -51,7 +51,7 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
                             if (!event.data?.closing) release();
                           },
                           focus: () => {
-                            if (__e2eIsZoomPush(route.key)) setTimeout(release, 500);
+                            if (__e2eIsZoomPush(route.key)) setTimeout(release, 2000);
                           },
                         };
                       }}
