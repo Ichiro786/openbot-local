@@ -551,7 +551,13 @@ function GlassMenuOverlay({
         <Animated.View
           accessibilityRole="menu"
           pointerEvents={pickerOpen ? "none" : "auto"}
-          style={[styles.card, { left: frame.left, transformOrigin: [frame.originX, frame.originY, 0] }, card]}
+          // Position and size are set here, not animated (build 9): a level change swaps the size at once
+          // under an opacity/scale crossfade, and the height is the clip a long, scrolling level needs.
+          style={[
+            styles.card,
+            { left: frame.left, top: frame.top, height: h, transformOrigin: [frame.originX, frame.originY, 0] },
+            card,
+          ]}
         >
           {/* The grid's blur replaces the card's and the bar's as soon as it mounts (they are fading out), so a
               message menu never runs more than two blurs. */}
