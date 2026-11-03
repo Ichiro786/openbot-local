@@ -19,7 +19,7 @@ dump() { # $1 name. An emulator "Process system isn't responding" dialog (packag
     adb pull /sdcard/ui.xml "$OUT/$1.xml" >/dev/null 2>&1 || echo "<none/>" > "$OUT/$1.xml"
     grep -q "isn&apos;t responding\|isn't responding" "$OUT/$1.xml" || return 0
     local who; who=$(grep -o 'text="[^"]*responding"' "$OUT/$1.xml" | head -1)
-    echo "[$(date +%T)] system dialog: $who -> Wait" >> "$OUT/steps.txt"
+    echo "[$(date +%T)] system dialog: $who -> Wait" >> "$OUT/steps.txt"; touch "$OUT/.infra"
     case "$who" in *OpenBot*|*openbot*) echo "[$(date +%T)] FAIL: app ANR dialog" >> "$OUT/steps.txt"; echo 1 > "$OUT/.anr";; esac
     local xy; xy=$(find_node "$OUT/$1.xml" "Wait"); [ -n "$xy" ] && adb shell input tap $xy; sleep 1
   done
@@ -92,6 +92,55 @@ close_menu_if_open() { # $1 name
   dump "$1"
   if [ "$(menu_open_kind "$1")" != none ]; then adb shell input keyevent 4; sleep 1; check "$1-close-leftover-menu" || true; fi
 }
+
+
+# ---------------- build 11 helpers (review) ----------------
+# Frame timing: gfxinfo framestats (ns). Prints frames, janky %, max ms and count over 32 ms for the window
+# since the last reset; the raw dump is kept as $OUT/<name>-gfx.txt.
+gfx_reset() { adb shell dumpsys gfxinfo $PKG reset >/dev/null 2>&1; }
+gfx() { # $1 name
+  adb shell dumpsys gfxinfo $PKG framestats > "$OUT/$1-gfx.txt" 2>/dev/null
+  local r; r=$(python3 - "$OUT/$1-gfx.txt" <<'PYG'
+import sys,re
+t=open(sys.argv[1],errors="ignore").read()
+jank=re.search(r"Janky frames: (\d+) \(([\d.]+)%\)",t); tot=re.search(r"Total frames rendered: (\d+)",t)
+rows=[];hdr=None
+for line in t.splitlines():
+    if line.startswith("Flags,"): hdr=line.split(","); continue
+    if hdr and re.match(r"^\d+,",line):
+        v=line.split(",")
+        try:
+            d=dict(zip(hdr,v))
+            if d.get("Flags","0")!="0": continue
+            ms=(int(d["FrameCompleted"])-int(d["IntendedVsync"]))/1e6
+            if 0<ms<5000: rows.append(ms)
+        except Exception: pass
+    elif hdr and line.strip()=="---PROFILEDATA---": hdr=None
+rows.sort()
+p90=rows[int(len(rows)*0.9)] if rows else 0
+print(f"frames={len(rows)} total={tot.group(1) if tot else '?'} janky={jank.group(2) if jank else '?'}% max={rows[-1] if rows else 0:.1f}ms p90={p90:.1f}ms over32={sum(1 for x in rows if x>32)} over16={sum(1 for x in rows if x>16.7)}")
+PYG
+)
+  log "  gfx ($1): $r"; echo "$1 $r" >> "$OUT/gfx-summary.txt"
+}
+# Blur counter (app support log, mirrored to logcat): every "blurs live" line since the last mark.
+blur_mark() { adb logcat -d 2>/dev/null | grep -c "blurs live" > "$OUT/.blurmark" || echo 0 > "$OUT/.blurmark"; }
+blur_max() { # $1 scenario name -> logs the highest count seen in the window and FAILs above 2
+  local from; from=$(cat "$OUT/.blurmark" 2>/dev/null || echo 0)
+  adb logcat -d 2>/dev/null | grep "blurs live" | tail -n +$((from+1)) > "$OUT/$1-blurs.txt"
+  local mx; mx=$(grep -oE "(max|live)=[0-9]+" "$OUT/$1-blurs.txt" | grep -oE "[0-9]+" | sort -n | tail -1)
+  if [ -z "$mx" ]; then log "  blur counter ($1): no line"; echo "$1 none" >> "$OUT/blur-summary.txt"; return; fi
+  echo "$1 max=$mx" >> "$OUT/blur-summary.txt"
+  if [ "$mx" -gt 2 ]; then log "FAIL $1: blurs live max=$mx (>2)"; FAIL=1; else log "ok: blurs live max=$mx ($1)"; fi
+}
+# A scenario that failed while an emulator system dialog was up is retried once (infra, not the app).
+retry_infra() { # $@ scenario command
+  local before=$FAIL; rm -f "$OUT/.infra"; "$@"
+  if [ -f "$OUT/.infra" ] && [ "$FAIL" != "$before" ]; then
+    log "RETRY (infra dialog during: $*)"; echo "$*" >> "$OUT/infra-retries.txt"; FAIL=$before; rm -f "$OUT/.infra"; home; "$@"
+  fi
+}
+app_anr() { adb logcat -d 2>/dev/null | grep -E "ANR in $PKG" | head -3; }
 
 # ---------------- build 10 smoke (v3) ----------------
 blurs() { # $1 name: mounted blur views in the window (upper bound of running blurs; info only)
@@ -189,14 +238,25 @@ row_scn() { # agent-row long-press menu: every item, the sub-menus, back row, ba
   rxy=$(wait_for "E2E Bot row" 10 "$n-r"); hold $rxy; sleep 1; adb shell input tap 540 2200; sleep 1; check "$n-outside" || return
   dump "$n-m7"; [ "$(menu_open_kind "$n-m7")" = none ] && log "ok: outside tap closed" || { log "FAIL $n: outside tap"; FAIL=1; home; }
 }
-zoom_scn() { # tap the zoom row, record the transition, then back
+zoom_open() { # $1 name: one recorded zoom open with frame stats; leaves the chat open
   local n=$1 xy
-  xy=$(wait_for "E2E Zoom chat" 10 "$n-z0") || { log "FAIL $n: no zoom row"; FAIL=1; return; }
-  adb shell "screenrecord --time-limit 4 --bit-rate 8000000 /sdcard/$n-zoom.mp4" & local rec=$!
-  sleep 0.6; adb shell input tap $xy; sleep 3.6; wait $rec 2>/dev/null
-  adb pull /sdcard/$n-zoom.mp4 "$OUT/$n-zoom.mp4" >/dev/null 2>&1
-  check "$n-zoom" || return
-  expect_text "E2E CHAT OPEN" 8 "$n-z1"; shot "$n-chat"
+  xy=$(wait_for "E2E Zoom chat" 10 "$n-z0") || { log "FAIL $n: no zoom row"; FAIL=1; return 1; }
+  blur_mark; gfx_reset
+  adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n.mp4" & local rec=$!
+  sleep 0.7; adb shell input tap $xy; sleep 2.6; wait $rec 2>/dev/null
+  gfx "$n-open"; blur_max "$n-open"
+  adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
+  check "$n" || return 1
+  expect_text "E2E CHAT OPEN" 8 "$n-z1"
+}
+zoom_scn() { # three opens (spec gate: 3 recorded opens + 3 backs with framestats); the third stays in the chat
+  local n=$1 i
+  for i in 1 2; do
+    zoom_open "$n$i" || return
+    shot "$n$i-chat"; gfx_reset; adb shell input keyevent 4; sleep 1.6; gfx "$n$i-back"; check "$n$i-back" || return
+    dump "$n$i-home"; [ -n "$(find_node "$OUT/$n$i-home.xml" "Toggle ColorOS")" ] || { log "FAIL $n$i: back did not return home"; FAIL=1; home; }
+  done
+  zoom_open "$n"3; shot "$n-chat"
 }
 chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
   local n=$1 xy e
@@ -282,6 +342,20 @@ PYY
   adb shell input keyevent 4; sleep 1.2; dump "$n-kb"; if [ -n "$(find_node "$OUT/$n-kb.xml" "E2E CHAT OPEN")" ]; then adb shell input keyevent 4; sleep 1.5; fi; check "$n-chat-back" || return
   dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
 }
+press_drag() { # $1 name $2 "x y" : press, drag 0.33 D down-left while held (recorded), release; then 20 fast press-drag-cancels
+  local n=$1 x y i; set -- $2; x=$1; y=$2
+  adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n.mp4" & local rec=$!
+  sleep 0.6
+  adb shell input motionevent DOWN $x $y; sleep 0.25
+  for i in 1 2 3 4 5 6; do adb shell input motionevent MOVE $((x - i*2)) $((y + i*7)); done
+  sleep 0.15; adb exec-out screencap -p > "$OUT/$n-held.png" 2>/dev/null
+  adb shell input motionevent MOVE $((x + 400)) $((y + 500)); adb shell input motionevent UP $((x + 400)) $((y + 500))
+  wait $rec 2>/dev/null; adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
+  check "$n-drag" || return 1
+  gfx_reset
+  for i in $(seq 1 20); do adb shell "input motionevent DOWN $x $y; input motionevent MOVE $((x+300)) $((y+400)); input motionevent UP $((x+300)) $((y+400))"; done
+  sleep 1; gfx "$n-rapid"; check "$n-rapid20" || return 1
+}
 toggle_to() { # $1 name $2 expected
   ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
@@ -292,6 +366,11 @@ round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; menu_scn "$1-dots
 
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
+# Emulator launcher ANRs ("Pixel Launcher isn't responding") ate taps in runs 41698820646 and 41693238776:
+# hide error dialogs system-wide (an app ANR is still caught from logcat, below) and stop the launcher.
+adb shell settings put global hide_error_dialogs 1
+adb shell settings put secure anr_show_background 0
+adb shell pm disable-user --user 0 com.google.android.apps.nexuslauncher >/dev/null 2>&1 || true
 adb shell settings put global window_animation_scale 1
 adb shell settings put global transition_animation_scale 1
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
@@ -307,5 +386,7 @@ adb logcat -d > "$OUT/logcat.txt" 2>/dev/null
 adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
 log "final pid: $(adb shell pidof $PKG | tr -d '\r')"
 [ -f "$OUT/.anr" ] && FAIL=1
+if [ -n "$(app_anr)" ]; then log "FAIL: app ANR: $(app_anr | tr '\n' ' ')"; FAIL=1; fi
+log "infra retries: $(cat "$OUT/infra-retries.txt" 2>/dev/null | wc -l)"
 log "RESULT FAIL=$FAIL"
 exit $FAIL
