@@ -121,6 +121,7 @@ import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
 import { WORKFLOWS_GITHUB_CAPABILITY } from "./workflows-github-v1";
 import { WORKFLOWS_CAPABILITY } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
+import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
 
 export const TEAM_SEMANTIC_TAGS_CAPABILITY = "installed-skills";
 export const TEAM_AGENT_ACTIVITY_CAPABILITY = "agent-activity";
@@ -279,6 +280,7 @@ export {
   WEBHOOK_TESTS_CAPABILITY,
   WORKFLOWS_CAPABILITY,
   WORKFLOWS_GITHUB_CAPABILITY,
+  WHATSAPP_MOBILE_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
 };
 
@@ -422,6 +424,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   COMPUTER_ACTIVITY_CAPABILITY,
   MODEL_VISIBILITY_CAPABILITY,
   AGENT_THREAD_REPLIES_CAPABILITY,
+  WHATSAPP_MOBILE_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -579,7 +582,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== LOCAL_SERVERS_CAPABILITY &&
     capability !== COMPUTER_ACTIVITY_CAPABILITY &&
     capability !== MODEL_VISIBILITY_CAPABILITY &&
-    capability !== AGENT_THREAD_REPLIES_CAPABILITY,
+    capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
+    capability !== WHATSAPP_MOBILE_CAPABILITY,
 );
 /**
  * The capabilities that only a protocol 9 peer sends and gets. Protocols 7 and 8 read at most 128
@@ -613,6 +617,7 @@ export const TEAM_PROTOCOL_V9_ONLY_CAPABILITIES: ReadonlySet<string> = new Set<T
   COMPUTER_ACTIVITY_CAPABILITY,
   MODEL_VISIBILITY_CAPABILITY,
   AGENT_THREAD_REPLIES_CAPABILITY,
+  WHATSAPP_MOBILE_CAPABILITY,
 ]);
 // A v8 host reads at most 128 capabilities, so a client sends the protocol 9 ones only after it
 // negotiates protocol 9.
@@ -729,6 +734,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== LOCAL_SERVERS_CAPABILITY &&
       capability !== COMPUTER_ACTIVITY_CAPABILITY &&
       capability !== MODEL_VISIBILITY_CAPABILITY &&
-      capability !== AGENT_THREAD_REPLIES_CAPABILITY,
+      capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
+      capability !== WHATSAPP_MOBILE_CAPABILITY,
   );
 }
