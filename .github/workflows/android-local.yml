@@ -127,7 +127,7 @@ jobs:
 
       - name: Cache Bun packages
         if: ${{ env.CLEAR_CACHE != 'true' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -151,7 +151,7 @@ jobs:
       # run id: each run saves its own entry, and the next run restores the newest by prefix.
       - name: Restore ccache
         if: ${{ env.CLEAR_CACHE != 'true' }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}-${{ github.run_id }}
@@ -232,7 +232,7 @@ jobs:
 
       - name: Save ccache
         if: ${{ always() && steps.ccache.outcome == 'success' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}-${{ github.run_id }}
