@@ -25,6 +25,10 @@ on:
         description: "Compile-check only: build without the engine payload (APK cannot install the engine)"
         type: boolean
         default: false
+      clear_cache:
+        description: "Skip restoring the Gradle, ccache and Bun caches (escape hatch for stale-cache errors); fresh caches are still saved"
+        type: boolean
+        default: false
   workflow_run:
     workflows: ["Engine rootfs"]
     types: [completed]
@@ -51,6 +55,19 @@ jobs:
       NODE_ENV: production
       # Root postinstall installs Electron for the desktop app; the phone build does not need it.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      # Native C/C++ (CMake via AGP externalNativeBuild) goes through ccache. CMake reads these
+      # variables when it configures, and Gradle passes the environment to the cmake/ninja it starts.
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_MAXSIZE: 2G
+      # Paths under the checkout hash relative to it, so a cache made in another run still hits.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      # Push/workflow_run events have no inputs; only a dispatch with clear_cache=true skips restores.
+      CLEAR_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.clear_cache && 'true' || 'false' }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -88,6 +105,9 @@ jobs:
           mkdir -p ~/.gradle
           echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> ~/.gradle/gradle.properties
           echo 'org.gradle.workers.max=2' >> ~/.gradle/gradle.properties
+          # Local Gradle build cache (task outputs in ~/.gradle/caches/build-cache-1), which
+          # setup-gradle below saves and restores with the rest of the Gradle user home.
+          echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
           # Swap on the separate /mnt disk so it does not eat the root disk the build needs.
           sudo fallocate -l 8G /mnt/swapfile-build
           sudo chmod 600 /mnt/swapfile-build
@@ -95,16 +115,18 @@ jobs:
           sudo swapon /mnt/swapfile-build
           free -h
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
+      # Gradle user home (dependencies, wrapper, build cache). Replaces the old actions/cache step.
+      # cache-read-only is off so dispatches on build branches save too (default: main only).
+      # clear_cache -> cache-write-only: nothing is restored, a fresh cache is saved at the end.
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('bun.lock', 'apps/mobile/app.json', 'apps/mobile/package.json', 'apps/mobile/modules/*/android/build.gradle') }}
-          restore-keys: gradle-${{ runner.os }}-
+          cache-read-only: false
+          cache-write-only: ${{ env.CLEAR_CACHE == 'true' }}
+          gradle-home-cache-cleanup: true
 
       - name: Cache Bun packages
+        if: ${{ env.CLEAR_CACHE != 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -113,6 +135,29 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install and key ccache
+        id: ccache
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ccache >/dev/null
+          mkdir -p "$CCACHE_DIR"
+          rn=$(node -p 'require("./apps/mobile/node_modules/react-native/package.json").version' 2>/dev/null ||
+            node -p 'require("react-native/package.json").version')
+          echo "rn=$rn" >> "$GITHUB_OUTPUT"
+          echo "React Native $rn, ccache $(ccache --version | head -n1)"
+          ccache --zero-stats >/dev/null
+
+      # Restore and save are separate so clear_cache can skip only the restore. The key ends in the
+      # run id: each run saves its own entry, and the next run restores the newest by prefix.
+      - name: Restore ccache
+        if: ${{ env.CLEAR_CACHE != 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}-
+            ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-
 
       # proot + libtalloc + libandroid-shmem from Termux, renamed lib*.so into the module's jniLibs.
       - name: Fetch proot (Termux arm64)
@@ -180,6 +225,17 @@ jobs:
             -PreactNativeArchitectures=arm64-v8a \
             --no-daemon --stacktrace
           df -h /
+
+      - name: ccache stats
+        if: ${{ always() && steps.ccache.outcome == 'success' }}
+        run: ccache --show-stats || true
+
+      - name: Save ccache
+        if: ${{ always() && steps.ccache.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-arm64-rn${{ steps.ccache.outputs.rn }}-${{ hashFiles('bun.lock', 'apps/mobile/package.json') }}-${{ github.run_id }}
 
       - name: Collect APK
         id: apk
