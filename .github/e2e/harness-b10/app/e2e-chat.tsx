@@ -37,6 +37,7 @@ export default function E2EChatRoute() {
 }
 
 function E2EChat() {
+  "use no memo";
   const insets = useSafeAreaInsets();
   const colorOS = useColorOSMotion().enabled;
   const target = useRef<ViewInstance | null>(null);
@@ -46,7 +47,11 @@ function E2EChat() {
   const [sent, setSent] = useState("none");
   const [reacted, setReacted] = useState<Record<string, string | null>>({});
   const [log, setLog] = useState("none");
-  const controls = { a1: useRef<MessageActionsControl | null>(null), u1: useRef<MessageActionsControl | null>(null) };
+  // Hooks at the top level: React Compiler memoised the object literal, so its useRef calls ran only on
+  // the first render ("Rendered fewer hooks than expected", run 41676402080).
+  const a1Control = useRef<MessageActionsControl | null>(null);
+  const u1Control = useRef<MessageActionsControl | null>(null);
+  const controls = { a1: a1Control, u1: u1Control };
   const react = async (id: string, emoji: string | null) => {
     setReacted((r) => ({ ...r, [id]: emoji }));
     setLog(`REACTED ${id} ${emoji ?? "null"} valid=${emoji === null || isMessageReaction(emoji)}`);

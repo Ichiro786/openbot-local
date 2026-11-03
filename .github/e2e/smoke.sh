@@ -120,7 +120,7 @@ expect_text() { # $1 substring $2 timeout $3 name
   if wait_for "$1" "$2" "$3" >/dev/null; then log "ok: $1"; else log "FAIL: expected '$1'"; shot "$3"; FAIL=1; fi
 }
 home() { # back to the harness home (relaunches the app if a back key left it)
-  local i; for i in 1 2 3; do dump hm; if [ -z "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && ! adb shell dumpsys window | grep -q "mCurrentFocus.*$PKG"; then log "  app not in front: relaunch (pid=$(adb shell pidof $PKG | tr -d '\r'))"; adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 6; continue; fi; [ -n "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && [ "$(menu_open_kind hm)" = none ] && return 0; adb shell input keyevent 4; sleep 1.2; done
+  local i; for i in 1 2 3; do dump hm; if [ -n "$(find_node "$OUT/hm.xml" "Copy crash log")" ]; then log "FAIL: a crash-log notice is on screen (an earlier JS/native crash)"; FAIL=1; xy=$(node "$OUT/hm.xml" "Dismiss" c); [ -n "$xy" ] && adb shell input tap $xy; sleep 1; dump hm; fi; if [ -z "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && ! adb shell dumpsys window | grep -q "mCurrentFocus.*$PKG"; then log "  app not in front: relaunch (pid=$(adb shell pidof $PKG | tr -d '\r'))"; adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 6; continue; fi; [ -n "$(find_node "$OUT/hm.xml" "Toggle ColorOS")" ] && [ "$(menu_open_kind hm)" = none ] && return 0; adb shell input keyevent 4; sleep 1.2; done
 }
 
 menu_scn() { # $1 name $2 expect ON|OFF : ••• menu -> Add agent sheet -> back
