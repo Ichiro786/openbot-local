@@ -81,6 +81,15 @@ chmod -R u+rwX,go=rX "$APP_SRC"
 rm -f "$WORK_DIR/OpenBot.AppImage"
 endstep
 
+# OpenBot Local engine patches (engine/patches/<version>/*.patch), e.g. DM context in group chats.
+# Publish a patched payload under a revision: engine-<version>-<n> (rootfs.yml input "revision").
+if compgen -G "$SCRIPT_DIR/patches/$version/*.patch" >/dev/null; then
+  step "Rebuild the engine main bundle with the fork's patches"
+  [ -n "${ENGINE_REVISION:-}" ] || fail "engine/patches/$version exists: set a payload revision (engine-$version-<n>)"
+  bash "$SCRIPT_DIR/patch-engine-main.sh" "$APP_SRC" "$version" "$SCRIPT_DIR/patches/$version"
+  endstep
+fi
+
 # ------------------------------------------------------------------ 2. Ubuntu base
 step "Download and verify ubuntu-base 24.04 arm64"
 sums=$(fetch "$UBUNTU_BASE_DIR/SHA256SUMS")
@@ -250,6 +259,7 @@ ubuntu_base=$base_version
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 git=${GIT_SHA:-unknown}
 revision=${ENGINE_REVISION:-0}
+patches=$(cat "$ROOTFS/opt/OpenBot/app/resources/openbot-local-patches.txt" 2>/dev/null | paste -sd, - || true)
 EOF
 chmod 0644 "$ROOTFS/opt/OpenBot/engine-version"
 endstep

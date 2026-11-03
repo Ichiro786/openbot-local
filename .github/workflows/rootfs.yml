@@ -86,6 +86,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils openssl proot shellcheck jq gcc libc6-dev
 
+      # engine/patch-engine-main.sh rebuilds the main bundle from source when engine/patches/<version> exists.
+      - name: Set up Bun (engine patches)
+        if: steps.ver.outputs.build == 'true' && hashFiles('engine/patches/**/*.patch') != ''
+        uses: ./.github/actions/setup-bun
+        with:
+          install: none
+
       - name: Lint engine scripts
         if: steps.ver.outputs.build == 'true'
         run: |
@@ -99,7 +106,8 @@ jobs:
           ENGINE_REVISION: ${{ steps.ver.outputs.revision }}
           GIT_SHA: ${{ github.sha }}
         run: |
-          sudo --preserve-env=OUT_DIR,WORK_DIR,OPENBOT_VERSION,ENGINE_REVISION,GIT_SHA,GH_TOKEN bash engine/build-rootfs.sh
+          export BUN_BIN=$(command -v bun || true)
+          sudo --preserve-env=OUT_DIR,WORK_DIR,OPENBOT_VERSION,ENGINE_REVISION,GIT_SHA,GH_TOKEN,BUN_BIN bash engine/build-rootfs.sh
           sudo chown -R "$(id -u):$(id -g)" "$OUT_DIR"
           ls -l "$OUT_DIR"
 
