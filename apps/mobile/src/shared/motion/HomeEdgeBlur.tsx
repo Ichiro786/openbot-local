@@ -8,6 +8,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { edges } from "./tokens";
+import { useBlurLive } from "./useBlurLive";
 import { useColorOSMotion } from "./useColorOSMotion";
 
 // Smoothstep from 0 (top of the zone) to 1 (at 60 % of it), held to the bottom: no edge, no bands.
@@ -27,10 +28,13 @@ const MASK_STOPS = Array.from({ length: 17 }, (_, index) => {
 export const HomeEdgeBlur = memo(function HomeEdgeBlur({
   target,
   paused,
+  menuOpen = false,
   height,
 }: {
   target: RefObject<ViewInstance | null> | undefined;
   paused: boolean;
+  /** A frosted menu took the edge's place: stop blurring at once instead of after the fade (≤2 blurs). */
+  menuOpen?: boolean;
   /** From the bottom of the screen to the top of the zone. */
   height: number;
 }) {
@@ -54,6 +58,8 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
     const timer = setTimeout(() => setBlurring(false), edges.homeFadeMs + 40);
     return () => clearTimeout(timer);
   }, [shown]);
+  const running = (shown || blurring) && !menuOpen;
+  const live = useBlurLive(running);
   if (!enabled || !ANDROID_BLUR || !target || height <= 0) return null;
   return (
     <Animated.View
@@ -89,11 +95,11 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
       >
         <BlurView
           blurTarget={target}
-          blurMethod={shown || blurring ? "dimezisBlurViewSdk31Plus" : "none"}
+          blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
           intensity={edges.homeIntensity}
           blurReductionFactor={4}
           tint={dark ? "dark" : "light"}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
         />
       </MaskedView>
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">

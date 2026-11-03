@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-na
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { composerFrost, pill } from "./tokens";
+import { useBlurLive } from "./useBlurLive";
 
 /**
  * Build 10 (ColorOS motion, Android 12+): the chat composer's frosted glass, the home search pill's
@@ -13,7 +14,7 @@ import { composerFrost, pill } from "./tokens";
  *
  * Blur rules (build 9): the BlurView always uses `dimezisBlurViewSdk31Plus` (never `none`, which
  * paints a solid tint), mounts at opacity 0 and fades in after its first layout, and is hidden with
- * opacity while `shown` is false; once faded out it stops blurring (`none`) until it is shown again. Under the blur, the card's solid fill comes back with the inverse
+ * opacity while `shown` is false; it stops blurring (`none`, hidden in the same commit) the moment it is paused. Under the blur, the card's solid fill comes back with the inverse
  * opacity, so a paused or disabled frost is the build 9 composer.
  */
 export function ComposerFrost({
@@ -33,17 +34,10 @@ export function ComposerFrost({
   const [ready, setReady] = useState(false);
   const visible = useSharedValue(0);
   const on = ready && shown && ANDROID_BLUR;
-  // Paused = invisible and not blurring (build 9 rule 8, as HomeEdgeBlur): the blur keeps running
-  // until the fade-out ends, then `none` (which paints a solid tint, so only once at opacity 0).
-  const [blurring, setBlurring] = useState(on);
-  useEffect(() => {
-    if (on) {
-      setBlurring(true);
-      return;
-    }
-    const timer = setTimeout(() => setBlurring(false), composerFrost.fadeOutMs + 40);
-    return () => clearTimeout(timer);
-  }, [on]);
+  // Paused = not blurring at once (build 9 rule 8, without waiting for the fade): the blur is hidden
+  // and set to `none` in the same commit, while the glass fill and rim fade out over the solid fill.
+  // So a menu that takes this frost's place never runs alongside it, even during the fade.
+  const live = useBlurLive(on);
   useEffect(() => {
     visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : composerFrost.fadeOutMs }));
   }, [on, visible]);
@@ -56,12 +50,12 @@ export function ComposerFrost({
         {ANDROID_BLUR && target.current ? (
           <BlurView
             blurTarget={target}
-            blurMethod={on || blurring ? "dimezisBlurViewSdk31Plus" : "none"}
+            blurMethod={on ? "dimezisBlurViewSdk31Plus" : "none"}
             intensity={composerFrost.intensity}
             // The composer is small: blur a quarter-size image of the list, as the home pill does.
             blurReductionFactor={4}
             tint={dark ? "dark" : "light"}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
           />
         ) : null}
         <View

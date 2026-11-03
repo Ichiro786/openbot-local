@@ -1052,7 +1052,7 @@ function HomeSearchEdge({
   // Build 10: a frosted glass menu (••• or an agent row's long-press) is one more blur over the pill,
   // so the edge pauses while it is open and home runs at most two.
   const menuFrost = useGlassMenuFrostOpen();
-  return <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost} />;
+  return <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost} menuOpen={menuFrost} />;
 }
 
 interface Shortcut {
