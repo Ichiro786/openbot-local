@@ -237,10 +237,16 @@ export function BloubStage({
   }, [reduced, wantedStatus]);
 
   const span = height + BLOUB_RADIUS;
-  const blockStyle = useAnimatedStyle(() => ({
-    opacity: veil.get(),
-    transform: [{ translateY: edge.get() - lift.get() - span }],
-  }));
+  const blockStyle = useAnimatedStyle(() => {
+    const bottom = edge.get() - lift.get();
+    return {
+      // At rest the block's rounded bottom edge sits exactly on y = 0, and Android anti-aliases a
+      // 1 px sliver of it into the top row of the screen: the thin coloured hairline (inset by the
+      // corner radius) over every screen. A block that is rolled away is hidden outright.
+      opacity: bottom <= 1 ? 0 : veil.get(),
+      transform: [{ translateY: bottom - span }],
+    };
+  });
   // The gradient stays still on the screen while the block's edge moves over it.
   const glowStyle = useAnimatedStyle(() => ({
     opacity: glow.get(),
