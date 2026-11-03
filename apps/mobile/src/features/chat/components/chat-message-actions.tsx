@@ -9,7 +9,7 @@ import Reply from "lucide-react-native/icons/reply";
 import Square from "lucide-react-native/icons/square";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Volume2 from "lucide-react-native/icons/volume-2";
-import { type PropsWithChildren, useMemo, useState } from "react";
+import { type PropsWithChildren, type RefObject, useMemo, useState } from "react";
 import { type AccessibilityState, Pressable, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -103,6 +103,14 @@ function ActionButton({
   );
 }
 
+/** Build 10: what the long-press menu of a message does through its action row. */
+export type MessageActionsControl = {
+  react: (emoji: string | null) => void;
+  copy: () => void;
+  /** The reader's reaction as the row shows it (the pending one included). */
+  own: string | null;
+};
+
 /** Reads the message aloud with the reply voice from the settings. A second tap stops it. */
 function ReadAloudButton({
   messageId,
@@ -147,6 +155,8 @@ export function ChatMessageActions({
   onSelectText,
   selecting = false,
   readAloudId,
+  longPressMenu = false,
+  controlRef,
 }: {
   align: "start" | "end";
   /** The text that Copy puts on the clipboard. Empty for a message of files only. */
@@ -162,6 +172,14 @@ export function ChatMessageActions({
   selecting?: boolean;
   /** The message that Read aloud reads. Unset where the app cannot read aloud. */
   readAloudId?: string;
+  /**
+   * Build 10 (ColorOS motion): the message's long-press menu carries React, Reply and Select text.
+   * The row under the reader's own message shows only its reactions; under an agent message it
+   * keeps Copy, Read aloud and the time.
+   */
+  longPressMenu?: boolean;
+  /** Build 10: lets the long-press menu react and copy through this row (its pending reaction and check). */
+  controlRef?: RefObject<MessageActionsControl | null>;
 }) {
   const { t, format } = useText();
   const [mutedColor, foregroundColor] = useThemeColor(["muted", "foreground"]);
@@ -195,11 +213,15 @@ export function ChatMessageActions({
       showFailureAlert(error, "turn", t("mobile.chat.message.reactionFailed"), t("mobile.chat.copyFailedMessage"));
     });
   };
+  if (controlRef) controlRef.current = { react, copy: () => void copy(), own };
   const time = useMemo(
     () => (createdAt ? format.date(new Date(createdAt), { timeStyle: "short" }) : null),
     [createdAt, format],
   );
 
+  // Build 10: under the reader's own message the long-press menu has every action, so the row
+  // keeps only its space (and reactions, when there are any).
+  if (longPressMenu && align === "end" && shown.length === 0) return <View className="pb-2" />;
   return (
     // The space under the row sets each message apart from the next one. Markers and activity rows
     // have no action row, so they keep the list's own smaller gap.
@@ -238,7 +260,7 @@ export function ChatMessageActions({
             </View>
           ),
         )}
-        {copyText ? (
+        {copyText && !(longPressMenu && align === "end") ? (
           <ActionButton
             accessibilityLabel={copied ? t("mobile.chat.message.copied") : t("mobile.chat.message.copy")}
             onPress={() => void copy()}
@@ -265,7 +287,7 @@ export function ChatMessageActions({
             selectedColor={String(foregroundColor)}
           />
         ) : null}
-        {onReact ? (
+        {onReact && !longPressMenu ? (
           <ActionButton
             accessibilityLabel={t("mobile.chat.message.addReaction")}
             accessibilityState={{ expanded: pickerOpen }}
@@ -278,7 +300,7 @@ export function ChatMessageActions({
             <SmilePlus size={ICON_SIZE} color={muted} />
           </ActionButton>
         ) : null}
-        {onReply ? (
+        {onReply && !longPressMenu ? (
           <ActionButton
             accessibilityLabel={t("mobile.chat.message.reply")}
             onPress={() => {
@@ -289,7 +311,7 @@ export function ChatMessageActions({
             <Reply size={ICON_SIZE} color={muted} />
           </ActionButton>
         ) : null}
-        {onSelectText ? (
+        {onSelectText && !longPressMenu ? (
           <ActionButton
             // Drawn as pressed while the text is selected: a second tap ends the selection.
             selected={selecting}
@@ -303,13 +325,13 @@ export function ChatMessageActions({
             <TextSelect size={ICON_SIZE} color={selecting ? String(foregroundColor) : muted} />
           </ActionButton>
         ) : null}
-        {time ? (
+        {time && !(longPressMenu && align === "end") ? (
           <Typography.Paragraph type="body-xs" className="px-1 text-muted">
             {time}
           </Typography.Paragraph>
         ) : null}
       </View>
-      {pickerOpen ? (
+      {pickerOpen && !longPressMenu ? (
         <Animated.View
           entering={PICKER_IN}
           exiting={PICKER_OUT}

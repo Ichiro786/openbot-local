@@ -1,11 +1,13 @@
 import { useThemeColor } from "heroui-native/hooks";
 import Reply from "lucide-react-native/icons/reply";
 import { type PropsWithChildren, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { haptics } from "@/shared/lib/haptics";
+
+const HOLD_ACTIONS = [{ name: "longpress" as const }];
 
 /**
  * A swipe away from the bubble's side of the chat replies: to the right for a bubble at the start,
@@ -18,6 +20,7 @@ export function ChatMessageGesture({
   selecting,
   onReply,
   onSelectText,
+  onHold,
 }: PropsWithChildren<{
   /** The side of the chat the bubble sits on. */
   align?: "start" | "end";
@@ -25,8 +28,14 @@ export function ChatMessageGesture({
   selecting: boolean;
   onReply?: () => void;
   onSelectText?: () => void;
+  /**
+   * Build 10 (ColorOS motion): a touch and hold opens the message menu at the finger (window
+   * coordinates) instead of selecting text. Select text is then a row of that menu.
+   */
+  onHold?: (x: number, y: number) => void;
 }>) {
   const muted = useThemeColor("muted");
+  const bubble = useRef<ViewInstance | null>(null);
   // The swipe distance toward the middle of the chat, in points. A bubble at the end moves left.
   const offset = useSharedValue(0);
   const direction = align === "end" ? -1 : 1;
@@ -35,10 +44,10 @@ export function ChatMessageGesture({
   // The reply icon behind the bubble mounts with the first swipe, not with each row of the chat.
   // It is clear until the bubble has moved, so it shows in time.
   const [iconShown, setIconShown] = useState(false);
-  const handlers = useRef({ onReply, onSelectText });
-  handlers.current = { onReply, onSelectText };
+  const handlers = useRef({ onReply, onSelectText, onHold });
+  handlers.current = { onReply, onSelectText, onHold };
   const canReply = Boolean(onReply) && !selecting;
-  const canSelect = Boolean(onSelectText) && !selecting;
+  const canSelect = (Boolean(onSelectText) || Boolean(onHold)) && !selecting;
   // Build the gestures once per row. A streaming reply re-renders its row for each chunk, and a new
   // gesture would reconfigure the native handler each time.
   const gesture = useMemo(() => {
@@ -46,9 +55,11 @@ export function ChatMessageGesture({
       void haptics.impact();
       handlers.current.onReply?.();
     };
-    const selectText = () => {
+    const selectText = (x: number, y: number) => {
       void haptics.impact();
-      handlers.current.onSelectText?.();
+      const { onHold: hold, onSelectText: select } = handlers.current;
+      if (hold) hold(x, y);
+      else select?.();
     };
     const swipe = Gesture.Pan()
       .enabled(canReply)
@@ -69,7 +80,7 @@ export function ChatMessageGesture({
       });
     const hold = Gesture.LongPress()
       .enabled(canSelect)
-      .onStart(() => scheduleOnRN(selectText));
+      .onStart((event) => scheduleOnRN(selectText, event.absoluteX, event.absoluteY));
     return Gesture.Race(swipe, hold);
   }, [canReply, canSelect, direction, offset]);
 
@@ -85,7 +96,25 @@ export function ChatMessageGesture({
         </Animated.View>
       ) : null}
       <GestureDetector gesture={gesture}>
-        <Animated.View style={bubbleStyle}>{children}</Animated.View>
+        <Animated.View
+          ref={bubble}
+          style={bubbleStyle}
+          // Build 10: TalkBack's touch and hold opens the message menu too, at the bubble's middle.
+          accessibilityActions={onHold ? HOLD_ACTIONS : undefined}
+          onAccessibilityAction={
+            onHold
+              ? (event) => {
+                  if (event.nativeEvent.actionName !== "longpress") return;
+                  bubble.current?.measureInWindow((x, y, width, height) => {
+                    if ([x, y, width, height].every(Number.isFinite))
+                      handlers.current.onHold?.(x + width / 2, y + height / 2);
+                  });
+                }
+              : undefined
+          }
+        >
+          {children}
+        </Animated.View>
       </GestureDetector>
     </View>
   );

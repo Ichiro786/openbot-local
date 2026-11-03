@@ -90,6 +90,7 @@ import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import { nativeTextSelection } from "../model/native-text-selection";
@@ -99,8 +100,9 @@ import { type AttachmentTint, ChatAttachmentView } from "./chat-attachment";
 import { ChatImageGallery } from "./chat-image-gallery";
 import { ChatImageGeneration, imageGenerationStatus } from "./chat-image-generation";
 import { ChatImageViewerProvider, isViewableImage } from "./chat-image-viewer";
-import { ChatMessageActions } from "./chat-message-actions";
+import { ChatMessageActions, type MessageActionsControl } from "./chat-message-actions";
 import { ChatMessageGesture } from "./chat-message-gesture";
+import { openMessageMenu } from "./chat-message-menu";
 import { ChatOutboxStatus, OutboxMessageMenu, type OutboxRowStatus } from "./chat-outbox-status";
 import { ChatSelectableText } from "./chat-selectable-text";
 import { HistoryShownContext } from "./use-history-shown";
@@ -354,6 +356,8 @@ interface MessageRowShared {
   canReply: boolean;
   canReact: boolean;
   canSelectText: boolean;
+  /** Build 10 (ColorOS motion, Android): a touch and hold opens the message's glass menu. */
+  longPressMenu: boolean;
   canSelectQuestion: boolean;
   /** The width inside the list padding. The iOS menu of a queued message does not limit its width. */
   listWidth: number;
@@ -484,7 +488,11 @@ const MessageRow = memo(function MessageRow({
   selecting?: boolean;
   shared: MessageRowShared;
 }) {
-  const { t } = useText();
+  const { t, format } = useText();
+  // Build 10 (ColorOS motion, Android): a touch and hold on a message opens its glass menu with the
+  // reaction bar; the action rows under the messages lose React, Reply and Select text.
+  const longPressMenu = shared.longPressMenu;
+  const actionsControl = useRef<MessageActionsControl | null>(null);
   const [selectionHeight, setSelectionHeight] = useState(0);
   // Native text views keep a selection until they draw again. When the chat ends the selection
   // from outside, such as with a tap elsewhere, the next generation draws them without it.
@@ -693,7 +701,7 @@ const MessageRow = memo(function MessageRow({
                   agents={agents}
                   body={message.body}
                   finished={!isStreamingReply(message)}
-                  selectable={message.author === "user"}
+                  selectable={message.author === "user" && !longPressMenu}
                   color={textColor}
                   playback={playback}
                   animationEnabled={shared.animationActive && arriving}
@@ -717,6 +725,32 @@ const MessageRow = memo(function MessageRow({
   // The fallback selection starts from Select text or a touch and hold. Native text views select
   // the word under the finger on their own, so they need neither.
   const selectable = shared.canSelectText && !nativeTextSelection && Boolean(message.body.trim());
+  // Build 10: the long-press menu of this message, at the finger. Without a menu host it selects text.
+  const openMenu =
+    longPressMenu && bubble
+      ? (x: number, y: number) => {
+          const copyText = messageCopyText(bubble);
+          const opened = openMessageMenu({
+            x,
+            y,
+            title: bubble.createdAt ? format.date(new Date(bubble.createdAt), { timeStyle: "short" }) : undefined,
+            icon: String(foreground),
+            labels: {
+              reply: t("mobile.chat.message.reply"),
+              copy: t("mobile.chat.message.copy"),
+              selectText: t("mobile.chat.message.selectText"),
+              react: (emoji) => t("mobile.chat.message.react", { emoji }),
+              moreEmoji: t("mobile.chat.message.moreEmoji"),
+            },
+            own: actionsControl.current?.own ?? null,
+            onReply: shared.canReply ? () => actions.reply(bubble) : undefined,
+            onCopy: copyText ? () => actionsControl.current?.copy() : undefined,
+            onSelectText: selectable ? () => actions.selectText(bubble) : undefined,
+            onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji) : undefined,
+          });
+          if (!opened && selectable) actions.selectText(bubble);
+        }
+      : undefined;
   const replyPreview =
     source?.kind === "message"
       ? mentionDraft(source.body).text || t("mobile.chat.reply.attachment")
@@ -753,6 +787,7 @@ const MessageRow = memo(function MessageRow({
           selecting={selecting}
           onReply={shared.canReply ? () => actions.reply(message) : undefined}
           onSelectText={selectable ? () => actions.selectText(message) : undefined}
+          onHold={openMenu}
         >
           {rendered}
         </ChatMessageGesture>
@@ -769,6 +804,7 @@ const MessageRow = memo(function MessageRow({
           align="end"
           selecting={selecting}
           onReply={shared.canReply ? () => actions.reply(message) : undefined}
+          onHold={openMenu}
         >
           {rendered}
         </ChatMessageGesture>
@@ -787,6 +823,8 @@ const MessageRow = memo(function MessageRow({
           onSelectText={selectable ? () => actions.selectText(message) : undefined}
           selecting={selecting}
           readAloudId={canReadAloud && message.author === "agent" ? message.id : undefined}
+          longPressMenu={longPressMenu}
+          controlRef={actionsControl}
         />
       ) : null}
     </View>
@@ -1192,6 +1230,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   const canReact = Boolean(onReact);
   const canSelectText = Boolean(onSelectText);
   const canSelectQuestion = Boolean(onSelectQuestion);
+  // One toggle read for the whole list, so a row does not subscribe to the setting itself.
+  const longPressMenu = useColorOSMotion().enabled && isAndroid;
   // The rows keep clear of the side insets: the rail of iPhone Duo and the edges in landscape.
   const listWidth = columnWidth - insets.left - insets.right - LIST_PADDING * 2;
   const shared = useMemo<MessageRowShared>(
@@ -1220,6 +1260,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canReply,
       canReact,
       canSelectText,
+      longPressMenu,
       canSelectQuestion,
       listWidth,
       actions,
@@ -1247,6 +1288,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canReply,
       canReact,
       canSelectText,
+      longPressMenu,
       canSelectQuestion,
       listWidth,
       actions,
