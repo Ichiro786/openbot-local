@@ -1,8 +1,7 @@
-import { BlurView } from "expo-blur";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
-import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
-import { BackHandler, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -17,7 +16,6 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
-import { useColorOSBlurTarget } from "./ColorOSMotionRoot";
 import { menu } from "./tokens";
 import { useColorOSMotion } from "./useColorOSMotion";
 
@@ -78,7 +76,6 @@ export function GlassMenu({
 }) {
   const { reduceMotion } = useColorOSMotion();
   const { t } = useText();
-  const target = useColorOSBlurTarget();
   const dark = useUniwind().theme === "dark";
   const window = useWindowDimensions();
   const safe = useSafeAreaInsets();
@@ -110,8 +107,12 @@ export function GlassMenu({
   const stretchY = useSharedValue(1);
   const active = useSharedValue(-1);
 
+  // One close at a time; reset on every open.
+  const closing = useRef(false);
+
   useEffect(() => {
     if (!visible) return;
+    closing.current = false;
     setShown(true);
     open.value = reduceMotion ? 1 : menu.fromScale;
     open.value = reduceMotion ? 1 : withSpring(1, menu.openSpring);
@@ -120,24 +121,22 @@ export function GlassMenu({
     active.value = -1;
   }, [visible, reduceMotion, open, fade, highlightAlpha, active]);
 
-  useEffect(() => {
-    if (!shown) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      dismiss();
-      return true;
-    });
-    return () => sub.remove();
-  });
+  // Android Modal takes the back press itself (onRequestClose); BackHandler never sees it.
 
   const finishClose = (id?: string) => {
+    if (!closing.current) return;
     setShown(false);
     onClose();
     if (id) setTimeout(() => onSelect(id), Math.max(0, menu.actionDelayMs - menu.closeMs));
   };
 
   const dismiss = (id?: string) => {
-    fade.value = withTiming(0, { duration: menu.closeMs, easing: Easing.in(Easing.quad) }, (done) => {
-      if (done) runOnJS(finishClose)(id);
+    if (closing.current) return;
+    closing.current = true;
+    // Close even when the fade is interrupted (finished=false): an invisible Modal left up would
+    // swallow every touch in the app.
+    fade.value = withTiming(0, { duration: menu.closeMs, easing: Easing.in(Easing.quad) }, () => {
+      runOnJS(finishClose)(id);
     });
     if (!reduceMotion) open.value = withTiming(menu.closeScale, { duration: menu.closeMs });
   };
@@ -216,7 +215,14 @@ export function GlassMenu({
   const danger = dark ? "#ff6b6b" : "#d92d20";
 
   return (
-    <Modal transparent visible={visible || shown} animationType="none" statusBarTranslucent navigationBarTranslucent>
+    <Modal
+      transparent
+      visible={visible || shown}
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={() => dismiss()}
+    >
       <GestureHandlerRootView style={StyleSheet.absoluteFill}>
         <Pressable accessibilityLabel={t("common.close")} style={StyleSheet.absoluteFill} onPress={() => dismiss()} />
         <GestureDetector gesture={pan}>
@@ -233,13 +239,9 @@ export function GlassMenu({
               card,
             ]}
           >
-            <BlurView
-              style={StyleSheet.absoluteFill}
-              intensity={menu.blurIntensity}
-              tint={dark ? "dark" : "light"}
-              blurTarget={target}
-              blurMethod={target ? "dimezisBlurViewSdk31Plus" : "none"}
-            />
+            {/* Solid card. A BlurView here blurred a target in the app window from inside the Modal's
+                own window, which Android draws as a black panel. */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgb(${tint})` }]} />
             <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
               <Defs>
                 <LinearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">

@@ -330,7 +330,9 @@ function OpenedMenu({
     }
     view.measureInWindow((x, y, width, buttonHeight) => {
       if (glassItems) {
-        setGlassAnchor({ x, y, width, height: buttonHeight });
+        // A detached anchor measures as undefined/NaN: open from the middle instead of NaN frames.
+        const measured = [x, y, width, buttonHeight].every(Number.isFinite);
+        setGlassAnchor(measured ? { x, y, width, height: buttonHeight } : null);
         onOpenChange(true);
         return;
       }
