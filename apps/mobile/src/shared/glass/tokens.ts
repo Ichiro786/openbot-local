@@ -17,6 +17,11 @@ export const glass = {
     /** Circle: angle in degrees (0 = right, 90 = down). Capsule: x as a fraction of the width. */
     glintA: { angle: 235, x: 0.18, alpha: 0.15, spread: 0.45 },
     glintB: { angle: 70, x: 0.82, alpha: 0.09, spread: 0.4 },
+    /**
+     * Capsules (long edges): both glints reach 0 before the middle of the top edge (gate ≤ 0.04 there;
+     * review heads-up: 0.45/0.4 left ≈ 0.053 on the composer and the header pill).
+     */
+    capsuleSpread: 0.3,
     /** Light theme (inferred: no light-mode reference). */
     lightA: 0.55,
     lightB: 0.22,

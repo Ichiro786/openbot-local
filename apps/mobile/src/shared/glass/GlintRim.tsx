@@ -103,7 +103,7 @@ function GlintSvg({
           gradientUnits="userSpaceOnUse"
           cx={a.x}
           cy={a.y}
-          r={half * rim.glintA.spread}
+          r={half * (round ? rim.glintA.spread : rim.capsuleSpread)}
           fx={a.x}
           fy={a.y}
         >
@@ -116,7 +116,7 @@ function GlintSvg({
           gradientUnits="userSpaceOnUse"
           cx={b.x}
           cy={b.y}
-          r={half * rim.glintB.spread}
+          r={half * (round ? rim.glintB.spread : rim.capsuleSpread)}
           fx={b.x}
           fy={b.y}
         >

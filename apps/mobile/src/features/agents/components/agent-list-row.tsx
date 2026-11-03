@@ -150,6 +150,7 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
   const row = (
     <ChatLinkPressable
       chatId={agent.id}
+      prefetchServerId={agent.serverId}
       accessibilityLabel={
         waitReason
           ? t("mobile.agent.list.withState", { label: openLabel, state: t(AGENT_WAIT_STATE[waitReason]) })

@@ -8,7 +8,7 @@ import { BlurTargetView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { router, useIsFocused } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
-import { type ParamListBase, useNavigation } from "expo-router/react-navigation";
+import { type ParamListBase, useNavigation, useRoute } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import ArrowDown from "lucide-react-native/icons/arrow-down";
@@ -65,6 +65,7 @@ import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { isZoomPush, markZoomContentReady } from "@/shared/motion/zoomPush";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import {
@@ -193,11 +194,17 @@ const OPEN_TRANSITION_DEADLINE_MS = 700;
  * and the older rows when it is in place. iOS animates the screen while it renders, so it renders
  * them all at once.
  */
-export function useRowsAfterOpenTransition(): boolean {
+export function useRowsAfterOpenTransition(zoomed = false): boolean {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   const [shown, setShown] = useState(!isAndroid);
   useEffect(() => {
     if (shown) return;
+    // Build 11: a zoom push has no native slide to keep short (animation "none" under the opaque zoom
+    // surface), so its rows come on the first frame after mount instead of after transitionEnd.
+    if (zoomed) {
+      const frame = requestAnimationFrame(() => setShown(true));
+      return () => cancelAnimationFrame(frame);
+    }
     const unsubscribe = navigation.addListener("transitionEnd", (event) => {
       if (!event.data.closing) setShown(true);
     });
@@ -206,7 +213,7 @@ export function useRowsAfterOpenTransition(): boolean {
       unsubscribe();
       clearTimeout(deadline);
     };
-  }, [navigation, shown]);
+  }, [navigation, shown, zoomed]);
   return shown;
 }
 
@@ -559,7 +566,10 @@ export function ChatView({
         setAwaitingTurn(true);
       }
   }, [outboxMessages, target.kind]);
-  const rowsShown = useRowsAfterOpenTransition();
+  // Build 11: this chat was opened by the ColorOS zoom (decided at mount, before its options release it).
+  const routeKey = useRoute().key;
+  const [zoomed] = useState(() => isZoomPush(routeKey));
+  const rowsShown = useRowsAfterOpenTransition(zoomed);
   const motion = useChatMotion(
     insets.top + 84,
     keyboardOffset,
@@ -571,8 +581,18 @@ export function ChatView({
     questionForm?.question ? (questionForm.messageId ?? null) : null,
     holdOpening,
     catchingUp,
+    zoomed,
   );
   const atLatest = motion.atLatest;
+  // Build 11: tell the zoom overlay the chat has painted (list revealed, or an empty/starter chat with
+  // its history read), one frame after the commit, so its single dissolve uncovers a finished chat.
+  // Not gated on `zoomed`: a no-op for any route but the armed zoom push, even one mounted late.
+  const zoomPainted = motion.historyVisible || (ready && rowsShown && messages.length === 0);
+  useEffect(() => {
+    if (!zoomPainted) return;
+    const frame = requestAnimationFrame(() => markZoomContentReady(routeKey));
+    return () => cancelAnimationFrame(frame);
+  }, [zoomPainted, routeKey]);
   // The end of a window around a searched message is not the latest message.
   const showLatest = () => {
     if (!detached || !showLatestMessages) {

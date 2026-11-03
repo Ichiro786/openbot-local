@@ -59,20 +59,26 @@ export function isZoomPush(routeKey: string): boolean {
 }
 
 /**
- * The route has appeared (its opening transitionEnd): its pop takes the normal animation again, and
- * the zoom overlay is told it may fade its surface off. True when it was a zoom push.
+ * The route has appeared (its opening transitionEnd): its pop takes the normal animation again.
+ * True when it was a zoom push. Build 11: the overlay no longer uncovers on this (transitionEnd comes
+ * before the chat has painted its rows); it waits for `markZoomContentReady`.
  */
 export function releaseZoomPush(routeKey: string): boolean {
   if (pushes.peek(routeKey) !== true) return false;
   pushes.set(routeKey, false);
-  // The zoomed route is on screen: the overlay may uncover it now.
-  if (routeKey === shownKey && onShown) {
-    const shown = onShown;
-    onShown = null;
-    shownKey = null;
-    shown();
-  }
   return true;
+}
+
+/**
+ * Build 11: the zoom-pushed chat has painted (header, composer and its revealed list or empty state).
+ * The overlay dissolves its surface off it once. Any other route is ignored.
+ */
+export function markZoomContentReady(routeKey: string): void {
+  if (routeKey !== shownKey || !onShown) return;
+  const shown = onShown;
+  onShown = null;
+  shownKey = null;
+  shown();
 }
 
 /** The route has closed: forget its key, so the memo holds only routes that are on a stack. */

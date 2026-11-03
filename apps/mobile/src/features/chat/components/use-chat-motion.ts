@@ -68,6 +68,8 @@ export function useChatMotion(
   holdOpening = false,
   /** The chat shows the messages that the phone kept, and reads the latest page of the host. */
   catchingUp = false,
+  /** Build 11: opened by the ColorOS zoom. The zoom surface's dissolve is the fade, so no inner fade. */
+  zoomed = false,
 ) {
   const listRef = useRef<LegendListRef>(null);
   const reducedMotion = useReducedMotion();
@@ -448,7 +450,11 @@ export function useChatMotion(
     },
   );
   const historyStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(revealed.get() ? 1 : 0, { duration: 150, reduceMotion: ReduceMotion.System }),
+    opacity: zoomed
+      ? revealed.get()
+        ? 1
+        : 0
+      : withTiming(revealed.get() ? 1 : 0, { duration: 150, reduceMotion: ReduceMotion.System }),
   }));
   const firstMessageStyle = useAnimatedStyle(() => ({
     opacity: firstOpacity.get(),

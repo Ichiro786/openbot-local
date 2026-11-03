@@ -1,7 +1,8 @@
 import { useThemeColor } from "heroui-native/hooks";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { StyleSheet, useColorScheme, useWindowDimensions, View } from "react-native";
 import Animated, {
+  Easing,
   interpolate,
   runOnJS,
   useAnimatedReaction,
@@ -10,7 +11,9 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { create } from "zustand";
+import { glass } from "@/shared/glass/tokens";
 import { zoom } from "./tokens";
 import { armZoomPush, disarmZoomPush } from "./zoomPush";
 
@@ -28,8 +31,14 @@ let nextKey = 1;
 let hostMounted = false;
 /** The latest the push runs, whatever happens to the spring. */
 const SAFETY_MS = 1200;
-/** The longest the surface waits for the pushed screen to appear before it uncovers anyway. */
-const SHOWN_SAFETY_MS = 1500;
+/**
+ * The longest the surface waits after the push for the chat's ready signal (`markZoomContentReady`)
+ * before it dissolves anyway (build 11: 600 ms, spec §3; was 1.5 s on transitionEnd).
+ */
+const SHOWN_SAFETY_MS = 600;
+/** Build 11: one dissolve of the surface (and its skeleton) off the painted chat. */
+const DISSOLVE_MS = 160;
+const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
 /**
  * Opens a bot or chat with the ColorOS zoom: a surface grows out of the source rect to the full
@@ -85,7 +94,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     uncovered.current = true;
     if (shownTimer.current) clearTimeout(shownTimer.current);
     // Clear whether or not the fade completes (an interrupted animation reports finished=false).
-    cover.value = withTiming(0, { duration: 220 }, () => {
+    cover.value = withTiming(0, { duration: DISSOLVE_MS, easing: DISSOLVE_EASING }, () => {
       runOnJS(clear)();
     });
   };
@@ -96,6 +105,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     setPassThrough(true);
     shownTimer.current = setTimeout(uncover, SHOWN_SAFETY_MS);
     // Build 10: the pushed chat takes no native slide under the surface (one open animation).
+    // Build 11: `uncover` runs when the chat marks itself painted, or SHOWN_SAFETY_MS after the push.
     armZoomPush(uncover);
     navigate();
   };
@@ -135,6 +145,16 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     };
   });
   const dim = useAnimatedStyle(() => ({ opacity: zoom.backgroundDim * Math.min(p.value, 1) * cover.value }));
+  // Build 11: the chat's silhouette fades in on the surface, so the hold before the chat is ready
+  // already looks like the chat instead of a flat colour (spec §3 target).
+  const skeletonStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(p.value, [0.45, 0.9], [0, 1], "clamp"),
+    // Held at its screen place while the surface grows around it.
+    transform: [
+      { translateX: -interpolate(p.value, [0, 1], [rect.x, 0]) },
+      { translateY: -interpolate(p.value, [0, 1], [rect.y, 0]) },
+    ],
+  }));
 
   return (
     <View pointerEvents={passThrough ? "none" : "auto"} style={StyleSheet.absoluteFill}>
@@ -142,12 +162,40 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
       <Animated.View
         pointerEvents="none"
         style={[styles.surface, { backgroundColor: String(surface ?? "#000") }, surfaceStyle]}
-      />
+      >
+        <Animated.View style={[{ width, height }, skeletonStyle]}>
+          <ChatZoomSkeleton />
+        </Animated.View>
+      </Animated.View>
     </View>
   );
 }
 
+/**
+ * The chat's shapes at their final places (ColorOS header: back circle, avatar over the name pill,
+ * ••• pill; the composer capsule). Plain Views in the solid glass fill: no data, no blur.
+ */
+function ChatZoomSkeleton() {
+  const insets = useSafeAreaInsets();
+  const fill = useColorScheme() === "light" ? "rgba(0, 0, 0, 0.06)" : glass.material.button.solidDark;
+  const top = insets.top + 8;
+  return (
+    <>
+      <View style={[styles.skBack, { top: top + 4, backgroundColor: fill }]} />
+      <View style={[styles.skPill, { top: top + 24, backgroundColor: fill }]} />
+      <View style={[styles.skAvatar, { top, backgroundColor: fill }]} />
+      <View style={[styles.skMore, { top: top + 4, backgroundColor: fill }]} />
+      <View style={[styles.skComposer, { bottom: insets.bottom + 8, backgroundColor: fill }]} />
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  skBack: { position: "absolute", left: 12, width: 40, height: 40, borderRadius: 20 },
+  skMore: { position: "absolute", right: 12, width: 52, height: 40, borderRadius: 20 },
+  skPill: { position: "absolute", alignSelf: "center", width: 160, height: 46, borderRadius: 23 },
+  skAvatar: { position: "absolute", alignSelf: "center", width: 34, height: 34, borderRadius: 17 },
+  skComposer: { position: "absolute", left: 12, right: 12, height: 52, borderRadius: 26 },
   dim: { backgroundColor: "#000" },
   surface: { position: "absolute", overflow: "hidden", borderCurve: "continuous" },
 });

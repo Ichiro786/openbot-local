@@ -3,6 +3,7 @@ import { type ComponentProps, createContext, useContext, useEffect, useRef } fro
 import { Pressable, type ViewInstance } from "react-native";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
 import type { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
+import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -14,13 +15,23 @@ export const ChatNavigationGateContext = createContext<ReturnType<typeof createC
 // router.push.
 export function ChatLinkPressable({
   chatId,
+  prefetchServerId,
   onPress,
+  onPressIn,
   ref,
   ...props
 }: ComponentProps<typeof Pressable> & {
   /** The chat this row opens. The chat list pane does not open the chat that shows already. */
   chatId?: string;
+  /**
+   * Build 11: the agent's server. With it, a touch on the row starts reading the agent chat's latest
+   * page (the read the chat makes on mount, deduplicated by the store), so the chat is often ready on
+   * its first commit.
+   */
+  prefetchServerId?: string;
 }) {
+  const conversationStore = useMobileWorkspaceSelector((current) => current.conversationStore);
+  const loadConversation = useMobileWorkspaceSelector((current) => current.loadConversation);
   const gate = useContext(ChatNavigationGateContext);
   const pane = useChatListPane();
   const route = useRoute();
@@ -44,6 +55,11 @@ export function ChatLinkPressable({
         self.current = node;
         if (typeof ref === "function") ref(node);
         else if (ref && "current" in ref) ref.current = node;
+      }}
+      onPressIn={(event) => {
+        if (chatId && prefetchServerId && !conversationStore.isUpToDate(chatId))
+          void loadConversation(chatId, prefetchServerId).catch(() => undefined);
+        onPressIn?.(event);
       }}
       onPress={(event) => {
         if (event.defaultPrevented) return;

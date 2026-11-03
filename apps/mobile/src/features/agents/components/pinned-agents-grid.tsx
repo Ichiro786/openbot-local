@@ -130,6 +130,7 @@ const PinnedAgentItem = memo(function PinnedAgentItem({ agent }: { agent: Mobile
   const trigger = (
     <ChatLinkPressable
       chatId={agent.id}
+      prefetchServerId={agent.serverId}
       accessibilityLabel={
         waitReason
           ? t("mobile.agent.list.withState", { label: openLabel, state: t(AGENT_WAIT_STATE[waitReason]) })
