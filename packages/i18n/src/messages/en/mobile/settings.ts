@@ -83,6 +83,9 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.animations.searchTransitions": "Animate search results",
   "mobile.settings.animations.searchTransitionsFooter":
     "Search results and search messages fade in and out with a short blur when they change. When motion is reduced, they only fade. When this is off, they change at once.",
+  "mobile.settings.animations.colorOSMotion": "ColorOS motion",
+  "mobile.settings.animations.colorOSMotionFooter":
+    "Buttons press in with a spring and a light glow, menus grow from where you tap with frosted glass, and chats zoom open. When motion is reduced, only the glow and haptics stay.",
   "mobile.settings.feedback.footer": "Touch feedback for actions in the app on this device.",
   "mobile.settings.feedback.haptics": "Haptics",
   "mobile.settings.feedback.retry": "Retry saving haptics setting",

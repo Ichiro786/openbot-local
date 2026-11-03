@@ -1,7 +1,7 @@
-import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
 import { Pressable, type PressableProps, type StyleProp, StyleSheet, type ViewStyle } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { haptics } from "@/shared/lib/haptics";
 import { press } from "./tokens";
 import { useColorOSMotion } from "./useColorOSMotion";
 
@@ -50,7 +50,7 @@ export function PressableSquish({
         if (enabled) {
           if (!reduceMotion) scale.value = withSpring(target, press.spring);
           light.value = withTiming(press.highlightOpacity, { duration: press.highlightInMs });
-          if (haptic) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          if (haptic) void haptics.impact("light");
         }
         onPressIn?.(e);
       }}

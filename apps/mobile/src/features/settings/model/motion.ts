@@ -14,6 +14,8 @@ export interface MotionPreferences {
   textReveal: boolean;
   /** Search results and search messages fade in and out with a short blur when they change. */
   searchTransitions: boolean;
+  /** ColorOS 17 motion: springy press feedback, glass menus, stretch and zoom. */
+  colorOSMotion: boolean;
 }
 
 export type MotionPreference = keyof MotionPreferences;
@@ -25,6 +27,7 @@ const DEFAULTS: MotionPreferences = {
   composerResize: true,
   textReveal: true,
   searchTransitions: true,
+  colorOSMotion: true,
 };
 export const MOTION_PREFERENCE_NAMES: readonly MotionPreference[] = [
   "allAnimations",
@@ -33,6 +36,7 @@ export const MOTION_PREFERENCE_NAMES: readonly MotionPreference[] = [
   "composerResize",
   "textReveal",
   "searchTransitions",
+  "colorOSMotion",
 ];
 
 export const useMotionPreferences = create<MotionPreferences & { ready: boolean }>(() => ({

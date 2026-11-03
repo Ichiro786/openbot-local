@@ -1,21 +1,18 @@
-import { useReducedMotion } from "react-native-reanimated";
-import { create } from "zustand";
+import { useMotionPreferences } from "@/features/settings/model/motion";
+import { useReducedMotion } from "@/shared/lib/motion";
 
-type ColorOSMotionState = {
-  /** Setting "ColorOS motion", default ON. */
-  enabled: boolean;
-  setEnabled: (enabled: boolean) => void;
-};
-
-/** Build 7 flag. Wire persistence through the app's settings model. */
-export const useColorOSMotionStore = create<ColorOSMotionState>((set) => ({
-  enabled: true,
-  setEnabled: (enabled) => set({ enabled }),
-}));
-
-/** `enabled` gates every ColorOS primitive; `reduceMotion` drops transforms but keeps feedback. */
+/**
+ * The "ColorOS motion" setting (Settings > Animations, default ON, persisted with the other
+ * motion preferences). `enabled` gates every ColorOS primitive; `reduceMotion` (system Reduce
+ * Motion or the app's "all animations" switch) drops transforms but keeps the highlight and haptics.
+ */
 export function useColorOSMotion() {
-  const enabled = useColorOSMotionStore((s) => s.enabled);
+  const enabled = useMotionPreferences((s) => s.colorOSMotion);
   const reduceMotion = useReducedMotion();
   return { enabled, reduceMotion };
+}
+
+/** Non-hook read for callbacks outside render. */
+export function colorOSMotionEnabled(): boolean {
+  return useMotionPreferences.getState().colorOSMotion;
 }

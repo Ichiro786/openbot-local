@@ -54,6 +54,11 @@ export function AnimationsSettingsScreen() {
       label: t("mobile.settings.animations.searchTransitions"),
       footer: t("mobile.settings.animations.searchTransitionsFooter"),
     },
+    {
+      name: "colorOSMotion",
+      label: t("mobile.settings.animations.colorOSMotion"),
+      footer: t("mobile.settings.animations.colorOSMotionFooter"),
+    },
   ];
   return (
     <SettingsContent>

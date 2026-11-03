@@ -29,8 +29,13 @@ export const press = {
   scale: 0.96,
   /** ζ 0.8 at k 600 → damping = 0.8·2·√600 ≈ 39. Alt (spec §2): 900/45 (~60 ms). */
   spring: spring(600, 39),
-  /** Highlight: luma +45% in ~25 ms, decays over 120–150 ms (spec §2, H). */
-  highlightOpacity: 0.22,
+  /**
+   * Highlight: luma +45% in ~25 ms, decays over 120–150 ms (spec §2, H). A full white fill at α
+   * lifts a #242424 button by (255−36)·α, so +24 luma (36→60) is α ≈ 0.11. Alt (radial, spec §2): 0.22.
+   */
+  highlightOpacity: 0.11,
+  /** Rows: "+6% white for 25 ms" (spec §4). */
+  rowHighlightOpacity: 0.06,
   highlightInMs: 25,
   /** Alt: 120. */
   highlightOutMs: 140,
