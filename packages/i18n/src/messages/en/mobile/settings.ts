@@ -82,7 +82,7 @@ export const messages = defineMessages("mobile.settings", {
     "Search results and search messages fade in and out with a short blur when they change. When motion is reduced, they only fade. When this is off, they change at once.",
   "mobile.settings.animations.colorOSMotion": "ColorOS motion",
   "mobile.settings.animations.colorOSMotionFooter":
-    "Buttons press in with a spring and a light glow, menus grow from where you tap with frosted glass, and chats zoom open. When motion is reduced, only the glow and haptics stay.",
+    "On by default. Glass buttons press and stretch under your finger, menus grow from where you tap with frosted glass, and chats zoom open. Turn it off for the Classic look, a simpler fallback. When motion is reduced, only the glow and haptics stay.",
   "mobile.settings.crash.lastTitle": "OpenBot closed unexpectedly last time",
   "mobile.settings.crash.lastBody":
     "A crash log was saved on this phone. Copy it and send it to whoever helps you fix the app.",
