@@ -13,7 +13,7 @@ import { composerFrost, pill } from "./tokens";
  *
  * Blur rules (build 9): the BlurView always uses `dimezisBlurViewSdk31Plus` (never `none`, which
  * paints a solid tint), mounts at opacity 0 and fades in after its first layout, and is hidden with
- * opacity while `shown` is false. Under the blur, the card's solid fill comes back with the inverse
+ * opacity while `shown` is false; once faded out it stops blurring (`none`) until it is shown again. Under the blur, the card's solid fill comes back with the inverse
  * opacity, so a paused or disabled frost is the build 9 composer.
  */
 export function ComposerFrost({
@@ -33,6 +33,17 @@ export function ComposerFrost({
   const [ready, setReady] = useState(false);
   const visible = useSharedValue(0);
   const on = ready && shown && ANDROID_BLUR;
+  // Paused = invisible and not blurring (build 9 rule 8, as HomeEdgeBlur): the blur keeps running
+  // until the fade-out ends, then `none` (which paints a solid tint, so only once at opacity 0).
+  const [blurring, setBlurring] = useState(on);
+  useEffect(() => {
+    if (on) {
+      setBlurring(true);
+      return;
+    }
+    const timer = setTimeout(() => setBlurring(false), composerFrost.fadeOutMs + 40);
+    return () => clearTimeout(timer);
+  }, [on]);
   useEffect(() => {
     visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : composerFrost.fadeOutMs }));
   }, [on, visible]);
@@ -45,7 +56,7 @@ export function ComposerFrost({
         {ANDROID_BLUR && target.current ? (
           <BlurView
             blurTarget={target}
-            blurMethod="dimezisBlurViewSdk31Plus"
+            blurMethod={on || blurring ? "dimezisBlurViewSdk31Plus" : "none"}
             intensity={composerFrost.intensity}
             // The composer is small: blur a quarter-size image of the list, as the home pill does.
             blurReductionFactor={4}

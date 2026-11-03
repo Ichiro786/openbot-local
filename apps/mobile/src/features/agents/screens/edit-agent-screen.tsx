@@ -193,7 +193,7 @@ function AgentForm({
     (edits.reasoningEffort !== undefined && edits.reasoningEffort !== agent.reasoningEffort) ||
     accountChanged;
   const valid =
-    page !== "info" ||
+    (page !== "info" && page !== "profile") ||
     (Boolean(name.trim()) &&
       name.length <= INPUT_LIMITS.agentName &&
       title.length <= INPUT_LIMITS.agentTitle &&

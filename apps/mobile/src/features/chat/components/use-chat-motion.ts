@@ -168,7 +168,8 @@ export function useChatMotion(
         } else if (!keyboardDismissed.get()) {
           lastKeyboardHeight.set(event.height);
           // A show reported only once settled: this phone sends no IME frames (or the keyboard resized).
-          if (event.duration === 0 && !framesMissing.get()) {
+          // Only where the fallback runs (ColorOS ON, Android): OFF stays build 9 and says nothing.
+          if (fallback.get() && event.duration === 0 && !framesMissing.get()) {
             framesMissing.set(true);
             scheduleOnRN(reportSettledKeyboard, event.height);
           }

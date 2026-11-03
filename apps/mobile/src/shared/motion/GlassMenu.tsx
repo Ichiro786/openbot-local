@@ -780,6 +780,16 @@ function ReactionBar({
     opacity: fade.get() * (1 - picker.get()),
     transform: [{ scale: open.get() }],
   }));
+  // The grid stays mounted until its fade-out ends, so leaving it is a crossfade as opening is.
+  const [gridMounted, setGridMounted] = useState(pickerOpen);
+  useEffect(() => {
+    if (pickerOpen) {
+      setGridMounted(true);
+      return;
+    }
+    const timer = setTimeout(() => setGridMounted(false), PICKER_MS + 20);
+    return () => clearTimeout(timer);
+  }, [pickerOpen]);
   const gridStyle = useAnimatedStyle(() => ({
     opacity: fade.get() * picker.get(),
     transform: [{ scale: open.get() * (0.92 + 0.08 * picker.get()) }],
@@ -843,9 +853,11 @@ function ReactionBar({
           </Pressable>
         </View>
       </Animated.View>
-      {pickerOpen ? (
+      {gridMounted ? (
         <Animated.View
           accessibilityLabel={reactions.moreLabel}
+          pointerEvents={pickerOpen ? "auto" : "none"}
+          importantForAccessibility={pickerOpen ? "auto" : "no-hide-descendants"}
           style={[
             styles.bar,
             {
@@ -859,7 +871,15 @@ function ReactionBar({
             gridStyle,
           ]}
         >
-          <GlassFill {...glass} width={width} height={PICKER_HEIGHT} radius={menu.radius} suffix="-grid" />
+          {/* Leaving, the grid fades out as solid glass: the card and the bar have their blurs back. */}
+          <GlassFill
+            {...glass}
+            frost={pickerOpen ? glass.frost : null}
+            width={width}
+            height={PICKER_HEIGHT}
+            radius={menu.radius}
+            suffix="-grid"
+          />
           <ScrollView
             style={{ height: PICKER_HEIGHT }}
             contentContainerStyle={styles.grid}

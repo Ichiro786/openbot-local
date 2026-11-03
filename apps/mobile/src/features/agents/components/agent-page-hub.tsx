@@ -79,6 +79,8 @@ export function AgentPageHero({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("common.edit")}
+          // 34 dp tall: the slop makes the target 48 dp (M3).
+          hitSlop={7}
           onPress={() => openSubPage(agent, "profile")}
           style={({ pressed }) => [styles.edit, { backgroundColor: String(field), opacity: pressed ? 0.6 : 1 }]}
         >

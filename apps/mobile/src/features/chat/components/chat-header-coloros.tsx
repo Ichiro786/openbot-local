@@ -1,12 +1,10 @@
-import { BlurView } from "expo-blur";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
-import { type RefObject, useEffect, useState } from "react";
+import type { RefObject } from "react";
 import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
@@ -14,13 +12,12 @@ import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatGlassButton, ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
-import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { MenuView } from "@/shared/components/menu-view";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { ComposerFrost } from "@/shared/motion/ComposerFrost";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
-import { composerFrost, pill } from "@/shared/motion/tokens";
 import type { AgentChatTarget } from "../model/chat-target";
 
 const AVATAR = 34;
@@ -119,7 +116,7 @@ export function ColorOSChatHeader({
         </View>
         <View pointerEvents="box-none" style={styles.middle}>
           <View style={[styles.pill, { marginTop: AVATAR - OVERLAP }]}>
-            <HeaderFrost target={frostTarget} solid={String(fallbackBackground)} dark={dark} />
+            <HeaderFrost target={frostTarget} solid={String(fallbackBackground)} />
             {threadMenu ? (
               <MenuView
                 colorScheme={dark ? "dark" : "light"}
@@ -167,62 +164,14 @@ export function ColorOSChatHeader({
 }
 
 /**
- * The pill's glass: the composer's frost (blur of the message list under a more opaque tint, rim).
- * Blur rules as ComposerFrost: dimezis only, faded in from 0 after layout, hidden with opacity, the
- * solid fill under it with the inverse opacity.
+ * The pill's glass: the composer's frost (the same component, so the same blur rules: dimezis only,
+ * faded in after layout, stopped once faded out). It pauses while a frosted glass menu is open. Without
+ * a target (frost off for this chat) the pill is the solid fill.
  */
-function HeaderFrost({
-  target,
-  solid,
-  dark,
-}: {
-  target?: RefObject<ViewInstance | null>;
-  solid: string;
-  dark: boolean;
-}) {
+function HeaderFrost({ target, solid }: { target?: RefObject<ViewInstance | null>; solid: string }) {
   const menuFrost = useGlassMenuFrostOpen();
-  const [ready, setReady] = useState(false);
-  const on = ANDROID_BLUR && Boolean(target) && ready && !menuFrost;
-  const visible = useSharedValue(0);
-  useEffect(() => {
-    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : composerFrost.fadeOutMs }));
-  }, [on, visible]);
-  const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
-  const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));
-  return (
-    <>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: solid }, solidStyle]} />
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, frostStyle]} onLayout={() => setReady(true)}>
-        {ANDROID_BLUR && target?.current ? (
-          <BlurView
-            blurTarget={target}
-            blurMethod="dimezisBlurViewSdk31Plus"
-            intensity={composerFrost.intensity}
-            blurReductionFactor={4}
-            tint={dark ? "dark" : "light"}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: dark ? composerFrost.fillDark : composerFrost.fillLight },
-          ]}
-        />
-      </Animated.View>
-      <View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          styles.rim,
-          {
-            borderColor: `rgba(255, 255, 255, ${dark ? pill.rimBottomDark : pill.rimBottomLight})`,
-            borderTopColor: `rgba(255, 255, 255, ${dark ? pill.rimTopDark : pill.rimTopLight})`,
-          },
-        ]}
-      />
-    </>
-  );
+  if (!target) return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: solid }]} />;
+  return <ComposerFrost target={target} shown={!menuFrost} solid={solid} radius={PILL_HEIGHT / 2} />;
 }
 
 const styles = StyleSheet.create({
@@ -250,5 +199,4 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 11, lineHeight: 14 },
   badge: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
   avatar: { position: "absolute", top: 0 },
-  rim: { borderRadius: PILL_HEIGHT / 2, borderCurve: "continuous", borderWidth: 1 },
 });

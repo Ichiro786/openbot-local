@@ -82,6 +82,7 @@ import { selectionColorProps } from "@/shared/lib/selection-color";
 import { currentText, useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
+import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { HomeEdgeBlur } from "@/shared/motion/HomeEdgeBlur";
 import { edges } from "@/shared/motion/tokens";
 
@@ -1042,13 +1043,16 @@ function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeo
   return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown} colorOSFrost />;
 }
 
-/** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included). */
+/** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
 function HomeSearchEdge({
   paused,
   ...props
 }: { paused: boolean } & Omit<ComponentProps<typeof HomeEdgeBlur>, "paused">) {
   const drawerShown = useAppDrawerShown();
-  return <HomeEdgeBlur {...props} paused={paused || drawerShown} />;
+  // Build 10: a frosted glass menu (••• or an agent row's long-press) is one more blur over the pill,
+  // so the edge pauses while it is open and home runs at most two.
+  const menuFrost = useGlassMenuFrostOpen();
+  return <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost} />;
 }
 
 interface Shortcut {
