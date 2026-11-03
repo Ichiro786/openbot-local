@@ -1,19 +1,25 @@
 import { BlurView } from "expo-blur";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import Plus from "lucide-react-native/icons/plus";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
   View,
   type ViewInstance,
 } from "react-native";
 import Animated, {
   Easing,
   runOnJS,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -39,6 +45,25 @@ export type GlassMenuItem = {
   selected?: boolean;
   /** Draws a divider above this item. */
   separatorBefore?: boolean;
+  /**
+   * Build 10: a sub-menu. Choosing this row shows these rows in the same card (a back row on top),
+   * as the HeroUI sub-menu did; the menu does not close.
+   */
+  children?: GlassMenuItem[];
+};
+
+/**
+ * Build 10: the quick reactions of a message, drawn as a frosted bar over the card. "+" grows the
+ * bar into the full emoji grid. A pick closes the menu and arrives in `onSelect` as
+ * `reactionMenuId(emoji)` (`null` removes the reader's reaction), after the menu has unmounted.
+ */
+export type GlassReactions = {
+  quick: readonly string[];
+  all: readonly string[];
+  /** The reader's own reaction, shown selected; picking it again removes it. */
+  own: string | null;
+  reactLabel: (emoji: string) => string;
+  moreLabel: string;
 };
 
 export type GlassMenuAnchor = { x: number; y: number; width: number; height: number };
@@ -49,11 +74,29 @@ type GlassMenuRequest = {
   anchor: GlassMenuAnchor | null;
   title?: string;
   items: GlassMenuItem[];
+  /** Build 10: the reaction bar over the card (message long-press). */
+  reactions?: GlassReactions;
+  /** Build 10: a light dim behind the menu (message long-press). */
+  dim?: boolean;
   /** Runs once, after the menu has closed and unmounted. */
   onSelect: (id: string) => void;
-  /** Runs once when the menu is gone, chosen or not. */
-  onClose: () => void;
+  /**
+   * Runs once when the menu is gone. `chosen` is true when an action follows in `onSelect` (it runs
+   * after the menu has unmounted and a frame has passed), so an opener can close after the action.
+   */
+  onClose: (chosen: boolean) => void;
 };
+
+const REACTION_PREFIX = "glass-reaction:";
+/** The `onSelect` id of a reaction pick. An empty emoji removes the reader's reaction. */
+export function reactionMenuId(emoji: string | null): string {
+  return `${REACTION_PREFIX}${emoji ?? ""}`;
+}
+/** The reaction an `onSelect` id carries: an emoji, `null` for a removal, `undefined` for no reaction. */
+export function reactionFromMenuId(id: string): string | null | undefined {
+  if (!id.startsWith(REACTION_PREFIX)) return undefined;
+  return id.slice(REACTION_PREFIX.length) || null;
+}
 
 const WIDTH = 224;
 const PADDING = 8;
@@ -76,7 +119,15 @@ function once<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => vo
   };
 }
 
-const useGlassMenuStore = create<{ request: GlassMenuRequest | null }>(() => ({ request: null }));
+const useGlassMenuStore = create<{ request: GlassMenuRequest | null; frosted: boolean }>(() => ({
+  request: null,
+  frosted: false,
+}));
+/** Whether an open glass menu draws two blurs (reaction bar + card), so a screen can pause its own. */
+export function useGlassMenuDoubleFrost(): boolean {
+  return useGlassMenuStore((s) => Boolean(s.request?.reactions) && s.frosted);
+}
+
 let nextKey = 1;
 let hostMounted = false;
 /** Keys of menus whose opener unmounted. */
@@ -95,7 +146,7 @@ export function openGlassMenu(request: Omit<GlassMenuRequest, "key">): number | 
   useGlassMenuStore.setState({
     request: { ...request, key, onClose: once(request.onClose), onSelect: once(request.onSelect) },
   });
-  previous?.onClose();
+  previous?.onClose(false);
   return key;
 }
 
@@ -106,7 +157,7 @@ export function closeGlassMenu(key: number): void {
   const request = useGlassMenuStore.getState().request;
   if (request?.key !== key) return;
   useGlassMenuStore.setState({ request: null });
-  request.onClose();
+  request.onClose(false);
 }
 
 /**
@@ -124,7 +175,7 @@ export function GlassMenuHost() {
       hostMounted = false;
       const open = useGlassMenuStore.getState().request;
       useGlassMenuStore.setState({ request: null });
-      open?.onClose();
+      open?.onClose(false);
     };
   }, []);
   const onLayout = (_event: LayoutChangeEvent) => {
@@ -139,10 +190,25 @@ export function GlassMenuHost() {
   );
 }
 
+/** A row of the level on screen: an item, or the back row of a sub-menu. */
+type Entry = GlassMenuItem & { back?: boolean };
 type Row = { top: number; index: number };
 
+const BACK_ID = "glass-menu-back";
+/** Reaction bar: one 44 dp slot per emoji and for "+", in a 52 dp capsule. */
+const BAR_SLOT = 44;
+const BAR_HEIGHT = 52;
+const BAR_PAD = 4;
+const BAR_GAP = 8;
+const PICKER_COLUMNS = 6;
+const PICKER_HEIGHT = 236;
+const LEVEL_MS = 180;
+const PICKER_MS = 200;
+/** Strong ease-out for UI (Expo animation skill): no ease-in on anything the user watches. */
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
 /** Lays the rows out once, so a finger y maps to a row without measuring. */
-function layout(items: GlassMenuItem[], hasTitle: boolean) {
+function layout(items: Entry[], hasTitle: boolean) {
   const rows: Row[] = [];
   let y = PADDING + (hasTitle ? TITLE_HEIGHT : 0);
   items.forEach((item, index) => {
@@ -153,6 +219,19 @@ function layout(items: GlassMenuItem[], hasTitle: boolean) {
   return { rows, height: y + PADDING };
 }
 
+/** The items of the level at `path` (indices of the sub-menu rows chosen so far). */
+function levelAt(items: GlassMenuItem[], path: number[]): { items: GlassMenuItem[]; parent: GlassMenuItem | null } {
+  let level = items;
+  let parent: GlassMenuItem | null = null;
+  for (const index of path) {
+    const next = level[index];
+    if (!next?.children?.length) break;
+    parent = next;
+    level = next.children;
+  }
+  return { items: level, parent };
+}
+
 /**
  * The ColorOS 17 popup menu. It grows out of its anchor from 0.25 on a critically damped 1450/76
  * spring and is a 27 dp card: frosted (blur of the focused screen's target under a 0.56 → 0.80 tint)
@@ -161,6 +240,10 @@ function layout(items: GlassMenuItem[], hasTitle: boolean) {
  * finger and stretches up to 1.5%. Touch is the React Native responder of one layer over the card:
  * the JS thread decides the row, the UI thread only animates. Back and an outside tap close it. The
  * chosen action runs after the menu has unmounted, one action per open.
+ *
+ * Build 10: a sub-menu row shows its rows in the same card (they slide in, the card resizes, a back
+ * row returns); a level taller than the room scrolls with a drag; a message menu carries a frosted
+ * reaction bar over the card that grows into the emoji grid.
  */
 function GlassMenuOverlay({
   request,
@@ -169,32 +252,78 @@ function GlassMenuOverlay({
   request: GlassMenuRequest;
   box: { x: number; y: number; width: number; height: number };
 }) {
-  const { title, items } = request;
+  const { title, items, reactions } = request;
   const { reduceMotion } = useColorOSMotion();
   const { t } = useText();
   const dark = useUniwind().theme === "dark";
   const safe = useSafeAreaInsets();
   const gradientId = `glass-menu-${useId().replaceAll(":", "")}`;
-  const { rows, height: naturalHeight } = useMemo(() => layout(items, Boolean(title)), [items, title]);
   // Read once per open: the focused screen's target, only where Android draws the blur.
   const [frost] = useState<RefObject<ViewInstance | null> | null>(() => (ANDROID_BLUR ? currentFrostTarget() : null));
+  useEffect(() => {
+    useGlassMenuStore.setState({ frosted: Boolean(frost) });
+    return () => useGlassMenuStore.setState({ frosted: false });
+  }, [frost]);
 
-  // Placement in host coordinates: below the anchor when it fits, else above; kept on screen.
+  // The sub-menu on screen, and the rows of that level.
+  const [path, setPath] = useState<number[]>([]);
+  const level = useMemo(() => levelAt(items, path), [items, path]);
+  const entries = useMemo<Entry[]>(
+    () =>
+      level.parent
+        ? [
+            { id: BACK_ID, title: level.parent.title, back: true },
+            ...level.items.map((item, index) => ({ ...item, separatorBefore: index === 0 || item.separatorBefore })),
+          ]
+        : level.items,
+    [level],
+  );
+  const hasTitle = Boolean(title) && path.length === 0;
+  const laid = useMemo(() => layout(entries, hasTitle), [entries, hasTitle]);
+  const rows = laid.rows;
+  // A reaction-only menu (no rows) draws no card, only the bar.
+  const cardShown = entries.length > 0;
+  const naturalHeight = cardShown ? laid.height : 0;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSettled, setPickerSettled] = useState(false);
+
+  // The anchor in host coordinates (a point in the middle when there is none).
+  const anchor = useMemo(
+    () =>
+      request.anchor
+        ? { ...request.anchor, x: request.anchor.x - box.x, y: request.anchor.y - box.y }
+        : { x: box.width / 2, y: box.height / 2, width: 0, height: 0 },
+    [request.anchor, box],
+  );
+  const barOffset = reactions ? BAR_HEIGHT + BAR_GAP : 0;
+  const barWidth = reactions ? BAR_PAD * 2 + BAR_SLOT * (reactions.quick.length + 1) : 0;
+  const groupWidth = Math.max(WIDTH, barWidth);
+  // The side is chosen for the first level and kept, so a sub-menu never jumps to the other side.
+  const side = useRef<boolean | null>(null);
+  // Placement in host coordinates: below the anchor when it fits, else above; kept on screen. The
+  // reaction bar sits over the card on both sides.
   const frame = useMemo(() => {
-    const a = request.anchor
-      ? { ...request.anchor, x: request.anchor.x - box.x, y: request.anchor.y - box.y }
-      : { x: box.width / 2, y: box.height / 2, width: 0, height: 0 };
-    const below = box.height - safe.bottom - EDGE - (a.y + a.height + menu.anchorGap);
-    const above = a.y - safe.top - EDGE - menu.anchorGap;
-    const placeBelow = below >= naturalHeight || below >= above;
-    const height = Math.max(menu.rowPitch, Math.min(naturalHeight, placeBelow ? below : above));
+    const a = anchor;
+    const below = box.height - safe.bottom - EDGE - (a.y + a.height + menu.anchorGap + barOffset);
+    const above = a.y - safe.top - EDGE - menu.anchorGap - barOffset;
+    if (side.current === null) side.current = below >= naturalHeight || below >= above;
+    const placeBelow = side.current;
+    const height = Math.max(cardShown ? menu.rowPitch : 0, Math.min(naturalHeight, placeBelow ? below : above));
     const alignRight = a.x + a.width / 2 > box.width / 2;
-    const left = Math.max(EDGE, Math.min(box.width - WIDTH - EDGE, alignRight ? a.x + a.width - WIDTH : a.x));
-    const top = placeBelow ? a.y + a.height + menu.anchorGap : a.y - menu.anchorGap - height;
+    const groupLeft = Math.max(
+      EDGE,
+      Math.min(box.width - groupWidth - EDGE, alignRight ? a.x + a.width - groupWidth : a.x),
+    );
+    const left = alignRight ? groupLeft + groupWidth - WIDTH : groupLeft;
+    const barLeft = alignRight ? groupLeft + groupWidth - barWidth : groupLeft;
+    const top = placeBelow ? a.y + a.height + menu.anchorGap + barOffset : a.y - menu.anchorGap - height;
     const originX = Math.max(0, Math.min(WIDTH, a.x + a.width / 2 - left));
-    const originY = placeBelow ? 0 : height;
-    return { left, top, height, originX, originY };
-  }, [request.anchor, box, safe.top, safe.bottom, naturalHeight]);
+    const originY = placeBelow ? -barOffset : height;
+    return { left, top, height, originX, originY, barLeft, scrollable: naturalHeight > height };
+  }, [anchor, box, safe.top, safe.bottom, naturalHeight, barOffset, groupWidth, barWidth, cardShown]);
+  const barTop = frame.top - barOffset;
+  // The emoji grid grows down from the bar's top, kept on screen.
+  const pickerTop = Math.max(safe.top + EDGE, Math.min(barTop, box.height - safe.bottom - EDGE - PICKER_HEIGHT));
 
   const open = useSharedValue(reduceMotion ? 1 : menu.fromScale);
   const fade = useSharedValue(0);
@@ -202,10 +331,18 @@ function GlassMenuOverlay({
   const highlightAlpha = useSharedValue(0);
   const lean = useSharedValue(0);
   const stretchY = useSharedValue(1);
+  // A new level pops in from 0.97 (transform only; the card takes the level's size at once).
+  const levelScale = useSharedValue(1);
+  const scroll = useSharedValue(0);
+  const levelIn = useSharedValue(1);
+  const levelFrom = useSharedValue(0);
+  const picker = useSharedValue(0);
   const active = useRef(-1);
   const closing = useRef(false);
   const done = useRef(false);
   const safety = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollNow = useRef(0);
+  const drag = useRef<{ y0: number; scroll0: number; scrolling: boolean } | null>(null);
 
   useEffect(() => {
     if (!reduceMotion) open.set(withSpring(1, menu.openSpring));
@@ -215,6 +352,20 @@ function GlassMenuOverlay({
     };
   }, [reduceMotion, open, fade]);
 
+  // A new level starts at the top of its rows.
+  const resetScroll = () => {
+    scrollNow.current = 0;
+    scroll.set(0);
+  };
+
+  useEffect(() => {
+    picker.set(withTiming(pickerOpen ? 1 : 0, { duration: reduceMotion ? 0 : PICKER_MS, easing: EASE_OUT }));
+    if (!pickerOpen) return;
+    // Once the grid covers them, the card and the bar drop their blurs: the grid is the one blur left.
+    const timer = setTimeout(() => setPickerSettled(true), PICKER_MS + 20);
+    return () => clearTimeout(timer);
+  }, [pickerOpen, picker, reduceMotion]);
+
   // Once, from the fade callback or the safety timer: unmount, then run the action a frame later.
   const finish = (id: string | null) => {
     if (done.current) return;
@@ -222,7 +373,7 @@ function GlassMenuOverlay({
     if (safety.current) clearTimeout(safety.current);
     const { onClose, onSelect, key } = request;
     if (useGlassMenuStore.getState().request?.key === key) useGlassMenuStore.setState({ request: null });
-    onClose();
+    onClose(id !== null);
     if (id === null) {
       cancelled.delete(key);
       return;
@@ -250,9 +401,50 @@ function GlassMenuOverlay({
     if (!reduceMotion) open.set(withTiming(menu.closeScale, { duration: menu.closeMs }));
   };
 
+  const clearHighlight = () => {
+    highlightAlpha.set(withTiming(0, { duration: 120 }));
+    active.current = -1;
+  };
+
+  // Into a sub-menu (index of its row), or back out of one (null).
+  const goLevel = (index: number | null) => {
+    if (closing.current) return;
+    void haptics.selection();
+    clearHighlight();
+    highlightY.set(-1);
+    levelFrom.set(index === null ? -1 : 1);
+    levelIn.set(0);
+    levelIn.set(withTiming(1, { duration: reduceMotion ? 0 : LEVEL_MS, easing: EASE_OUT }));
+    if (!reduceMotion) {
+      levelScale.set(0.97);
+      levelScale.set(withTiming(1, { duration: LEVEL_MS, easing: EASE_OUT }));
+    }
+    resetScroll();
+    setPath((current) => (index === null ? current.slice(0, -1) : [...current, index]));
+  };
+
+  const choose = (entry: Entry | undefined, index: number) => {
+    if (!entry || entry.disabled) return;
+    if (entry.back) {
+      goLevel(null);
+      return;
+    }
+    // The row's index in its level: the back row comes first in a sub-menu.
+    if (entry.children?.length) {
+      goLevel(level.parent ? index - 1 : index);
+      return;
+    }
+    dismiss(entry.id);
+  };
+
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      dismiss(null);
+      // Back leaves the emoji grid, then a sub-menu, then closes the menu.
+      if (pickerOpen) {
+        setPickerOpen(false);
+        setPickerSettled(false);
+      } else if (path.length > 0) goLevel(null);
+      else dismiss(null);
       return true;
     });
     return () => subscription.remove();
@@ -264,12 +456,12 @@ function GlassMenuOverlay({
     for (const row of rows) {
       if (y >= row.top && y < row.top + menu.rowPitch) index = row.index;
     }
-    return index >= 0 && items[index]?.disabled ? -1 : index;
+    return index >= 0 && entries[index]?.disabled ? -1 : index;
   };
 
   const track = (y: number, first: boolean) => {
     if (closing.current) return;
-    const index = rowAt(y);
+    const index = rowAt(y + scrollNow.current);
     if (index !== active.current) {
       if (index >= 0 && !first) void haptics.selection();
       active.current = index;
@@ -279,7 +471,8 @@ function GlassMenuOverlay({
       highlightY.set(first || highlightY.get() < 0 ? top : withSpring(top, menu.highlight.spring));
     }
     highlightAlpha.set(withTiming(index >= 0 ? 1 : 0, { duration: first ? 40 : 60 }));
-    if (reduceMotion) return;
+    // A level that scrolls keeps still under the finger.
+    if (reduceMotion || frame.scrollable) return;
     lean.set(
       withSpring(Math.max(menu.lean.min, Math.min(menu.lean.max, (y - h / 2) * menu.lean.factor)), menu.lean.spring),
     );
@@ -291,160 +484,399 @@ function GlassMenuOverlay({
     stretchY.set(withSpring(1, menu.lean.spring));
   };
 
+  const grant = (event: GestureResponderEvent) => {
+    const y = event.nativeEvent.locationY;
+    drag.current = { y0: y, scroll0: scrollNow.current, scrolling: false };
+    track(y, true);
+  };
+
+  const move = (event: GestureResponderEvent) => {
+    const y = event.nativeEvent.locationY;
+    const current = drag.current;
+    if (current && frame.scrollable && (current.scrolling || Math.abs(y - current.y0) > 8)) {
+      if (!current.scrolling) {
+        current.scrolling = true;
+        clearHighlight();
+      }
+      const max = naturalHeight - h;
+      scrollNow.current = Math.max(0, Math.min(max, current.scroll0 - (y - current.y0)));
+      scroll.set(scrollNow.current);
+      return;
+    }
+    track(y, false);
+  };
+
   const release = (event: GestureResponderEvent) => {
     settle();
+    const scrolled = drag.current?.scrolling ?? false;
+    drag.current = null;
     const { locationX: x, locationY: y } = event.nativeEvent;
     const index = active.current;
     const inside = x >= 0 && x <= WIDTH && y >= 0 && y <= h;
-    const item = index >= 0 ? items[index] : undefined;
-    if (inside && item && !item.disabled) {
-      dismiss(item.id);
+    if (!scrolled && inside && index >= 0) {
+      choose(entries[index], index);
+      if (!closing.current) clearHighlight();
       return;
     }
-    highlightAlpha.set(withTiming(0, { duration: 120 }));
-    active.current = -1;
+    clearHighlight();
   };
 
   const card = useAnimatedStyle(() => ({
-    opacity: fade.get(),
-    transform: [{ translateY: lean.get() }, { scale: open.get() }, { scaleY: stretchY.get() }],
+    opacity: fade.get() * (1 - picker.get()),
+    transform: [{ translateY: lean.get() }, { scale: open.get() * levelScale.get() }, { scaleY: stretchY.get() }],
+  }));
+  const content = useAnimatedStyle(() => ({
+    opacity: levelIn.get(),
+    transform: [{ translateY: -scroll.get() }, { translateX: (1 - levelIn.get()) * 16 * levelFrom.get() }],
   }));
   const highlight = useAnimatedStyle(() => ({
     opacity: highlightAlpha.get(),
     transform: [{ translateY: highlightY.get() }],
   }));
+  const dimStyle = useAnimatedStyle(() => ({ opacity: fade.get() * 0.22 }));
 
   const tint = dark ? "22,22,22" : "248,248,248";
   const text = dark ? "#f2f2f2" : "#161616";
   const danger = dark ? "#ff6b6b" : "#d92d20";
   const tintTop = frost ? FROST_TINT_TOP : menu.tintTop;
   const tintBottom = frost ? FROST_TINT_BOTTOM : menu.tintBottom;
+  const glass = { frost, dark, tint, tintTop, tintBottom, gradientId };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {request.dim ? (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
+      ) : null}
       <Pressable accessibilityLabel={t("common.close")} style={StyleSheet.absoluteFill} onPress={() => dismiss(null)} />
-      <Animated.View
-        accessibilityRole="menu"
-        style={[
-          styles.card,
-          {
-            left: frame.left,
-            top: frame.top,
-            height: frame.height,
-            transformOrigin: [frame.originX, frame.originY, 0],
-          },
-          card,
-        ]}
-      >
-        {frost ? (
-          // Frost: the BlurView lives outside the target (this host is a sibling after the navigator).
-          <BlurView
-            blurTarget={frost}
-            blurMethod="dimezisBlurViewSdk31Plus"
-            intensity={FROST_INTENSITY}
-            blurReductionFactor={4}
-            tint={dark ? "dark" : "light"}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : (
-          // Solid card (build 8) where no target is registered.
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgb(${tint})` }]} />
-        )}
-        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-          <Defs>
-            <LinearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-              <Stop offset="0" stopColor={`rgb(${tint})`} stopOpacity={tintTop} />
-              <Stop offset="1" stopColor={`rgb(${tint})`} stopOpacity={tintBottom} />
-            </LinearGradient>
-            <LinearGradient id={`${gradientId}-rim`} x1="0" x2="0" y1="0" y2="1">
-              <Stop offset="0" stopColor="#ffffff" stopOpacity={dark ? 0.16 : 0.5} />
-              <Stop offset="1" stopColor="#ffffff" stopOpacity={dark ? 0.04 : 0.12} />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
-          {frost ? (
-            // Specular rim: a hairline, brighter at the top, inside the card's corner radius.
-            <Rect
-              x={0.5}
-              y={0.5}
-              width={WIDTH - 1}
-              height={Math.max(0, h - 1)}
-              rx={menu.radius - 0.5}
-              ry={menu.radius - 0.5}
-              fill="none"
-              stroke={`url(#${gradientId}-rim)`}
-              strokeWidth={1}
-            />
-          ) : null}
-        </Svg>
+      {cardShown ? (
         <Animated.View
-          pointerEvents="none"
-          style={[styles.highlight, { backgroundColor: dark ? menu.highlight.fill : "rgba(0,0,0,0.07)" }, highlight]}
-        />
-        {title ? (
-          <View pointerEvents="none" style={[styles.title, { top: PADDING }]}>
-            <Typography.Paragraph type="body-xs" numberOfLines={1} style={{ color: text, opacity: 0.6 }}>
-              {title}
-            </Typography.Paragraph>
-          </View>
-        ) : null}
-        {items.map((item, index) => {
-          const row = rows[index];
-          const color = item.destructive ? danger : text;
-          return (
-            // Full-size wrapper: a zero-size one hid the absolute rows from accessibility (Android
-            // drops nodes outside their parent's bounds), so TalkBack and UI tests could not see them.
-            <View key={item.id} pointerEvents="none" style={StyleSheet.absoluteFill}>
-              {item.separatorBefore && index > 0 && row ? (
-                <View
-                  style={[
-                    styles.separator,
-                    { top: row.top - SEPARATOR / 2 - 0.5, backgroundColor: dark ? "#ffffff1f" : "#0000001a" },
-                  ]}
-                />
-              ) : null}
-              <View
-                accessible
-                accessibilityRole="menuitem"
-                accessibilityLabel={item.title}
-                accessibilityState={{ disabled: item.disabled, selected: item.selected }}
-                // TalkBack's double tap is an accessibility action, not a touch on the layer above.
-                accessibilityActions={[{ name: "activate" }]}
-                onAccessibilityAction={(event) => {
-                  if (event.nativeEvent.actionName === "activate" && !item.disabled) dismiss(item.id);
-                }}
-                style={[styles.row, { top: row?.top ?? 0, opacity: item.disabled ? 0.4 : 1 }]}
-              >
-                {item.icon ? <View style={styles.icon}>{item.icon}</View> : null}
-                <Typography.Paragraph weight="medium" numberOfLines={1} style={[styles.label, { color }]}>
-                  {item.title}
+          accessibilityRole="menu"
+          pointerEvents={pickerOpen ? "none" : "auto"}
+          style={[styles.card, { left: frame.left, transformOrigin: [frame.originX, frame.originY, 0] }, card]}
+        >
+          <GlassFill {...glass} frost={pickerSettled ? null : frost} width={WIDTH} height={h} radius={menu.radius} />
+          <Animated.View style={[StyleSheet.absoluteFill, content]}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.highlight,
+                { backgroundColor: dark ? menu.highlight.fill : "rgba(0,0,0,0.07)" },
+                highlight,
+              ]}
+            />
+            {hasTitle ? (
+              <View pointerEvents="none" style={[styles.title, { top: PADDING }]}>
+                <Typography.Paragraph type="body-xs" numberOfLines={1} style={{ color: text, opacity: 0.6 }}>
+                  {title}
                 </Typography.Paragraph>
-                {item.selected ? <Check size={16} color={color} strokeWidth={2.2} /> : null}
               </View>
-            </View>
-          );
-        })}
-        {/* One touch layer over the card: its locations are in the card's own (untransformed) space. */}
-        <View
-          style={StyleSheet.absoluteFill}
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderTerminationRequest={() => false}
-          onResponderGrant={(event) => track(event.nativeEvent.locationY, true)}
-          onResponderMove={(event) => track(event.nativeEvent.locationY, false)}
-          onResponderRelease={release}
-          onResponderTerminate={() => {
-            settle();
-            highlightAlpha.set(withTiming(0, { duration: 120 }));
-            active.current = -1;
+            ) : null}
+            {entries.map((item, index) => {
+              const row = rows[index];
+              const color = item.destructive ? danger : text;
+              return (
+                // Full-size wrapper: a zero-size one hid the absolute rows from accessibility (Android
+                // drops nodes outside their parent's bounds), so TalkBack and UI tests could not see them.
+                <View key={`${path.join(".")}:${item.id}`} pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  {item.separatorBefore && index > 0 && row ? (
+                    <View
+                      style={[
+                        styles.separator,
+                        { top: row.top - SEPARATOR / 2 - 0.5, backgroundColor: dark ? "#ffffff1f" : "#0000001a" },
+                      ]}
+                    />
+                  ) : null}
+                  <View
+                    accessible
+                    accessibilityRole={item.back ? "button" : "menuitem"}
+                    accessibilityLabel={item.back ? `${t("common.back")}, ${item.title}` : item.title}
+                    accessibilityState={{ disabled: item.disabled, selected: item.selected }}
+                    // TalkBack's double tap is an accessibility action, not a touch on the layer above.
+                    accessibilityActions={[{ name: "activate" }]}
+                    onAccessibilityAction={(event) => {
+                      if (event.nativeEvent.actionName === "activate") choose(item, index);
+                    }}
+                    style={[styles.row, { top: row?.top ?? 0, opacity: item.disabled ? 0.4 : 1 }]}
+                  >
+                    {item.back ? (
+                      <View style={styles.icon}>
+                        <ChevronLeft size={18} color={text} strokeWidth={2} />
+                      </View>
+                    ) : item.icon ? (
+                      <View style={styles.icon}>{item.icon}</View>
+                    ) : null}
+                    <Typography.Paragraph
+                      weight={item.back ? "semibold" : "medium"}
+                      numberOfLines={1}
+                      style={[styles.label, { color }]}
+                    >
+                      {item.title}
+                    </Typography.Paragraph>
+                    {item.selected ? <Check size={16} color={color} strokeWidth={2.2} /> : null}
+                    {item.children?.length ? (
+                      <ChevronRight size={16} color={text} strokeWidth={2} opacity={0.6} />
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+          </Animated.View>
+          {/* One touch layer over the card: its locations are in the card's own (untransformed) space. */}
+          <View
+            style={StyleSheet.absoluteFill}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderTerminationRequest={() => false}
+            onResponderGrant={grant}
+            onResponderMove={move}
+            onResponderRelease={release}
+            onResponderTerminate={() => {
+              settle();
+              drag.current = null;
+              clearHighlight();
+            }}
+          />
+        </Animated.View>
+      ) : null}
+      {reactions ? (
+        <ReactionBar
+          reactions={reactions}
+          glass={glass}
+          left={frame.barLeft}
+          top={barTop}
+          pickerTop={pickerTop}
+          width={barWidth}
+          originX={Math.max(0, Math.min(barWidth, anchor.x + anchor.width / 2 - frame.barLeft))}
+          originY={side.current ? 0 : BAR_HEIGHT + BAR_GAP + h}
+          open={open}
+          fade={fade}
+          picker={picker}
+          pickerOpen={pickerOpen}
+          pickerSettled={pickerSettled}
+          onOpenPicker={() => {
+            if (closing.current) return;
+            void haptics.selection();
+            setPickerOpen(true);
+          }}
+          onPick={(emoji) => {
+            void haptics.selection();
+            dismiss(reactionMenuId(emoji === reactions.own ? null : emoji));
           }}
         />
-      </Animated.View>
+      ) : null}
     </View>
   );
 }
 
+type Glass = {
+  frost: RefObject<ViewInstance | null> | null;
+  dark: boolean;
+  tint: string;
+  tintTop: number;
+  tintBottom: number;
+  gradientId: string;
+};
+
+/** The card's glass: the frost blur (or the solid card), the tint gradient and, frosted, the rim. */
+function GlassFill({
+  frost,
+  dark,
+  tint,
+  tintTop,
+  tintBottom,
+  gradientId,
+  width,
+  height,
+  radius,
+  suffix = "",
+}: Glass & { width: number; height: number; radius: number; suffix?: string }) {
+  const id = `${gradientId}${suffix}`;
+  return (
+    <>
+      {frost ? (
+        // Frost: the BlurView lives outside the target (this host is a sibling after the navigator).
+        <BlurView
+          blurTarget={frost}
+          blurMethod="dimezisBlurViewSdk31Plus"
+          intensity={FROST_INTENSITY}
+          blurReductionFactor={4}
+          tint={dark ? "dark" : "light"}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        // Solid card (build 8) where no target is registered.
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgb(${tint})` }]} />
+      )}
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={id} x1="0" x2="0" y1="0" y2="1">
+            <Stop offset="0" stopColor={`rgb(${tint})`} stopOpacity={tintTop} />
+            <Stop offset="1" stopColor={`rgb(${tint})`} stopOpacity={tintBottom} />
+          </LinearGradient>
+          <LinearGradient id={`${id}-rim`} x1="0" x2="0" y1="0" y2="1">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={dark ? 0.16 : 0.5} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={dark ? 0.04 : 0.12} />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#${id})`} />
+        {frost ? (
+          // Specular rim: a hairline, brighter at the top, inside the card's corner radius.
+          <Rect
+            x={0.5}
+            y={0.5}
+            width={Math.max(0, width - 1)}
+            height={Math.max(0, height - 1)}
+            rx={radius - 0.5}
+            ry={radius - 0.5}
+            fill="none"
+            stroke={`url(#${id}-rim)`}
+            strokeWidth={1}
+          />
+        ) : null}
+      </Svg>
+    </>
+  );
+}
+
+/**
+ * Build 10: the frosted reaction bar of a message menu. Five quick emojis and "+"; "+" crossfades the
+ * bar into the emoji grid, a fixed-size glass panel that grows from the bar (opacity and scale only),
+ * while the card under it fades out. It opens and closes with the card.
+ */
+function ReactionBar({
+  reactions,
+  glass,
+  left,
+  top,
+  pickerTop,
+  width,
+  originX,
+  originY,
+  open,
+  fade,
+  picker,
+  pickerOpen,
+  pickerSettled,
+  onOpenPicker,
+  onPick,
+}: {
+  reactions: GlassReactions;
+  glass: Glass;
+  left: number;
+  top: number;
+  pickerTop: number;
+  width: number;
+  originX: number;
+  originY: number;
+  open: SharedValue<number>;
+  fade: SharedValue<number>;
+  picker: SharedValue<number>;
+  pickerOpen: boolean;
+  pickerSettled: boolean;
+  onOpenPicker: () => void;
+  onPick: (emoji: string) => void;
+}) {
+  const text = glass.dark ? "#f2f2f2" : "#161616";
+  const selected = glass.dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.09)";
+  const barStyle = useAnimatedStyle(() => ({
+    opacity: fade.get() * (1 - picker.get()),
+    transform: [{ scale: open.get() }],
+  }));
+  const gridStyle = useAnimatedStyle(() => ({
+    opacity: fade.get() * picker.get(),
+    transform: [{ scale: open.get() * (0.92 + 0.08 * picker.get()) }],
+  }));
+  const emojiButton = (emoji: string, size: number) => (
+    <Pressable
+      key={emoji}
+      accessibilityRole="button"
+      accessibilityLabel={reactions.reactLabel(emoji)}
+      accessibilityState={{ selected: emoji === reactions.own }}
+      onPress={() => onPick(emoji)}
+      style={({ pressed }) => [
+        styles.emoji,
+        { width: size, height: size, borderRadius: size / 2 },
+        emoji === reactions.own ? { backgroundColor: selected } : null,
+        pressed ? styles.emojiPressed : null,
+      ]}
+    >
+      <Text style={styles.emojiText}>{emoji}</Text>
+    </Pressable>
+  );
+  return (
+    <>
+      <Animated.View
+        pointerEvents={pickerOpen ? "none" : "auto"}
+        style={[
+          styles.bar,
+          {
+            left,
+            top,
+            width,
+            height: BAR_HEIGHT,
+            borderRadius: BAR_HEIGHT / 2,
+            transformOrigin: [originX, originY, 0],
+          },
+          barStyle,
+        ]}
+      >
+        <GlassFill
+          {...glass}
+          frost={pickerSettled ? null : glass.frost}
+          width={width}
+          height={BAR_HEIGHT}
+          radius={BAR_HEIGHT / 2}
+          suffix="-bar"
+        />
+        <View style={styles.quick}>
+          {reactions.quick.map((emoji) => emojiButton(emoji, BAR_SLOT))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={reactions.moreLabel}
+            accessibilityState={{ expanded: pickerOpen }}
+            onPress={onOpenPicker}
+            style={({ pressed }) => [
+              styles.emoji,
+              { width: BAR_SLOT, height: BAR_SLOT, borderRadius: BAR_SLOT / 2 },
+              pressed ? styles.emojiPressed : null,
+            ]}
+          >
+            <Plus size={20} color={text} strokeWidth={2} />
+          </Pressable>
+        </View>
+      </Animated.View>
+      {pickerOpen ? (
+        <Animated.View
+          accessibilityLabel={reactions.moreLabel}
+          style={[
+            styles.bar,
+            {
+              left,
+              top: pickerTop,
+              width,
+              height: PICKER_HEIGHT,
+              borderRadius: menu.radius,
+              transformOrigin: [originX, top - pickerTop + BAR_HEIGHT / 2, 0],
+            },
+            gridStyle,
+          ]}
+        >
+          <GlassFill {...glass} width={width} height={PICKER_HEIGHT} radius={menu.radius} suffix="-grid" />
+          <ScrollView
+            style={{ height: PICKER_HEIGHT }}
+            contentContainerStyle={styles.grid}
+            showsVerticalScrollIndicator={false}
+          >
+            {reactions.all.map((emoji) => emojiButton(emoji, (width - BAR_PAD * 2) / PICKER_COLUMNS))}
+          </ScrollView>
+        </Animated.View>
+      ) : null}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  dim: { backgroundColor: "#000" },
   card: {
     position: "absolute",
     width: WIDTH,
@@ -453,6 +885,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     boxShadow: "0 12px 32px rgba(0, 0, 0, 0.28)",
   },
+  bar: {
+    position: "absolute",
+    borderCurve: "continuous",
+    overflow: "hidden",
+    boxShadow: "0 10px 28px rgba(0, 0, 0, 0.24)",
+  },
+  quick: { flexDirection: "row", alignItems: "center", height: BAR_HEIGHT, paddingHorizontal: BAR_PAD },
+  grid: { flexDirection: "row", flexWrap: "wrap", padding: BAR_PAD },
+  emoji: { alignItems: "center", justifyContent: "center" },
+  emojiPressed: { transform: [{ scale: 0.88 }] },
+  emojiText: { fontSize: 26, lineHeight: 32 },
   highlight: {
     position: "absolute",
     left: menu.highlight.inset,

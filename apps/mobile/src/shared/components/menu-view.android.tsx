@@ -306,8 +306,8 @@ function OpenedMenu({
   const [room, setRoom] = useState<{ placement: "top" | "bottom"; height: number } | null>(null);
   // A second call in the same tick must see the new state before React applies it.
   const openRef = useRef(false);
-  // ColorOS motion draws a flat menu (no sub-menu, up to 10 rows) as the GlassMenu. It opens in the
-  // root GlassMenuHost (in the app window), never as a child of this anchor in the header.
+  // ColorOS motion draws the menu as the GlassMenu (build 10: sub-menus too; up to 14 rows a level).
+  // It opens in the root GlassMenuHost (in the app window), never as a child of this anchor.
   const { enabled: colorOS } = useColorOSMotion();
   const glassItems = colorOS ? toGlassItems(actions, colors) : null;
   const glassKey = useRef<number | null>(null);
@@ -346,10 +346,19 @@ function OpenedMenu({
           anchor: measured ? { x, y, width, height: buttonHeight } : null,
           title: title || undefined,
           items: glassItems,
-          onSelect: (id) => onPressAction?.({ nativeEvent: { event: id } }),
-          onClose: () => {
+          // The HeroUI menu runs the action before it reports the close; the glass menu keeps that
+          // order (build 10): an opener that unmounts on close, such as the long-press menu of an
+          // agent row, is still mounted when its action runs.
+          onSelect: (id) => {
+            try {
+              onPressAction?.({ nativeEvent: { event: id } });
+            } finally {
+              onOpenChange(false);
+            }
+          },
+          onClose: (chosen) => {
             glassKey.current = null;
-            onOpenChange(false);
+            if (!chosen) onOpenChange(false);
           },
         });
         if (key !== null) {
@@ -432,27 +441,44 @@ function OpenedMenu({
   );
 }
 
-/** The flat GlassMenu rows of a menu, or null when it needs the HeroUI menu (a sub-menu, or a long list). */
+/** The most rows of one GlassMenu level; a longer list (dictation languages) keeps the HeroUI menu. */
+const GLASS_MAX_ROWS = 14;
+
+/**
+ * The GlassMenu rows of a menu, or null when it needs the HeroUI menu (a level longer than
+ * GLASS_MAX_ROWS). Build 10: a sub-menu becomes rows of its own level in the glass card.
+ */
 function toGlassItems(actions: MenuAction[], colors: MenuColors): GlassMenuItem[] | null {
   const list = groups(actions);
   const items: GlassMenuItem[] = [];
   for (const [groupIndex, group] of list.entries()) {
     for (const [index, action] of group.entries()) {
-      if (action.subactions?.length) return null;
-      const destructive = Boolean(action.attributes?.destructive);
-      const Icon = typeof action.image === "string" ? ICONS[action.image] : undefined;
-      const color = action.imageColor ? String(action.imageColor) : destructive ? colors.danger : colors.text;
-      const fill = typeof action.image === "string" && action.image.endsWith(".fill") ? color : "none";
-      items.push({
-        id: actionId(action),
-        title: action.title,
-        icon: Icon ? <Icon size={18} strokeWidth={2} color={color} fill={fill} /> : undefined,
-        destructive,
-        disabled: action.attributes?.disabled,
-        selected: action.state === "on",
-        separatorBefore: groupIndex > 0 && index === 0,
-      });
+      const item = toGlassItem(action, colors);
+      if (!item) return null;
+      items.push({ ...item, separatorBefore: groupIndex > 0 && index === 0 });
     }
   }
-  return items.length > 0 && items.length <= 10 ? items : null;
+  return items.length > 0 && items.length <= GLASS_MAX_ROWS ? items : null;
+}
+
+function toGlassItem(action: MenuAction, colors: MenuColors): GlassMenuItem | null {
+  const destructive = Boolean(action.attributes?.destructive);
+  const Icon = typeof action.image === "string" ? ICONS[action.image] : undefined;
+  const color = action.imageColor ? String(action.imageColor) : destructive ? colors.danger : colors.text;
+  const fill = typeof action.image === "string" && action.image.endsWith(".fill") ? color : "none";
+  let children: GlassMenuItem[] | undefined;
+  if (action.subactions?.length) {
+    const sub = toGlassItems(action.subactions, colors);
+    if (!sub) return null;
+    children = sub;
+  }
+  return {
+    id: actionId(action),
+    title: action.title,
+    icon: Icon ? <Icon size={18} strokeWidth={2} color={color} fill={fill} /> : undefined,
+    destructive,
+    disabled: action.attributes?.disabled,
+    selected: action.state === "on",
+    children,
+  };
 }
