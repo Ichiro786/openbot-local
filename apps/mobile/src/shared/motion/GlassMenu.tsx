@@ -290,7 +290,6 @@ function GlassMenuOverlay({
   const cardShown = entries.length > 0;
   const naturalHeight = cardShown ? laid.height : 0;
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSettled, setPickerSettled] = useState(false);
 
   // The anchor in host coordinates (a point in the middle when there is none).
   const anchor = useMemo(
@@ -365,10 +364,6 @@ function GlassMenuOverlay({
 
   useEffect(() => {
     picker.set(withTiming(pickerOpen ? 1 : 0, { duration: reduceMotion ? 0 : PICKER_MS, easing: EASE_OUT }));
-    if (!pickerOpen) return;
-    // Once the grid covers them, the card and the bar drop their blurs: the grid is the one blur left.
-    const timer = setTimeout(() => setPickerSettled(true), PICKER_MS + 20);
-    return () => clearTimeout(timer);
   }, [pickerOpen, picker, reduceMotion]);
 
   // Once, from the fade callback or the safety timer: unmount, then run the action a frame later.
@@ -447,7 +442,6 @@ function GlassMenuOverlay({
       // Back leaves the emoji grid, then a sub-menu, then closes the menu.
       if (pickerOpen) {
         setPickerOpen(false);
-        setPickerSettled(false);
       } else if (path.length > 0) goLevel(null);
       else dismiss(null);
       return true;
@@ -559,7 +553,9 @@ function GlassMenuOverlay({
           pointerEvents={pickerOpen ? "none" : "auto"}
           style={[styles.card, { left: frame.left, transformOrigin: [frame.originX, frame.originY, 0] }, card]}
         >
-          <GlassFill {...glass} frost={pickerSettled ? null : frost} width={WIDTH} height={h} radius={menu.radius} />
+          {/* The grid's blur replaces the card's and the bar's as soon as it mounts (they are fading out), so a
+              message menu never runs more than two blurs. */}
+          <GlassFill {...glass} frost={pickerOpen ? null : frost} width={WIDTH} height={h} radius={menu.radius} />
           <Animated.View style={[StyleSheet.absoluteFill, content]}>
             <Animated.View
               pointerEvents="none"
@@ -657,7 +653,6 @@ function GlassMenuOverlay({
           fade={fade}
           picker={picker}
           pickerOpen={pickerOpen}
-          pickerSettled={pickerSettled}
           onOpenPicker={() => {
             if (closing.current) return;
             void haptics.selection();
@@ -761,7 +756,6 @@ function ReactionBar({
   fade,
   picker,
   pickerOpen,
-  pickerSettled,
   onOpenPicker,
   onPick,
 }: {
@@ -777,7 +771,6 @@ function ReactionBar({
   fade: SharedValue<number>;
   picker: SharedValue<number>;
   pickerOpen: boolean;
-  pickerSettled: boolean;
   onOpenPicker: () => void;
   onPick: (emoji: string) => void;
 }) {
@@ -827,7 +820,7 @@ function ReactionBar({
       >
         <GlassFill
           {...glass}
-          frost={pickerSettled ? null : glass.frost}
+          frost={pickerOpen ? null : glass.frost}
           width={width}
           height={BAR_HEIGHT}
           radius={BAR_HEIGHT / 2}

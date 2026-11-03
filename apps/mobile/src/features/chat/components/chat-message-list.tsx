@@ -1230,8 +1230,10 @@ export const ChatMessageList = memo(function ChatMessageList({
   const canReact = Boolean(onReact);
   const canSelectText = Boolean(onSelectText);
   const canSelectQuestion = Boolean(onSelectQuestion);
-  // One toggle read for the whole list, so a row does not subscribe to the setting itself.
-  const longPressMenu = useColorOSMotion().enabled && isAndroid;
+  // One toggle read for the whole list, so a row does not subscribe to the setting itself. With a screen
+  // reader on, the build 9 rows stay: TalkBack cannot reach the long-press menu, and the rows are the
+  // only other path to React, Reply and Select text.
+  const longPressMenu = useColorOSMotion().enabled && isAndroid && !screenReaderEnabled;
   // The rows keep clear of the side insets: the rail of iPhone Duo and the edges in landscape.
   const listWidth = columnWidth - insets.left - insets.right - LIST_PADDING * 2;
   const shared = useMemo<MessageRowShared>(

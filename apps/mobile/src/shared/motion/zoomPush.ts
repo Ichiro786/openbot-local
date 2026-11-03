@@ -39,6 +39,12 @@ export function zoomPushAnimation<T extends string>(routeKey: string | undefined
   return zoomed.has(routeKey) ? "none" : fallback;
 }
 
+/** The route has closed: forget its key, so the set holds only routes that are on a stack. */
+export function forgetZoomRoute(routeKey: string): void {
+  seen.delete(routeKey);
+  zoomed.delete(routeKey);
+}
+
 export function isZoomPush(routeKey: string): boolean {
   return zoomed.has(routeKey);
 }

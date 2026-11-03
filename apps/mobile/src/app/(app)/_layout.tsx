@@ -35,7 +35,7 @@ import { headerFontOptions } from "@/shared/lib/app-font";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { isZoomPush, releaseZoomPush, zoomPushAnimation } from "@/shared/motion/zoomPush";
+import { forgetZoomRoute, isZoomPush, releaseZoomPush, zoomPushAnimation } from "@/shared/motion/zoomPush";
 
 /** How long a notification tap waits for the channel list of its server before it opens the agent chat. */
 const NOTIFICATION_CHANNEL_WAIT_MS = 8_000;
@@ -78,6 +78,7 @@ function zoomPushListeners({
   return {
     transitionEnd: (event: { data?: { closing?: boolean } }) => {
       if (!event.data?.closing) release();
+      else if (key !== undefined) forgetZoomRoute(key);
     },
     focus: () => {
       if (key !== undefined && isZoomPush(key)) setTimeout(release, ZOOM_RELEASE_MS);
