@@ -299,6 +299,12 @@ export function ChatAttachmentPanel({
     morph.set(withSpring(1, MORPH));
   }
 
+  // Build 11: Camera chosen from the ColorOS glass + menu opens this card on the camera.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per card
+  useEffect(() => {
+    if (anchor.camera) void chooseCamera();
+  }, []);
+
   return (
     <View style={StyleSheet.absoluteFill} accessibilityViewIsModal onAccessibilityEscape={dismiss}>
       <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismiss} />

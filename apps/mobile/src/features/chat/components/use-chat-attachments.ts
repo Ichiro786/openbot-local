@@ -29,6 +29,8 @@ export interface ChatAttachmentAnchor {
   left: number;
   bottom: number;
   size: number;
+  /** Build 11 (ColorOS + menu): the card opens straight into the camera. */
+  camera?: boolean;
 }
 
 export interface ChatAttachment extends RemoteFileUpload {

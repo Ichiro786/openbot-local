@@ -49,6 +49,8 @@ export const menu = {
   /** Critically damped ω≈38, no overshoot. Alt: { duration: 230, dampingRatio: 1 }. */
   openSpring: spring(1450, 76, 1, true),
   contentFadeInMs: 70,
+  /** Build 11 (composer +): each row arrives over `span` of the open value, `step` after the one nearer the anchor. */
+  stagger: { start: 0.15, step: 0.09, span: 0.45, rise: 6 },
   radius: 27,
   anchorGap: 8,
   rowPitch: 37,

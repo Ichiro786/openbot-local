@@ -4,8 +4,11 @@ import { useIsFocused } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
 import ArrowUp from "lucide-react-native/icons/arrow-up";
 import Blocks from "lucide-react-native/icons/blocks";
+import Camera from "lucide-react-native/icons/camera";
+import Images from "lucide-react-native/icons/images";
 import Mic from "lucide-react-native/icons/mic";
 import MicOff from "lucide-react-native/icons/mic-off";
+import Paperclip from "lucide-react-native/icons/paperclip";
 import Plus from "lucide-react-native/icons/plus";
 import Reply from "lucide-react-native/icons/reply";
 import Sparkles from "lucide-react-native/icons/sparkles";
@@ -24,6 +27,7 @@ import {
 } from "react";
 import {
   AccessibilityInfo,
+  Keyboard,
   Text as NativeText,
   Pressable,
   ScrollView,
@@ -50,6 +54,7 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -73,7 +78,8 @@ import { isAndroid } from "@/shared/lib/platform";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";
 import { ComposerFrost } from "@/shared/motion/ComposerFrost";
-import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { glassMenuHostBox, openGlassMenu, useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { menu as menuTokens } from "@/shared/motion/tokens";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
 import { applyMarkdownListEdit, markdownListReturn } from "../model/composer-lists";
@@ -93,6 +99,8 @@ import type { ChatAttachments } from "./use-chat-attachments";
 import type { ComposerDictation } from "./use-composer-dictation";
 import { VoiceCallBar } from "./voice-call-bar";
 
+/** Build 11: the × turns back to + without overshoot. */
+const PLUS_CLOSE_SPRING = { duration: 220, dampingRatio: 1 };
 // The field grows to this many lines, then keeps its height and scrolls.
 const MAX_INPUT_LINES = 5;
 // Width the controls take from the single row, the card's own text inset, and
@@ -196,6 +204,8 @@ interface ChatComposerProps {
   menuOpen?: boolean;
   /** The card's open progress, so the plus can cross-fade against the card. */
   menuProgress?: SharedValue<number>;
+  /** Build 11: "Use skill or app" in the ColorOS + menu (present when the agent has skills). */
+  onUseSkill?: () => void;
   stopping?: boolean;
   /** Absent for a text-only composer: no plus, and a paste adds no file. */
   attachments?: ChatAttachments;
@@ -296,6 +306,7 @@ export const ChatComposer = memo(function ChatComposer({
   onInputFocus,
   menuOpen = false,
   menuProgress,
+  onUseSkill,
   stopping = false,
   attachments,
   sendRetryVersion,
@@ -811,8 +822,21 @@ export const ChatComposer = memo(function ChatComposer({
   // places on one progress: the glyph is gone by the time the card is drawn,
   // and back on the frames the card fades out. Waiting for the card to
   // unmount left the corner empty for the whole length of its collapse.
+  // Build 11 (ColorOS): the + opens the frosted GlassMenu from its own place and turns into ×.
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const plusTurn = useSharedValue(0);
+  useEffect(() => {
+    plusTurn.set(
+      reducedMotion
+        ? plusMenuOpen
+          ? 1
+          : 0
+        : withSpring(plusMenuOpen ? 1 : 0, plusMenuOpen ? menuTokens.openSpring : PLUS_CLOSE_SPRING),
+    );
+  }, [plusMenuOpen, plusTurn, reducedMotion]);
   const plusGlyphStyle = useAnimatedStyle(() => ({
     opacity: interpolate(menuMotion.get(), [0, 0.2], [1, 0], Extrapolation.CLAMP) * (leadingBlocked ? 0.45 : 1),
+    transform: [{ rotate: `${45 * plusTurn.get()}deg` }],
   }));
   // Where the plus is drawn, in either shape, from the constants that draw it.
   // Measuring it cannot work: `measureInWindow` reads the layout tree, and the
@@ -831,6 +855,44 @@ export const ChatComposer = memo(function ChatComposer({
       (restingPlus ? (cardWidth - restWidth) / 2 - restControlShift : 0),
     bottom: Math.max(bottomInset, 10) + 4 + plusInset - (restingPlus ? restControlOffset : 0),
     size: plusDrawn,
+  };
+  /** Opens the ColorOS + menu; false when no glass host is mounted (the classic card opens instead). */
+  const openPlusGlassMenu = (files: NonNullable<typeof attachments>): boolean => {
+    const box = glassMenuHostBox();
+    if (!box) return false;
+    // The + rides the keyboard's lift, as the classic card does.
+    const lift = Math.max(0, (Keyboard.metrics()?.height ?? 0) - (Math.max(bottomInset, 10) - 10));
+    const size = attachmentAnchor.size;
+    const anchor = {
+      x: box.x + attachmentAnchor.left,
+      y: box.y + box.height - attachmentAnchor.bottom - size - lift,
+      width: size,
+      height: size,
+    };
+    const icon = (Icon: typeof Plus) => <Icon color={String(foreground)} size={20} strokeWidth={1.9} />;
+    const key = openGlassMenu({
+      anchor,
+      stagger: true,
+      items: [
+        ...(onUseSkill ? [{ id: "skill", title: t("mobile.chat.attachment.useSkill"), icon: icon(Sparkles) }] : []),
+        { id: "files", title: t("mobile.chat.attachment.files"), icon: icon(Paperclip), disabled: files.preparing },
+        { id: "photos", title: t("mobile.chat.attachment.photos"), icon: icon(Images), disabled: files.preparing },
+        { id: "camera", title: t("mobile.chat.attachment.camera"), icon: icon(Camera), disabled: files.preparing },
+      ],
+      onSelect: (id) => {
+        if (id === "skill") onUseSkill?.();
+        else if (id === "files") void files.chooseFiles();
+        else if (id === "photos") void files.choosePhotos();
+        else if (id === "camera") {
+          setOpenedWith({ expanded: !restingPlus, focused });
+          files.openMenu({ ...attachmentAnchor, camera: true });
+        }
+      },
+      onClose: () => setPlusMenuOpen(false),
+    });
+    if (key === null) return false;
+    setPlusMenuOpen(true);
+    return true;
   };
   const control = composerAction({
     disabled,
@@ -1148,7 +1210,8 @@ export const ChatComposer = memo(function ChatComposer({
               <ComposerFrost
                 target={frostTarget}
                 // At most two blurs on the chat: a message menu brings two, so the composer pauses.
-                shown={!voiceOpen && !doubleFrostMenu}
+                // Build 11: the + menu is the second blur (header band + menu), so the composer snaps solid.
+                shown={!voiceOpen && !doubleFrostMenu && !plusMenuOpen}
                 solid={String(fallbackBackground)}
                 radius={CARD_RADIUS}
               />
@@ -1538,12 +1601,13 @@ export const ChatComposer = memo(function ChatComposer({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("mobile.chat.composer.addAttachment")}
-              accessibilityState={{ disabled: leadingBlocked }}
               disabled={leadingBlocked}
               hitSlop={4}
               className="size-10 items-center justify-center rounded-full"
+              accessibilityState={{ disabled: leadingBlocked, expanded: plusMenuOpen }}
               onPress={() => {
                 void haptics.selection();
+                if (frosted && attachments && openPlusGlassMenu(attachments)) return;
                 setOpenedWith({ expanded: !restingPlus, focused });
                 attachments?.openMenu(attachmentAnchor);
               }}

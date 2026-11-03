@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  Extrapolation,
+  interpolate,
   runOnJS,
   type SharedValue,
   useAnimatedStyle,
@@ -80,6 +82,8 @@ type GlassMenuRequest = {
   reactions?: GlassReactions;
   /** Build 10: a light dim behind the menu (message long-press). */
   dim?: boolean;
+  /** Build 11: the rows arrive one after another, nearest the anchor first (composer + menu). */
+  stagger?: boolean;
   /** Runs once, after the menu has closed and unmounted. */
   onSelect: (id: string) => void;
   /**
@@ -137,6 +141,14 @@ export function useGlassMenuDoubleFrost(): boolean {
 
 let nextKey = 1;
 let hostMounted = false;
+let hostBox: GlassMenuAnchor | null = null;
+/**
+ * Build 11: the host's frame in the window, for an opener that knows its place from the screen's
+ * bottom edge (the composer +, whose Reanimated transforms `measureInWindow` cannot see).
+ */
+export function glassMenuHostBox(): GlassMenuAnchor | null {
+  return hostMounted ? hostBox : null;
+}
 /** Keys of menus whose opener unmounted. */
 const cancelled = new Set<number>();
 
@@ -187,7 +199,10 @@ export function GlassMenuHost() {
   }, []);
   const onLayout = (_event: LayoutChangeEvent) => {
     host.current?.measureInWindow((x, y, width, height) => {
-      if ([x, y, width, height].every(Number.isFinite) && width > 0 && height > 0) setBox({ x, y, width, height });
+      if ([x, y, width, height].every(Number.isFinite) && width > 0 && height > 0) {
+        hostBox = { x, y, width, height };
+        setBox(hostBox);
+      }
     });
   };
   return (
@@ -586,7 +601,13 @@ function GlassMenuOverlay({
               return (
                 // Full-size wrapper: a zero-size one hid the absolute rows from accessibility (Android
                 // drops nodes outside their parent's bounds), so TalkBack and UI tests could not see them.
-                <View key={`${path.join(".")}:${item.id}`} pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <StaggerRow
+                  key={`${path.join(".")}:${item.id}`}
+                  open={open}
+                  order={side.current === false ? entries.length - 1 - index : index}
+                  below={side.current !== false}
+                  on={Boolean(request.stagger) && !reduceMotion}
+                >
                   {item.separatorBefore && index > 0 && row ? (
                     <View
                       style={[
@@ -626,7 +647,7 @@ function GlassMenuOverlay({
                       <ChevronRight size={16} color={text} strokeWidth={2} opacity={0.6} />
                     ) : null}
                   </View>
-                </View>
+                </StaggerRow>
               );
             })}
           </Animated.View>
@@ -673,6 +694,39 @@ function GlassMenuOverlay({
         />
       ) : null}
     </View>
+  );
+}
+
+/**
+ * Build 11: a row's light entry on the menu's own open value (no timer of its own), so closing
+ * reverses it. Full-size and untouchable like the plain wrapper; `on` false draws it as before.
+ */
+function StaggerRow({
+  open,
+  order,
+  below,
+  on,
+  children,
+}: {
+  open: SharedValue<number>;
+  order: number;
+  below: boolean;
+  on: boolean;
+  children: ReactNode;
+}) {
+  const style = useAnimatedStyle(() => {
+    if (!on) return { opacity: 1, transform: [{ translateY: 0 }] };
+    const start = menu.stagger.start + order * menu.stagger.step;
+    const arrived = interpolate(open.get(), [start, start + menu.stagger.span], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity: arrived,
+      transform: [{ translateY: (1 - arrived) * menu.stagger.rise * (below ? -1 : 1) }],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      {children}
+    </Animated.View>
   );
 }
 

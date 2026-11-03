@@ -1267,6 +1267,7 @@ export function ChatView({
                   onInputFocus={motion.anticipateKeyboard}
                   menuOpen={attachments.menuOpen}
                   menuProgress={menuProgress}
+                  onUseSkill={mentionSkills?.length ? () => setSkillPickerVersion((version) => version + 1) : undefined}
                   stopping={stopping}
                   voice={composerVoice}
                   dictation={dictation}
