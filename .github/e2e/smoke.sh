@@ -123,15 +123,16 @@ PYG
 )
   log "  gfx ($1): $r"; echo "$1 $r" >> "$OUT/gfx-summary.txt"
 }
-# Blur counter (app support log, mirrored to logcat): every "blurs live" line since the last mark.
-blur_mark() { adb logcat -d 2>/dev/null | grep -c "blurs live" > "$OUT/.blurmark" || echo 0 > "$OUT/.blurmark"; }
-blur_max() { # $1 scenario name -> logs the highest count seen in the window and FAILs above 2
-  local from; from=$(cat "$OUT/.blurmark" 2>/dev/null || echo 0)
-  adb logcat -d 2>/dev/null | grep "blurs live" | tail -n +$((from+1)) > "$OUT/$1-blurs.txt"
-  local mx; mx=$(grep -oE "(max|live)=[0-9]+" "$OUT/$1-blurs.txt" | grep -oE "[0-9]+" | sort -n | tail -1)
-  if [ -z "$mx" ]; then log "  blur counter ($1): no line"; echo "$1 none" >> "$OUT/blur-summary.txt"; return; fi
+# Blur counter: the harness shows the app's blurBudgetMax() as "BLURMAX=N" (most live blurs at once
+# since launch) on home and in the chat. Read after each scenario; the first scenario that raises it is
+# the one that broke the budget.
+blur_mark() { :; }
+blur_max() { # $1 scenario name
+  local i mx=""
+  for i in 1 2 3; do dump "$1-bm"; mx=$(grep -oE 'BLURMAX=[0-9]+' "$OUT/$1-bm.xml" | head -1 | cut -d= -f2); [ -n "$mx" ] && break; sleep 0.5; done
+  if [ -z "$mx" ]; then log "  blur counter ($1): not on screen"; echo "$1 none" >> "$OUT/blur-summary.txt"; return; fi
   echo "$1 max=$mx" >> "$OUT/blur-summary.txt"
-  if [ "$mx" -gt 2 ]; then log "FAIL $1: blurs live max=$mx (>2)"; FAIL=1; else log "ok: blurs live max=$mx ($1)"; fi
+  if [ "$mx" -gt 2 ]; then log "FAIL $1: blurs live max=$mx (>2)"; FAIL=1; else log "ok: blurs live max so far=$mx ($1)"; fi
 }
 # A scenario that failed while an emulator system dialog was up is retried once (infra, not the app).
 retry_infra() { # $@ scenario command
@@ -356,13 +357,23 @@ press_drag() { # $1 name $2 "x y" : press, drag 0.33 D down-left while held (rec
   for i in $(seq 1 20); do adb shell "input motionevent DOWN $x $y; input motionevent MOVE $((x+300)) $((y+400)); input motionevent UP $((x+300)) $((y+400))"; done
   sleep 1; gfx "$n-rapid"; check "$n-rapid20" || return 1
 }
+plush_scn() { # upstream v0.60 plush avatars, all moods, animating
+  local n=$1
+  tapl "E2E Plush" 5 "$n-p0" || { log "note $n: no plush route (target has no plush)"; return; }
+  sleep 2; check "$n-open" || return
+  expect_text "E2E PLUSH OPEN" 8 "$n-p1"
+  log "  plush moods on screen: $(grep -o 'plush [a-z]*' "$OUT/$n-p1.xml" | sort -u | tr '\n' ' ')"
+  shot "$n-a"; sleep 1.2; shot "$n-b"; sleep 3; check "$n-animate" || return
+  [ "$(md5sum < "$OUT/$n-a.png")" != "$(md5sum < "$OUT/$n-b.png")" ] && log "ok: plush frames change" || log "note $n: two plush screenshots identical (still faces?)"
+  adb shell input keyevent 4; sleep 1.2; check "$n-back" || return
+}
 toggle_to() { # $1 name $2 expected
   ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
   local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
-round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; menu_scn "$1-dots" $2; row_scn "$1-row" $2; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; retry_infra plush_scn "$1-plush"; }
 
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
