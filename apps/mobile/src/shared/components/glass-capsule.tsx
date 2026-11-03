@@ -1,12 +1,15 @@
 import { BlurView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
-import type { PropsWithChildren, RefObject } from "react";
+import { type PropsWithChildren, type RefObject, useId } from "react";
 import { Platform, StyleSheet, View, type ViewInstance } from "react-native";
 import Animated, { cubicBezier } from "react-native-reanimated";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { isAndroid } from "@/shared/lib/platform";
+import { pill } from "@/shared/motion/tokens";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /** The height of the bottom search capsules: home search and the Marketplace field. */
 export const GLASS_CAPSULE_HEIGHT = 52;
@@ -34,8 +37,14 @@ export function GlassCapsule({
   tintShown = true,
   blurTarget,
   blurPaused = false,
+  colorOSFrost = false,
   children,
 }: PropsWithChildren<{
+  /**
+   * ColorOS motion (build 9): while the capsule blurs, a lighter fill lets the colours behind glow
+   * through, with a hairline specular rim and a soft top light. Ignored when ColorOS motion is off.
+   */
+  colorOSFrost?: boolean;
   liquidGlass: boolean;
   /** Android: the content to blur under the capsule. Without it the capsule has the solid glass. */
   blurTarget?: RefObject<ViewInstance | null>;
@@ -63,6 +72,9 @@ export function GlassCapsule({
   const { theme } = useUniwind();
   const blurFill = String(useCSSVariable("--openbot-bg-chrome-blur"));
   const blurs = ANDROID_BLUR && !liquidGlass && blurTarget !== undefined && !blurPaused;
+  const colorOS = useColorOSMotion().enabled;
+  const frost = colorOSFrost && colorOS && blurs;
+  const dark = theme === "dark";
   const fallback = isAndroid ? milky : { backgroundColor: String(fallbackBackground), boxShadow: CAPSULE_SHADOW };
   return (
     <GlassView
@@ -106,9 +118,20 @@ export function GlassCapsule({
           ) : null}
           <View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { backgroundColor: blurs ? blurFill : milky.backgroundColor }]}
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                backgroundColor: frost
+                  ? dark
+                    ? pill.fillDark
+                    : pill.fillLight
+                  : blurs
+                    ? blurFill
+                    : milky.backgroundColor,
+              },
+            ]}
           />
-          <ChromeGlassSheen />
+          {frost ? <FrostRim height={height} dark={dark} /> : <ChromeGlassSheen />}
         </>
       ) : null}
       {/* The tint lies over the glass, as in the prototype. The native glass tint cannot animate, and
@@ -130,5 +153,40 @@ export function GlassCapsule({
       ) : null}
       {children}
     </GlassView>
+  );
+}
+
+/** ColorOS frost: a soft light over the top of the glass and a 1 px rim, bright on top, faint below. */
+function FrostRim({ height, dark }: { height: number; dark: boolean }) {
+  const id = `frost-rim-${useId().replaceAll(":", "")}`;
+  const sheen = dark ? pill.sheenDark : pill.sheenLight;
+  const top = dark ? pill.rimTopDark : pill.rimTopLight;
+  const side = dark ? pill.rimBottomDark : pill.rimBottomLight;
+  return (
+    <>
+      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} height="100%" width="100%">
+        <Defs>
+          <LinearGradient id={id} x1="0" x2="0" y1="0" y2="1">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity={sheen} />
+            <Stop offset="0.45" stopColor="#ffffff" stopOpacity={sheen / 5} />
+            <Stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect fill={`url(#${id})`} height="100%" width="100%" />
+      </Svg>
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            borderRadius: height / 2,
+            borderCurve: "continuous",
+            borderWidth: 1,
+            borderColor: `rgba(255, 255, 255, ${side})`,
+            borderTopColor: `rgba(255, 255, 255, ${top})`,
+          },
+        ]}
+      />
+    </>
   );
 }

@@ -104,6 +104,31 @@ export const edges = {
   bottomHeight: 72,
   /** Dim scrim black 0.55 → 0. */
   scrimAlpha: 0.55,
+  /**
+   * Build 9 home edge (one masked BlurView, spec §1e: blur ramps from 0 over the zone). expo-blur
+   * intensity on a 1/4-size image, like the search pill (24).
+   */
+  homeIntensity: 22,
+  /** The zone rises this far above the top of the search pill. */
+  homeRise: 72,
+  /** Background-colour scrim at the bottom edge (0 at the zone top), for text over the blur. */
+  homeScrim: 0.5,
+  /** Opacity in/out when the blur pauses (search open, home moving). */
+  homeFadeMs: 180,
+} as const;
+
+/** Build 9 search pill frost (spec §1: tint over blur, 1 px rim white 10–12 % top, ~6 % sides). */
+export const pill = {
+  /** Lighter than the chrome fill (0.62 dark / 0.55 light) so colours behind show through. */
+  fillDark: "rgba(22, 22, 24, 0.34)",
+  fillLight: "rgba(255, 255, 255, 0.42)",
+  rimTopDark: 0.22,
+  rimBottomDark: 0.05,
+  rimTopLight: 0.7,
+  rimBottomLight: 0.18,
+  /** The soft light across the top third of the glass. */
+  sheenDark: 0.1,
+  sheenLight: 0.22,
 } as const;
 
 /** 5. Zoom open (spec §4). */
