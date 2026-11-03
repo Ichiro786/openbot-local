@@ -164,6 +164,9 @@ export function openGlassMenu(request: Omit<GlassMenuRequest, "key">): number | 
   // Each callback runs at most once, whichever path (choice, back, outside tap, replace, unmount) ends it.
   useGlassMenuStore.setState({
     request: { ...request, key, onClose: once(request.onClose), onSelect: once(request.onSelect) },
+    // Build 11 (e2e: 4 live blurs on a message long-press): the screen's own blurs (header band,
+    // composer) pause in the same commit that mounts the menu's, not one effect later.
+    frosted: ANDROID_BLUR && currentFrostTarget() !== null,
   });
   previous?.onClose(false);
   return key;
