@@ -52,8 +52,23 @@ wait_for() { # $1 label $2 timeout_s $3 name -> echoes "x y"
   return 1
 }
 alive() { [ -n "$(adb shell pidof $PKG | tr -d '\r')" ]; }
-crashed() { # any fatal since the last clear
-  adb logcat -d -b crash > "$OUT/crash-buffer.txt" 2>/dev/null
+crashed() { # any fatal of the app since the last clear (run 41718194068: a systemui/gmail crash on the
+  # busy emulator filled the crash buffer and every check failed; only $PKG or its pid counts now)
+  adb logcat -d -b crash > "$OUT/crash-buffer-all.txt" 2>/dev/null
+  local pid; pid=$(adb shell pidof $PKG | tr -d '\r')
+  python3 - "$OUT/crash-buffer-all.txt" "$PKG" "${pid:-none}" > "$OUT/crash-buffer.txt" <<'PYC'
+import sys,re
+lines=open(sys.argv[1],errors="ignore").read().splitlines();pkg,pid=sys.argv[2],sys.argv[3]
+pids=set([pid])
+for l in lines:
+    m=re.search(r"Process: (\S+), PID: (\d+)",l)
+    if m and m.group(1).startswith(pkg): pids.add(m.group(2))
+    m=re.search(r">>> (\S+) <<<",l); n=re.search(r"pid: (\d+)",l)
+    if m and n and m.group(1).startswith(pkg): pids.add(n.group(1))
+for l in lines:
+    f=l.split()
+    if len(f)>3 and (f[2] in pids or pkg in l): print(l)
+PYC
   adb logcat -d | grep -E "FATAL EXCEPTION|AndroidRuntime: (FATAL|Process)|ReactNativeJS.*(Error|Exception)|SIGSEGV|SIGABRT|libc  *: Fatal" >> "$OUT/fatal-lines.txt" 2>/dev/null
   [ -s "$OUT/crash-buffer.txt" ] || ! alive
 }
@@ -443,6 +458,12 @@ toggle_to() { # $1 name $2 expected
 }
 round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
 
+# Run 41718194068 started while the emulator was still delivering BOOT_COMPLETED (skipped 315 frames,
+# JS timers seconds late): wait for it (max 240 s) and let the system settle before the app starts.
+for i in $(seq 1 120); do adb logcat -d 2>/dev/null | grep -q "Finished processing BOOT_COMPLETED" && break; sleep 2; done
+echo "[$(date +%T)] boot settle: BOOT_COMPLETED processed after ~$((i*2)) s; load $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
+sleep 20
+echo "[$(date +%T)] load before start $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
 adb logcat -c; adb logcat -b crash -c
 adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
 # Emulator launcher ANRs ("Pixel Launcher isn't responding") ate taps in runs 41698820646 and 41693238776:
