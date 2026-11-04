@@ -644,6 +644,54 @@ close_scn() { # $1 name $2 ON|OFF
   adb shell input keyevent 4; sleep 2; check "$n-d-back" || return; close_land "$n-d2" button "$rp"
   blur_max "$n-close"
 }
+# Build 11.2 stuck-Back regression (Syed's phone, a94d5ec): zoom-open chat -> agent page -> Appearance ->
+# change colour -> Save -> back to the chat: header Back and system Back must both leave the chat.
+at_home() { dump "$1"; [ -n "$(find_node "$OUT/$1.xml" "Toggle ColorOS")" ]; }
+to_appearance_and_back() { # $1 name $2 key|swipe: how to come back to the chat
+  local n=$1 xy
+  tapl "E2E Open agent page" 6 "$n-ag0" || { log "FAIL $n: no agent page button"; FAIL=1; return 1; }; sleep 1.5
+  expect_text "E2E AGENT PAGE OPEN" 8 "$n-ag1"
+  tapl "E2E Appearance" 6 "$n-ap0" || { log "FAIL $n: no Appearance button"; FAIL=1; return 1; }; sleep 1.5
+  expect_text "PICKER OPEN" 8 "$n-ap1"
+  xy=$(find_node "$OUT/$n-ap1.xml" "Blue"); [ -n "$xy" ] && adb shell input tap $xy; sleep 0.8
+  tapl "E2E Save" 5 "$n-ap2" || FAIL=1; sleep 0.8; dump "$n-ap3"
+  grep -q 'DIRTY=0 SAVED=1' "$OUT/$n-ap3.xml" && log "ok: colour saved ($n)" || log "note $n: save state $(grep -oE 'DIRTY=[0-9] SAVED=[0-9]+' "$OUT/$n-ap3.xml" | head -1)"
+  if [ "$2" = swipe ]; then edge_swipe "$n-sw1" 640 640; edge_swipe "$n-sw2" 640 640
+  else adb shell input keyevent 4; sleep 1.5; adb shell input keyevent 4; fi
+  sleep 1.5; check "$n-back-to-chat" || return 1
+  expect_text "E2E CHAT OPEN" 6 "$n-chat"
+}
+stuck_scn() { # $1 name
+  local n=$1
+  log "== stuck-Back regression ($n)"
+  # 1. agent page + Save, back by keys; leave with the HEADER Back
+  home; zoom_open "$n-1" ON || return
+  to_appearance_and_back "$n-1" key || return
+  tapl_last "Back" "$n-1-h" || { log "FAIL $n: no header Back"; FAIL=1; }; sleep 2.5; check "$n-1-left" || return
+  at_home "$n-1-home" && log "ok: header Back left the chat after agent page + Save" || { log "FAIL $n: header Back stuck after agent page + Save"; FAIL=1; home; }
+  # 2. same, back by edge swipes; leave with SYSTEM Back (key)
+  zoom_open "$n-2" ON || return
+  to_appearance_and_back "$n-2" swipe || return
+  adb shell input keyevent 4; sleep 2.5; check "$n-2-left" || return
+  at_home "$n-2-home" && log "ok: system Back left the chat after agent page + Save" || { log "FAIL $n: system Back stuck after agent page + Save"; FAIL=1; home; }
+  # 3. same, leave with the predictive back GESTURE
+  zoom_open "$n-3" ON || return
+  to_appearance_and_back "$n-3" key || return
+  edge_swipe "$n-3-sw" 640 640; sleep 1; check "$n-3-left" || return
+  at_home "$n-3-home" && log "ok: back gesture left the chat after agent page + Save" || { log "FAIL $n: back gesture stuck after agent page + Save"; FAIL=1; home; }
+  # 4. a cancelled gesture, then a plain push/pop (agent page), then header Back and (again) system Back
+  zoom_open "$n-4" ON || return
+  edge_swipe "$n-4-cancel" 520 10; sleep 0.5
+  tapl "E2E Open agent page" 6 "$n-4-ag" || FAIL=1; sleep 1.5; adb shell input keyevent 4; sleep 1.5
+  expect_text "E2E CHAT OPEN" 6 "$n-4-chat"
+  tapl_last "Back" "$n-4-h" || FAIL=1; sleep 2.5; check "$n-4-left" || return
+  at_home "$n-4-home" && log "ok: header Back left the chat after cancel + push/pop" || { log "FAIL $n: header Back stuck after cancel + push/pop"; FAIL=1; home; }
+  zoom_open "$n-5" ON || return
+  tapl "E2E Open agent page" 6 "$n-5-ag" || FAIL=1; sleep 1.5; adb shell input keyevent 4; sleep 1.5
+  adb shell input keyevent 4; sleep 2.5; check "$n-5-left" || return
+  at_home "$n-5-home" && log "ok: system Back left the chat after push/pop" || { log "FAIL $n: system Back stuck after push/pop"; FAIL=1; home; }
+  blur_max "$n"
+}
 picker_scn() { # $1 name $2 ON|OFF
   local n=$1 xy b
   log "== picker ($n, colorOS=$2)"
@@ -706,7 +754,7 @@ toggle_to() { # $1 name $2 expected
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
   local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
-round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; close_scn "$1-close" $2; retry_infra picker_scn "$1-picker" $2; list_scn "$1-list" $2; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; close_scn "$1-close" $2; if [ "$2" = ON ]; then stuck_scn "$1-stuck"; fi; retry_infra picker_scn "$1-picker" $2; list_scn "$1-list" $2; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
 
 # Run 41718194068 started while the emulator was still delivering BOOT_COMPLETED (skipped 315 frames,
 # JS timers seconds late): wait for it (max 240 s) and let the system settle before the app starts.
