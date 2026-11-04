@@ -1,8 +1,8 @@
 diff --git a/src/backend/agent-service.ts b/src/backend/agent-service.ts
-index acebd74..5379118 100644
+index 2b411e218..6eb157872 100644
 --- a/src/backend/agent-service.ts
 +++ b/src/backend/agent-service.ts
-@@ -213,6 +213,13 @@ import { ThreadLifecycle } from "./agent/thread-lifecycle";
+@@ -215,6 +215,13 @@ import { ThreadLifecycle } from "./agent/thread-lifecycle";
  import { toToolOperationFailed } from "./agent/tool-operation";
  import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
  import { memoryReviewUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
@@ -16,7 +16,7 @@ index acebd74..5379118 100644
  import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
  import { WarmGenerations } from "./agent/warm-generations";
  import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
-@@ -1168,6 +1175,32 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+@@ -1194,6 +1201,32 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
        reportsCompactions: (agentId) => this.#reportsCompactions(agentId),
        forgetThread: (threadId) => this.#forgetExecutionThread(threadId).pipe(toChannelOperationError),
        loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
@@ -48,8 +48,8 @@ index acebd74..5379118 100644
 +        ),
        // A held agent gets no channel assignment: one that waited for the reset would hold its
        // resources. A channel turn runs beside the agent's tasks, unless its provider runs one turn
-       // of the agent at a time.
-@@ -2425,6 +2458,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+       // of the agent at a time. A delivery of its own chat that starts has no turn ID yet, and it
+@@ -2464,6 +2497,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     * that the agent does by itself. Another ACP agent or Pi can compact with no signal, so a prompt
     * that names earlier context instead of repeating it could lose what the summary dropped.
     */
@@ -70,7 +70,7 @@ index acebd74..5379118 100644
      const agent = this.#store.list().find((item) => item.id === agentId);
      const mode = agent ? this.#providers.clientForAgent(agent)?.contextCompaction : undefined;
 diff --git a/src/backend/agent/agent-memories.ts b/src/backend/agent/agent-memories.ts
-index ac042d7..ca33f3f 100644
+index ac042d763..ca33f3f12 100644
 --- a/src/backend/agent/agent-memories.ts
 +++ b/src/backend/agent/agent-memories.ts
 @@ -115,6 +115,11 @@ export class AgentMemories {
@@ -86,7 +86,7 @@ index ac042d7..ca33f3f 100644
      const ids = new Set(
        this.#memories
 diff --git a/src/backend/agent/memory-review.ts b/src/backend/agent/memory-review.ts
-index f8e3638..9ad2866 100644
+index f8e363899..9ad28668c 100644
 --- a/src/backend/agent/memory-review.ts
 +++ b/src/backend/agent/memory-review.ts
 @@ -124,6 +124,29 @@ export class MemoryReview {
@@ -120,7 +120,7 @@ index f8e3638..9ad2866 100644
    readonly chatCleared = Effect.fn("MemoryReview.chatCleared")(function* (this: MemoryReview, agentId: string) {
      const conversation = this.#conversation(agentId, null);
 diff --git a/src/backend/channel-history.ts b/src/backend/channel-history.ts
-index 537e68c..f400e4d 100644
+index 537e68cab..f400e4da0 100644
 --- a/src/backend/channel-history.ts
 +++ b/src/backend/channel-history.ts
 @@ -26,6 +26,12 @@ export type ChannelTextModel = (
@@ -181,18 +181,18 @@ index 537e68c..f400e4d 100644
            // happened; a member that acted on an old request in it continued finished work.
            ...(summaryShown
 diff --git a/src/backend/channel-service.ts b/src/backend/channel-service.ts
-index 1dc928c..2ce2fc6 100644
+index 3cde5aa35..f830a88c5 100644
 --- a/src/backend/channel-service.ts
 +++ b/src/backend/channel-service.ts
-@@ -52,6 +52,7 @@ import {
+@@ -54,6 +54,7 @@ import {
    PERSON_REQUEST_REQUIRED,
  } from "./channel-management";
  import { ChannelMemoryStore } from "./channel-memory-store";
 +import { dmContextEnabled } from "./dm-channel-context";
  import { type ChannelAssignment, type ChannelContext, ChannelStore } from "./channel-store";
  import type { DeliveryContext, MailboxStore } from "./mailbox-store";
- import type { OpenBotDatabase } from "./openbot-database";
-@@ -104,6 +105,13 @@ export interface ChannelHooks {
+ import { type MessageDeleteAccess, MessageDeleteRefused } from "./message-delete";
+@@ -107,6 +108,13 @@ export interface ChannelHooks {
    queueHoldChanged?(): void;
    /** A memory is not part of the channel revision, so a tool write needs its own notification. */
    memoriesChanged?(channelId: string): void;
@@ -206,7 +206,7 @@ index 1dc928c..2ce2fc6 100644
    /**
     * The access level of the person who asked a member to change the channel, for an agent that the
     * change adds or removes, as the Team API gives it for their own save. Omitted, `manage`: only
-@@ -245,7 +253,12 @@ export class ChannelService {
+@@ -248,7 +256,12 @@ export class ChannelService {
    ) {
      this.store = new ChannelStore(database);
      this.memories = new ChannelMemoryStore(database);
@@ -220,7 +220,7 @@ index 1dc928c..2ce2fc6 100644
    }
  
    /**
-@@ -2140,6 +2153,8 @@ export class ChannelService {
+@@ -2227,6 +2240,8 @@ export class ChannelService {
      yield* channelSync(() => this.requireMember(channel, assignment.agentId));
      const agent = this.hooks.agents().find((item) => item.id === assignment.agentId);
      if (!agent) return yield* channelFailure(new Error(sourceText("error.backend.channelAssigneeUnavailable")));
@@ -231,7 +231,7 @@ index 1dc928c..2ce2fc6 100644
      const delivered = this.#deliveredContext(channel.id, context, agent);
 diff --git a/src/backend/dm-channel-context.ts b/src/backend/dm-channel-context.ts
 new file mode 100644
-index 0000000..5f92a1e
+index 000000000..5f92a1e45
 --- /dev/null
 +++ b/src/backend/dm-channel-context.ts
 @@ -0,0 +1,109 @@
