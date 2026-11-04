@@ -84,6 +84,10 @@ class PredictiveBackModule : Module() {
     }
 
     // The base Back must be in the dispatcher before any screen's callback, so from the first activity on.
+    OnCreate {
+      (appContext.currentActivity as? ComponentActivity)?.let { activity -> activity.runOnUiThread { installReactBack(activity) } }
+    }
+
     OnActivityEntersForeground {
       (appContext.currentActivity as? ComponentActivity)?.let { activity -> activity.runOnUiThread { installReactBack(activity) } }
     }
