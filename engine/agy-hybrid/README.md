@@ -21,7 +21,7 @@ when `current/.ready` exists and rewrites `antigravity-package.json` from the se
 | File | Role |
 | --- | --- |
 | `prepare.py` | builds the runtime; `--check` prints installed/latest; progress as `[agy-hybrid] STAGE <name> <pct>` on stderr |
-| `agy_hybrid.py` | bootstrap: sys.path, merged `google` namespace, protobuf runtime check off, runs `acp_server.main` |
+| `agy_hybrid.py` | bootstrap: sys.path, merged `google` namespace, protobuf runtime check off, `FieldDescriptor.label` restored on protobuf >= 7.34, runs `acp_server.main`; `openbot-start.sh` copies it over a prepared runtime on each start |
 | `agy_acp_server` | sh launcher (what OpenBot runs); sets the harness path and `BROWSER=open-url` |
 | `open-url` | BROWSER stand-in: records the Google sign-in link in `/root/.config/openbot-local/agy-signin-url`, never writes to stdout (the ACP channel) |
 | `agy-hybrid.sh` | what the app runs: `status`, `check`, `prepare`, `remove`, `signin-url` |

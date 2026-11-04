@@ -302,6 +302,10 @@ if [ -f "$AGY_CURRENT/.ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ]; the
   if [[ $agy_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf '{"version":"%s"}\n' "$agy_version" >"$AGY_CURRENT/antigravity-package.json.tmp" &&
       mv -f "$AGY_CURRENT/antigravity-package.json.tmp" "$AGY_CURRENT/antigravity-package.json"
+    # The runtime under /root outlives engine updates: keep its bootstrap in step with this engine's fixes.
+    cmp -s /opt/agy-hybrid/tools/agy_hybrid.py "$AGY_CURRENT/bin/agy_hybrid.py" ||
+      cp -f /opt/agy-hybrid/tools/agy_hybrid.py "$AGY_CURRENT/bin/agy_hybrid.py" ||
+      log "Antigravity (Gemini): could not refresh the hybrid bootstrap."
     export OPENBOT_ANTIGRAVITY_PATH="$AGY_CURRENT/bin/agy_acp_server"
     log "Antigravity (Gemini): hybrid runtime $agy_version at $OPENBOT_ANTIGRAVITY_PATH."
   else
