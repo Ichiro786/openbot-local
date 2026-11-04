@@ -66,6 +66,29 @@ interface ChatHeaderProps {
   frostTarget?: RefObject<ViewInstance | null>;
 }
 
+/**
+ * Whether the chat draws the ColorOS agent header (it ends lower than the classic one). Shared with
+ * ChatView so the message list starts under the header that is actually shown (split pane included).
+ */
+export function colorOSChatHeaderShown(o: {
+  colorOS: boolean;
+  kind: string;
+  actionsMenu?: unknown;
+  title?: unknown;
+  kicker?: string;
+  splitShown: boolean;
+}): boolean {
+  return (
+    o.colorOS &&
+    isAndroid &&
+    o.kind === "agent" &&
+    o.actionsMenu === undefined &&
+    o.title === undefined &&
+    !o.kicker &&
+    !o.splitShown
+  );
+}
+
 export function ChatHeader({
   target,
   fallbackBackground,
@@ -361,13 +384,8 @@ export function ChatHeader({
   // the agent chat's X-style glass header with ••• to the agent page (which holds the browser). Tasks,
   // channels, the split pane and iOS keep the header below.
   if (
-    colorOS &&
-    isAndroid &&
     target.kind === "agent" &&
-    actionsMenu === undefined &&
-    title === undefined &&
-    !kicker &&
-    !splitShown
+    colorOSChatHeaderShown({ colorOS, kind: target.kind, actionsMenu, title, kicker, splitShown })
   ) {
     return (
       <ColorOSChatHeader

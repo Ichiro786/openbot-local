@@ -151,7 +151,8 @@ export function ColorOSChatHeader({
         <Typography.Paragraph className="font-semibold min-w-0 shrink" numberOfLines={1} style={styles.name}>
           {target.name}
         </Typography.Paragraph>
-        <ChevronRight color={iconColor} size={14} strokeWidth={2.5} style={styles.chevron} />
+        {/* Build 11.2: the › says "opens the agent page"; a thread menu opens a menu instead, so no ›. */}
+        {threadMenu ? null : <ChevronRight color={iconColor} size={16} strokeWidth={2.75} style={styles.chevron} />}
         {threadMenu && threadMenu.attention > 0 ? (
           <View style={[styles.badge, { backgroundColor: threadMenu.color }]} />
         ) : null}
@@ -273,7 +274,8 @@ const styles = StyleSheet.create({
   },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 2, minWidth: 0 },
   name: { fontSize: 15, lineHeight: 19 },
-  chevron: { opacity: 0.6 },
+  // Build 11.2: full strength, so the › reads on the light frosted pill too (0.6 washed out there).
+  chevron: { opacity: 0.9 },
   badge: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
   avatar: { position: "absolute", top: 0 },
 });

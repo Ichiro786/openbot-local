@@ -28,7 +28,7 @@ import { channelRecipient } from "@/features/channels/model/channel-draft";
 import type { ApprovalDecision } from "@/features/chat/components/chat-approval-card";
 import { ChatComposer, type MentionSkill } from "@/features/chat/components/chat-composer";
 import { ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
-import { ChatHeader } from "@/features/chat/components/chat-header";
+import { ChatHeader, colorOSChatHeaderShown } from "@/features/chat/components/chat-header";
 import { ChatMessageList } from "@/features/chat/components/chat-message-list";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
 import { useChatAttachments } from "@/features/chat/components/use-chat-attachments";
@@ -57,6 +57,7 @@ import type { MobileAgentActivity } from "@/features/workspace/model/agent-activ
 import type { PendingApproval } from "@/features/workspace/model/pending-approvals";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { showsOnline } from "@/features/workspace/model/server-status";
+import { useSplitLayout } from "@/shared/components/adaptive-split";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
@@ -576,7 +577,9 @@ export function ChatView({
   const rowsShown = useRowsAfterOpenTransition(zoomed);
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;
-  const colorOSAgentHeader = isAndroid && colorOSHeaderOn && target.kind === "agent";
+  // Build 11.2: the same check ChatHeader makes (the split pane keeps the classic header).
+  const splitShown = useSplitLayout() !== null;
+  const colorOSAgentHeader = colorOSChatHeaderShown({ colorOS: colorOSHeaderOn, kind: target.kind, splitShown });
   const motion = useChatMotion(
     colorOSAgentHeader ? insets.top + COLOROS_CHAT_HEADER_BOTTOM + 6 : insets.top + 84,
     keyboardOffset,
