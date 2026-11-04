@@ -31,6 +31,8 @@ const ANDROID_PLACE_TIMEOUT_MS = 250;
 /** How long the list keeps the latest message in view after the chat has its rows and its latest page. */
 const OPENING_FOLLOW_MS = 600;
 
+/** Build 11.2: the longest a sent message's scroll waits for the keyboard to finish moving. */
+const KEYBOARD_SETTLE_MS = 450;
 /** Build 10 keyboard fallback: how long a settled keyboard change takes to animate. */
 const FALLBACK_KEYBOARD_MS = 240;
 /** Build 10 keyboard fallback: the anticipated lift on focus, about an IME's own rise. */
@@ -93,6 +95,8 @@ export function useChatMotion(
   }, [fallback, colorOS, reducedMotion]);
   /** Bumped by each keyboard Start, so an anticipated lift knows whether the keyboard came. */
   const keyboardEvents = useSharedValue(0);
+  /** Build 11.2: the keyboard is between its Start and its End (showing or hiding). */
+  const keyboardMoving = useSharedValue(false);
   // Track opening and interactive frames. Once dismissal starts, finish the
   // return independently so a missing completion cannot retain keyboard space.
   useKeyboardHandler(
@@ -100,6 +104,7 @@ export function useChatMotion(
       onStart: (event) => {
         "worklet";
         keyboardEvents.set(keyboardEvents.get() + 1);
+        keyboardMoving.set(true);
         if (event.height > 0) {
           // Fallback: the settled burst (duration 0) leaves an anticipated lift running; onEnd lands it.
           if (!(fallback.get() && event.duration === 0)) {
@@ -108,9 +113,12 @@ export function useChatMotion(
           }
           keyboardDismissed.set(false);
           lastKeyboardHeight.set(event.height);
-          // Fallback: ride to the destination on the keyboard's own duration; real onMove frames,
-          // when they come, overwrite this on their first frame.
-          if (fallback.get() && event.duration > 0) {
+          // Fallback: ride to the destination on the keyboard's own duration, only on a phone known to
+          // send no IME frames. Build 11.2 (stutter on focus): where frames come, a timing started here
+          // ran ahead of the IME (out-cubic is front-loaded) and the first real frame pulled the
+          // composer back down: a visible back-step, and the composer out of step with the
+          // keyboard-aware list. The frames alone drive it now.
+          if (fallback.get() && event.duration > 0 && framesMissing.get()) {
             const timing = {
               duration: event.duration,
               easing: Easing.out(Easing.cubic),
@@ -152,6 +160,7 @@ export function useChatMotion(
       },
       onEnd: (event) => {
         "worklet";
+        keyboardMoving.set(false);
         if (event.height <= 0 || event.progress === 0) {
           keyboardDismissed.set(true);
           // Fallback: a return that is still animating (from onStart) finishes on its own.
@@ -190,7 +199,7 @@ export function useChatMotion(
         }
       },
     },
-    [keyboardHeight, keyboardProgress, keyboardDismissed, fallback, keyboardEvents],
+    [keyboardHeight, keyboardProgress, keyboardDismissed, fallback, keyboardEvents, keyboardMoving],
   );
   useEffect(() => {
     // A native picker or interrupted dismissal can omit the controller's final frame.
@@ -387,11 +396,22 @@ export function useChatMotion(
       const animated = !send.first && send.fromLatest && !reducedMotion;
       if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
       if (animated) {
+        // Build 11.2 (stutter on send): Send dismisses the keyboard, and the keyboard-aware list moves
+        // its content with the keyboard on the UI thread. An animated scroll started mid-dismissal
+        // aimed at an end that kept moving under it, and the two fought. The scroll waits for the
+        // keyboard to settle (at most KEYBOARD_SETTLE_MS), then glides once.
+        const started = Date.now();
+        const step = () => {
+          // ColorOS motion only (the fallback's switch): OFF scrolls as build 11 did.
+          if (fallback.get() && keyboardMoving.get() && Date.now() - started < KEYBOARD_SETTLE_MS) {
+            sendScrollFrame.current = requestAnimationFrame(step);
+            return;
+          }
+          sendScrollFrame.current = null;
+          void listRef.current?.scrollToEnd({ animated: true });
+        };
         sendScrollFrame.current = requestAnimationFrame(() => {
-          sendScrollFrame.current = requestAnimationFrame(() => {
-            sendScrollFrame.current = null;
-            void listRef.current?.scrollToEnd({ animated: true });
-          });
+          sendScrollFrame.current = requestAnimationFrame(step);
         });
       } else {
         sendScrollFrame.current = null;
@@ -416,8 +436,10 @@ export function useChatMotion(
       finishFirstMessage,
       firstOffset,
       firstOpacity,
+      fallback,
       header,
       keyboardHeight,
+      keyboardMoving,
       keyboardOffset,
       reducedMotion,
       responseOpacity,
