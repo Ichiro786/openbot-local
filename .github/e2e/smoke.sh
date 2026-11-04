@@ -339,6 +339,7 @@ chat_scn() { # in /e2e-chat: message menus, reactions, rows, composer; then back
   log "  header: Back=$(count "$OUT/$n-h0.xml" Back) Info=$(count "$OUT/$n-h0.xml" "Info for E2E Agent") name=$(count "$OUT/$n-h0.xml" "E2E Agent")"
   if [ "$2" = ON ]; then
     [ "$(count "$OUT/$n-h0.xml" "Info for E2E Agent")" -ge 2 ] && log "ok: X header (name pill + ••• labelled)" || { log "FAIL $n: ColorOS header labels missing"; FAIL=1; }
+    header_geom "$n" "$OUT/$n-h0.xml"
   else
     [ "$(count "$OUT/$n-h0.xml" "Info for E2E Agent")" -le 1 ] && log "ok: OFF header is the build 9 one" || { log "FAIL $n: OFF shows the ColorOS header"; FAIL=1; }
   fi
@@ -387,6 +388,38 @@ PYY
   expect_text 'SENT=line1\nline2\nline3' 5 "$n-k3"
   adb shell input keyevent 4; sleep 1.2; dump "$n-kb"; if [ -n "$(find_node "$OUT/$n-kb.xml" "E2E CHAT OPEN")" ]; then adb shell input keyevent 4; sleep 1.5; fi; check "$n-chat-back" || return
   dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
+}
+header_geom() { # hotfix 11.1: compact agent pill (32 dp, hugs the name, <= 220 dp), no subtitle text, Back centred on avatar+pill (80 dp)
+  local n=$1 r d; d=$(adb shell wm density | grep -oE "[0-9]+" | tail -1)
+  r=$(python3 - "$2" "${d:-420}" <<'PYH'
+import re,sys,html
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read(); dp=int(sys.argv[2])/160
+pill=back=None; sub=0
+for n in re.findall(r'<node [^>]*>',xml):
+    t=re.search(r' text="([^"]*)"',n); d=re.search(r' content-desc="([^"]*)"',n)
+    t=html.unescape(t.group(1)) if t else ""; d=html.unescape(d.group(1)) if d else ""
+    b=re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n)
+    if not b: continue
+    b=tuple(map(int,b.groups()))
+    if "Review helper" in t: sub+=1
+    if pill is None and d.startswith("Info for E2E Agent"): pill=b
+    if back is None and d=="Back": back=b
+if not pill: print("nopill"); sys.exit()
+h=(pill[3]-pill[1])/dp; w=(pill[2]-pill[0])/dp
+gtop=pill[3]/dp-80; gmid=(gtop+pill[3]/dp)/2
+bmid=((back[1]+back[3])/2/dp) if back else -1
+print(f"h={h:.1f} w={w:.1f} pill={pill} sub={sub} groupTop={gtop:.1f} groupMid={gmid:.1f} backMid={bmid:.1f}")
+PYH
+)
+  log "  header geometry ($n): $r"
+  case "$r" in nopill) log "FAIL $n: no name pill node"; FAIL=1; return;; esac
+  python3 - "$r" <<'PYC' || { log "FAIL $n: header geometry out of spec"; FAIL=1; return; }
+import re,sys
+v={k:float(x) for k,x in re.findall(r"(\w+)=(-?[\d.]+)\b",sys.argv[1]) if k in("h","w","sub","groupMid","backMid")}
+ok=30<=v["h"]<=36 and v["w"]<=222 and v["sub"]==0 and (v["backMid"]<0 or abs(v["backMid"]-v["groupMid"])<=3)
+sys.exit(0 if ok else 1)
+PYC
+  log "ok: compact agent pill, name only, Back centred on the group"
 }
 ime_top() { # IME window top in screen px, or 0 when the keyboard is not shown
   local d; d=$(adb shell dumpsys input_method 2>/dev/null | grep -oE "mInputShown=(true|false)" | head -1)
