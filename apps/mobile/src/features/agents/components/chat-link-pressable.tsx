@@ -6,6 +6,7 @@ import type { createChatNavigationGate } from "@/features/agents/model/chat-navi
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
+import { snapshotNavigator } from "@/shared/motion/ColorOSMotionRoot";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
 
@@ -38,6 +39,9 @@ export function ChatLinkPressable({
   const navigation = useNavigation();
   const mounted = useRef(true);
   const self = useRef<ViewInstance | null>(null);
+  // Build 11.2: a recycled list row can show another chat by the time the opened one closes.
+  const shownChat = useRef(chatId);
+  shownChat.current = chatId;
   const { enabled: colorOS, reduceMotion } = useColorOSMotion();
   // ColorOS motion on Android: the row zooms open into the chat (iOS keeps Link.AppleZoom).
   const zoom = isAndroid && colorOS && !reduceMotion && !pane;
@@ -79,7 +83,28 @@ export function ChatLinkPressable({
           return;
         }
         node.measureInWindow((x, y, width, height) => {
-          if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0)) go();
+          if (!width || !height) {
+            go();
+            return;
+          }
+          // Build 11.2: the close zooms back into this row: it re-measures the row then, and shows a
+          // still of this screen behind the chat while a predictive back gesture is undecided.
+          const openedChat = chatId;
+          const source = {
+            home: snapshotNavigator(),
+            measure: (done: (rect: { x: number; y: number; width: number; height: number } | null) => void) => {
+              const row = self.current;
+              if (!mounted.current || !row || shownChat.current !== openedChat) {
+                done(null);
+                return;
+              }
+              row.measureInWindow((rx, ry, rw, rh) => done(rw && rh ? { x: rx, y: ry, width: rw, height: rh } : null));
+            },
+          };
+          if (!zoomOpen({ x, y, width, height }, go, 0, source)) {
+            void source.home.then((image) => image?.dispose());
+            go();
+          }
         });
       }}
     />

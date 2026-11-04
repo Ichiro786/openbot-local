@@ -6,7 +6,7 @@ import Images from "lucide-react-native/icons/images";
 import Paperclip from "lucide-react-native/icons/paperclip";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Keyboard, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
+import { Keyboard, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
 import Animated, {
   cubicBezier,
   Extrapolation,
@@ -23,6 +23,7 @@ import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
+import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import { ChatCameraContent } from "./chat-camera-panel";
 import type { ChatAttachmentAnchor, ChatAttachments } from "./use-chat-attachments";
 
@@ -240,7 +241,7 @@ export function ChatAttachmentPanel({
   }, [morph]);
 
   useEffect(() => {
-    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+    const back = addChatBackListener(() => {
       if (mode === "camera") showOptions();
       else dismiss();
       return true;

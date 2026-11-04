@@ -28,7 +28,7 @@
         "monochromeImage": "./assets/icons/adaptive-monochrome.png",
         "backgroundColor": "#C7A6E6"
       },
-      "predictiveBackGestureEnabled": false,
+      "predictiveBackGestureEnabled": true,
       "permissions": ["android.permission.CAMERA"],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",

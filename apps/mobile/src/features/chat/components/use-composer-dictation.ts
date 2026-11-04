@@ -1,7 +1,7 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { BackHandler } from "react-native";
 import { Easing, ReduceMotion, type SharedValue, useSharedValue, withTiming } from "react-native-reanimated";
+import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import type { DictationPhase } from "../model/voice-dictation";
 import { useVoiceDictation } from "./use-voice-dictation";
 
@@ -98,7 +98,7 @@ export function useComposerDictation({
   // Android back stops dictation and keeps the text before it leaves the chat.
   useEffect(() => {
     if (!active || !focused) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    const subscription = addChatBackListener(() => {
       finish();
       return true;
     });

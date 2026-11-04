@@ -53,6 +53,7 @@ import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
 import { ColorOSMotionRoot } from "@/shared/motion/ColorOSMotionRoot";
 import { GlassMenuHost } from "@/shared/motion/GlassMenu";
+import { ZoomCloseHost } from "@/shared/motion/ZoomCloseOverlay";
 import { ZoomOpenHost } from "@/shared/motion/ZoomOpenOverlay";
 
 import { installLocalEngine } from "../../modules/openbot-engine";
@@ -168,6 +169,7 @@ function RootNavigator() {
                   <>
                     <GlassMenuHost />
                     <ZoomOpenHost />
+                    <ZoomCloseHost />
                   </>
                 }
               >

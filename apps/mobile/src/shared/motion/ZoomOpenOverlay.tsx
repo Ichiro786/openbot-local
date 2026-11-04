@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { create } from "zustand";
 import { glass } from "@/shared/glass/tokens";
 import { zoom } from "./tokens";
-import { armZoomPush, disarmZoomPush } from "./zoomPush";
+import { armZoomPush, disarmZoomPush, type ZoomSource } from "./zoomPush";
 
 export type ZoomRect = { x: number; y: number; width: number; height: number };
 
@@ -24,6 +24,8 @@ type ZoomRequest = {
   rect: ZoomRect;
   radius: number;
   navigate: () => void;
+  /** Build 11.2: handed to the pushed route, so its close can zoom back into the row. */
+  source: ZoomSource | null;
 };
 
 const useZoomStore = create<{ request: ZoomRequest | null }>(() => ({ request: null }));
@@ -47,12 +49,19 @@ const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
  * Nothing behind is scaled or blurred, so no screen can be left shrunk. Returns false when no host
  * is mounted, so the caller navigates directly.
  */
-export function zoomOpen(rect: ZoomRect, navigate: () => void, radius = 16): boolean {
+export function zoomOpen(
+  rect: ZoomRect,
+  navigate: () => void,
+  radius = 16,
+  source: Omit<ZoomSource, "rect" | "radius"> | null = null,
+): boolean {
   if (!hostMounted) return false;
   // Re-entrant taps: one zoom at a time. The second tap navigates directly, as before build 7.
   if (useZoomStore.getState().request) return false;
   if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return false;
-  useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });
+  useZoomStore.setState({
+    request: { key: nextKey++, rect, radius, navigate, source: source && { ...source, rect, radius } },
+  });
   return true;
 }
 
@@ -88,7 +97,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   const done = useRef(false);
   // Touches pass through once the route is pushed, so a stuck overlay can never block the app.
   const [passThrough, setPassThrough] = useState(false);
-  const { rect, radius, navigate } = request;
+  const { rect, radius, navigate, source } = request;
 
   const uncovered = useRef(false);
   const shownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,7 +120,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     shownTimer.current = setTimeout(uncover, SHOWN_SAFETY_MS);
     // Build 10: the pushed chat takes no native slide under the surface (one open animation).
     // Build 11: `uncover` runs when the chat marks itself painted, or SHOWN_SAFETY_MS after the push.
-    armZoomPush(uncover);
+    armZoomPush(uncover, source);
     navigate();
   };
 

@@ -1,3 +1,4 @@
+import type { SkImage } from "@shopify/react-native-skia";
 import { routeMemo } from "./routeMemo";
 
 /**
@@ -22,13 +23,31 @@ let armedUntil = 0;
 /** The overlay's "the zoomed route is on screen" callback, and the route it belongs to once taken. */
 let onShown: (() => void) | null = null;
 let shownKey: string | null = null;
+/**
+ * Build 11.2: where a zoom-opened route came from, so its close can shrink back into the same row.
+ * `measure` re-reads the row (null when it is gone); `home` is a still of the screen under it, taken
+ * as the zoom started, which shows behind the chat while a predictive back gesture is still undecided.
+ */
+export type ZoomSource = {
+  rect: { x: number; y: number; width: number; height: number };
+  radius: number;
+  measure: (done: (rect: ZoomSource["rect"] | null) => void) => void;
+  home: Promise<SkImage | null>;
+};
+let pendingSource: ZoomSource | null = null;
+const sources = new Map<string, ZoomSource>();
+/** Build 11.2: routes being zoom-closed: their pop takes no native animation (the overlay plays it). */
+const closing = new Set<string>();
+
 /** For each route the stack has seen: true while it is a zoom push that still has its animation off. */
 const pushes = routeMemo<boolean>();
 
 /** Called by the zoom overlay right before it navigates; `shown` runs once the pushed route has appeared. */
-export function armZoomPush(shown: () => void): void {
+export function armZoomPush(shown: () => void, source: ZoomSource | null = null): void {
   armedUntil = Date.now() + ARM_MS;
   onShown = shown;
+  disposeSource(pendingSource);
+  pendingSource = source;
   shownKey = null;
 }
 
@@ -37,6 +56,12 @@ export function disarmZoomPush(): void {
   armedUntil = 0;
   onShown = null;
   shownKey = null;
+  disposeSource(pendingSource);
+  pendingSource = null;
+}
+
+function disposeSource(source: ZoomSource | null): void {
+  void source?.home.then((image) => image?.dispose());
 }
 
 /**
@@ -45,10 +70,13 @@ export function disarmZoomPush(): void {
  */
 export function zoomPushAnimation<T extends string>(routeKey: string | undefined, fallback: T): T | "none" {
   if (routeKey === undefined) return fallback;
+  if (closing.has(routeKey)) return "none";
   const zoomed = pushes.get(routeKey, () => {
     if (Date.now() >= armedUntil) return false;
     armedUntil = 0;
     shownKey = routeKey;
+    if (pendingSource) sources.set(routeKey, pendingSource);
+    pendingSource = null;
     return true;
   });
   return zoomed ? "none" : fallback;
@@ -84,4 +112,24 @@ export function markZoomContentReady(routeKey: string): void {
 /** The route has closed: forget its key, so the memo holds only routes that are on a stack. */
 export function forgetZoomRoute(routeKey: string): void {
   pushes.forget(routeKey);
+  closing.delete(routeKey);
+  disposeSource(sources.get(routeKey) ?? null);
+  sources.delete(routeKey);
+}
+
+/** Build 11.2: the row a zoom-opened route came from (undefined for any other route). */
+export function zoomSource(routeKey: string): ZoomSource | undefined {
+  return sources.get(routeKey);
+}
+
+/** Build 11.2: the closing overlay owns the source (and disposes its still) from here on. */
+export function takeZoomSource(routeKey: string): ZoomSource | undefined {
+  const source = sources.get(routeKey);
+  sources.delete(routeKey);
+  return source;
+}
+
+/** Build 11.2: this route is being zoom-closed; the caller re-reads its options before it pops. */
+export function markZoomClosing(routeKey: string): void {
+  closing.add(routeKey);
 }

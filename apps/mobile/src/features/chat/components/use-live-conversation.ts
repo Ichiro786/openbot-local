@@ -8,7 +8,6 @@ import {
 } from "@openbot/contracts/ipc";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useEffect, useId, useRef, useState } from "react";
-import { BackHandler } from "react-native";
 import {
   cancelAnimation,
   Easing,
@@ -24,6 +23,7 @@ import { REPLY_VOICE_FAILURE_TEXT, type ReplyReading, streamReply } from "@/feat
 import { speechNative } from "@/features/voice/model/speech-native";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText } from "@/shared/lib/text";
+import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import { type LiveConversationPhase, liveReplyTurn } from "../model/live-conversation";
 import type { OutboxMessage } from "../model/outbox";
 import { useVoiceDictation, type VoiceDictation } from "./use-voice-dictation";
@@ -185,7 +185,7 @@ export function useLiveConversation(input: LiveConversationInput): LiveConversat
   // Android back ends the conversation before it leaves the chat.
   useEffect(() => {
     if (!state.open || !input.focused) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    const subscription = addChatBackListener(() => {
       controller.end();
       return true;
     });

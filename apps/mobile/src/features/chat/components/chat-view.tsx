@@ -65,6 +65,7 @@ import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { useZoomClose } from "@/shared/motion/useZoomClose";
 import { isZoomPush, markZoomContentReady } from "@/shared/motion/zoomPush";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
@@ -570,6 +571,8 @@ export function ChatView({
   // Build 11: this chat was opened by the ColorOS zoom (decided at mount, before its options release it).
   const routeKey = useRoute().key;
   const [zoomed] = useState(() => isZoomPush(routeKey));
+  // Build 11.2: Back zooms a zoom-opened chat back into its home row (predictive on Android 14+).
+  useZoomClose(routeKey);
   const rowsShown = useRowsAfterOpenTransition(zoomed);
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;

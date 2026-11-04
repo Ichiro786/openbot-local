@@ -1,10 +1,10 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { BackHandler } from "react-native";
 import { Easing, ReduceMotion, type SharedValue, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { haptics } from "@/shared/lib/haptics";
+import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import type { DictationPhase } from "../model/voice-dictation";
 import { useVoiceDictation } from "./use-voice-dictation";
 
@@ -231,7 +231,7 @@ export function useVoiceMode({
   // queue, must go back normally and leave the transcript for review.
   useEffect(() => {
     if (stage === "closed" || !focused) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    const subscription = addChatBackListener(() => {
       back();
       return true;
     });
