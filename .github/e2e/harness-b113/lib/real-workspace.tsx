@@ -4,6 +4,8 @@
 // an empty loaded conversation, tasks on (so the name pill opens the thread menu). Unknown fields are
 // a callable "anything" that returns itself.
 import type { PropsWithChildren } from "react";
+import { OutboxProvider } from "@/features/chat/context/outbox-context";
+import { QueuedMessagesProvider } from "@/features/chat/context/queued-messages-context";
 import { WorkspaceContexts } from "@/features/workspace/context/workspace-store";
 
 const anything: any = new Proxy(function () {}, {
@@ -84,7 +86,10 @@ const actions: any = new Proxy({}, { get: (_t, key) => (typeof key === "string" 
 export function RealWorkspace({ children }: PropsWithChildren) {
   return (
     <WorkspaceContexts value={value} actions={actions}>
-      {children}
+      {/* The chat reads these two from the signed-in layout ((app)/_layout.tsx); 41804841271: "QueuedMessagesProvider is missing." */}
+      <OutboxProvider>
+        <QueuedMessagesProvider>{children}</QueuedMessagesProvider>
+      </OutboxProvider>
     </WorkspaceContexts>
   );
 }
