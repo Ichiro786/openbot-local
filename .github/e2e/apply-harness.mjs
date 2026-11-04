@@ -260,5 +260,53 @@ if (existsSync("apps/mobile/src/features/chat/components/chat-message-list.tsx")
   src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-list" options={{ headerShown: false }} />`);
   console.log("list route applied");
 }
+// Build 11.3: the REAL agent chat screen (AgentChatScreen) zoom-opened from a home row, with the chat
+// route's options and listeners (zoomPushAnimation, release on open, forgetZoomRoute on close).
+if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts") && existsSync(".github/e2e/harness-b113/app/e2e-real.tsx")) {
+  const index = "apps/mobile/src/app/index.tsx";
+  cpSync(".github/e2e/harness-b113/app/e2e-real.tsx", "apps/mobile/src/app/e2e-real.tsx");
+  cpSync(".github/e2e/harness-b113/lib/real-workspace.tsx", "apps/mobile/src/e2e/real-workspace.tsx");
+  let f = readFileSync(index, "utf8");
+  const ref = "const zoomRow = useRef<View>(null);";
+  const row = '<Text style={{ color: "#fff", fontSize: 17 }}>E2E Zoom chat (tap me)</Text>\n        </Pressable>';
+  if (!f.includes(ref) || !f.includes(row)) throw new Error("real chat row anchors missing (11.3)");
+  f = f.replace(ref, `${ref}
+  const __realRow = useRef<View>(null);
+  const __openReal = () => {
+    const go = () => router.push({ pathname: "/e2e-real", params: { agentId: "e2e-agent" } });
+    const view = __realRow.current;
+    if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
+    view.measureInWindow((x, y, width, height) => {
+      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0, { home: __snap(), measure: (done) => { const v = __realRow.current; if (!v) { done(null); return; } v.measureInWindow((a, b, c, d) => done(c && d ? { x: a, y: b, width: c, height: d } : null)); } })) go();
+    });
+  };`).replace(row, `${row}
+        <Pressable ref={__realRow} accessibilityRole="button" accessibilityLabel="E2E Real chat" onPress={__openReal} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#1f6f8b", justifyContent: "center", paddingHorizontal: 16 }}>
+          <Text style={{ color: "#fff", fontSize: 17 }}>E2E Real chat</Text>
+        </Pressable>`);
+  writeFileSync(index, f);
+  src = `import { forgetZoomRoute as __e2eForget } from "@/shared/motion/zoomPush";\n${src}`.replace(
+    anchor,
+    `${anchor}
+                    <Stack.Screen
+                      name="e2e-real"
+                      options={({ route }) => ({ animation: __e2eZoomPushAnimation(route.key, "slide_from_right"), headerShown: false, contentStyle: { backgroundColor: "#000" } })}
+                      listeners={({ navigation, route }) => {
+                        const release = () => {
+                          if (__e2eReleaseZoomPush(route.key)) navigation.setOptions({});
+                        };
+                        return {
+                          transitionEnd: (event) => {
+                            if (!event.data?.closing) release();
+                            else __e2eForget(route.key);
+                          },
+                          focus: () => {
+                            if (__e2eIsZoomPush(route.key)) setTimeout(release, 2000);
+                          },
+                        };
+                      }}
+                    />`,
+  );
+  console.log("build 11.3 real chat route applied");
+}
 writeFileSync(path, src);
 console.log("harness applied");

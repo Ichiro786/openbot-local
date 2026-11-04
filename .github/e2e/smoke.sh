@@ -799,6 +799,88 @@ adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 if ! wait_for "E2E READY" 120 "00-launch" >/dev/null; then log "FAIL: harness never showed"; shot "00-launch"; FAIL=1; fi
 shot "00-launch"; grep -o 'E2E READY[a-z ]*colorOS=[A-Z]*' "$OUT/00-launch.xml" | head -1 | tee -a "$OUT/steps.txt"
 check launch || true
+# Build 11.3: Back on the REAL chat screen (AgentChatScreen over a stand-in workspace), random-input lanes,
+# each looped REALN times. After a lane, the chat must be gone within ~3 s. If not: probe 1 = one settled
+# header Back tap (gone now = "IGNORED": the lane's taps were lost, e.g. under the open overlay); still
+# there = probe 2 = system Back key; still there = "STUCK" (Syed's bug). STUCK fails the run.
+REALN=${REALN:-20}
+real_row() { [ -s "$OUT/.realrow" ] || { wait_for "E2E Real chat" 10 rr0 > "$OUT/.realrow" || return 1; }; cat "$OUT/.realrow"; }
+real_open() { local xy; xy=$(real_row) || return 1; adb shell input tap $xy; sleep "${1:-2.6}"; }
+real_tap() { adb shell input tap $1 $2; }
+edge_quick() { # $1 out_x $2 end_x : left-edge swipe as motion events, no recording
+  local y=1300 x; adb shell input motionevent DOWN 3 $y
+  for x in $(seq 30 90 $1); do adb shell input motionevent MOVE $x $y; done
+  if [ "$2" -lt "$1" ]; then for x in $(seq $1 -120 $2); do adb shell input motionevent MOVE $x $y; done; fi
+  adb shell input motionevent UP $2 $y
+}
+on_home() { dump "$1"; [ -n "$(find_node "$OUT/$1.xml" "Toggle ColorOS")" ]; }
+on_real() { grep -q "E2E REAL OPEN" "$OUT/$1.xml"; }
+real_judge() { # $1 lane $2 iter $3 mode
+  local n="rl-$3-$1-$2" k
+  for k in 1 2 3; do sleep 1; if on_home "$n"; then echo "$3 $1 $2 ok" >> "$OUT/real-lanes.txt"; return 0; fi; done
+  check "$n" || { echo "$3 $1 $2 CRASH" >> "$OUT/real-lanes.txt"; ensure_running "$n"; home; return 0; }
+  local where=other; on_real "$n" && where=chat; shot "$n"
+  real_tap $BACKXY; sleep 2.5
+  if on_home "$n-p1"; then log "  lane $3/$1 iter $2: IGNORED (on $where after the lane; one settled header Back left)"; echo "$3 $1 $2 IGNORED $where" >> "$OUT/real-lanes.txt"; return 0; fi
+  shot "$n-p1"; adb shell input keyevent 4; sleep 2.5
+  if on_home "$n-p2"; then log "FAIL lane $3/$1 iter $2: STUCK header Back (on $where; header Back did nothing, system Back left)"; echo "$3 $1 $2 STUCK-HEADER $where" >> "$OUT/real-lanes.txt"; FAIL=1; return 0; fi
+  log "FAIL lane $3/$1 iter $2: STUCK header AND system Back (on $where)"; shot "$n-p2"; echo "$3 $1 $2 STUCK-BOTH $where" >> "$OUT/real-lanes.txt"; FAIL=1
+  adb logcat -d -s ReactNativeJS 2>/dev/null | tail -40 > "$OUT/$n-js.txt"; home
+}
+real_setup() { # opens the real chat once: rendered? coordinates of Back, the name pill, the composer
+  home; real_open 3.5 || { log "FAIL real: no E2E Real chat row"; FAIL=1; return 1; }
+  dump real0; shot real0
+  if grep -q "E2E REAL ERROR" "$OUT/real0.xml" || ! on_real real0; then
+    log "FAIL real: the real chat screen did not render: $(grep -oE 'E2E REAL ERROR[^"]*' "$OUT/real0.xml" | head -1)"
+    adb logcat -d -s ReactNativeJS 2>/dev/null | grep -E "E2EREAL|Error" | tail -20 | tee -a "$OUT/steps.txt"; FAIL=1; home; return 1
+  fi
+  BACKXY=$(python3 - "$OUT/real0.xml" <<'PYB'
+import re,sys,html
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read();last=""
+for n in re.findall(r'<node [^>]*>',xml):
+    d=re.search(r' content-desc="([^"]*)"',n)
+    if d and html.unescape(d.group(1))=="Back":
+        x1,y1,x2,y2=map(int,re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n).groups()); last=f"{(x1+x2)//2} {(y1+y2)//2}"
+print(last)
+PYB
+)
+  PILLXY=$(find_node "$OUT/real0.xml" "VEYR, threads"); EDITXY=$(edit_xy "$OUT/real0.xml" | cut -d' ' -f1,2)
+  log "real chat rendered: Back=[$BACKXY] pill=[$PILLXY] composer=[$EDITXY] threadMenu=$( [ -n "$PILLXY" ] && echo yes || echo no)"
+  [ -n "$BACKXY" ] || { log "FAIL real: no header Back"; FAIL=1; home; return 1; }
+  real_tap $BACKXY; sleep 2.5; on_home real0h && log "ok: real chat left by header Back" || { log "FAIL real: first header Back did not leave"; FAIL=1; home; }
+}
+real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
+  local m=$1 N=$2 i L
+  for L in $3; do
+    log "== real lane $m/$L x$N"
+    for i in $(seq 1 $N); do
+      case $L in
+        L1) real_open 0.35 || return; real_tap $BACKXY; sleep 0.12; real_tap $BACKXY; sleep 0.12; real_tap $BACKXY ;;   # rapid taps during the open
+        L2) real_open 2.6 || return; real_tap $BACKXY ;;                                                            # settled, one tap
+        L3) real_open 0.35 || return; adb shell input keyevent 4 ;;                                                 # system Back during the open
+        L4) real_open 2.6 || return; [ -n "$PILLXY" ] && real_tap $PILLXY; sleep 1.2; adb shell input keyevent 4; sleep 0.8; real_tap $BACKXY ;;  # thread menu, key closes it, header Back
+        L5) real_open 2.6 || return; [ -n "$PILLXY" ] && real_tap $PILLXY; sleep 1.2; real_tap $BACKXY; sleep 0.8; real_tap $BACKXY ;;        # thread menu, tap closes it, header Back
+        L6) real_open 2.6 || return; edge_quick 520 10; real_tap $BACKXY ;;                                         # cancelled back gesture, header Back at once
+        L7) real_open 2.6 || return; [ -n "$EDITXY" ] && real_tap $EDITXY; sleep 1.5; adb shell input keyevent 111; sleep 0.6; real_tap $BACKXY ;;  # keyboard up/down, header Back
+        L8) real_open 2.6 || return; edge_quick 640 640 ;;                                                          # back gesture released
+        L9) real_open 2.6 || return; real_tap $BACKXY; sleep 0.25; real_tap $BACKXY ;;                              # double tap (second during the close)
+      esac
+      real_judge $L $i $m
+    done
+    log "  lane $m/$L: $(grep -c "^$m $L .* ok" "$OUT/real-lanes.txt") ok, $(grep -c "^$m $L .* IGNORED" "$OUT/real-lanes.txt") ignored, $(grep -c "^$m $L .* STUCK" "$OUT/real-lanes.txt") stuck, $(grep -c "^$m $L .* CRASH" "$OUT/real-lanes.txt") crash"
+  done
+}
+if [ -f .github/e2e/quick113 ]; then
+  log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
+  touch "$OUT/real-lanes.txt"; ensure_running q
+  if real_setup; then real_lanes ON $REALN "L1 L2 L3 L4 L5 L6 L7 L8 L9"; fi
+  stuck_scn q-stuck; close_scn q-close ON
+  toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
+  log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
+  log "RESULT FAIL=$FAIL"; exit $FAIL
+fi
 # Quick lane (release deadline): .github/e2e/quick = stuck-Back regression + zoom-close only, on a reused APK.
 if [ -f .github/e2e/quick ]; then
   log "== QUICK lane: stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null))"

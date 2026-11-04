@@ -1,4 +1,4 @@
-name: E2E emulator smoke (build 11.2)
+name: E2E emulator smoke (build 11.2/11.3)
 
 # Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build11-review-ci (build 11 reviewer; from build10-review-ci).
 # Build 11.2 builder copy: branch build11-2-ci (from build11-review-ci ed3de711), target build11-2; adds the zoom-close / predictive back and colour picker checks.
@@ -142,7 +142,12 @@ jobs:
     needs: [plan, build]
     if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
+    # Build 11.3: Syed's phone is Android 15 (API 35); API 34 kept as before.
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 35]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -173,7 +178,7 @@ jobs:
           APK: ${{ github.workspace }}/apk/e2e.apk
           OUT: ${{ github.workspace }}/e2e-out
         with:
-          api-level: 34
+          api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -183,6 +188,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-out
+          name: e2e-out-${{ matrix.api }}
           path: e2e-out
           retention-days: 3
