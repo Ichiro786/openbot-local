@@ -20,6 +20,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class PredictiveBackModule : Module() {
   private var callback: OnBackPressedCallback? = null
   private var gesture = false
+  /** What JavaScript asked for last; a Back handed on to React Native restores this, not `true`. */
+  private var wanted = false
 
   override fun definition() = ModuleDefinition {
     Name("OpenBotPredictiveBack")
@@ -56,13 +58,19 @@ class PredictiveBackModule : Module() {
             // No gesture: React Native's Back, as if this callback were not here.
             isEnabled = false
             activity.onBackPressedDispatcher.onBackPressed()
-            isEnabled = true
+            isEnabled = wanted
           }
         }.also {
           activity.onBackPressedDispatcher.addCallback(activity, it)
           callback = it
         }
-        if (!enabled) gesture = false
+        // Build 11.2 fix (stuck Back): turned off mid gesture, the system sends this callback no cancel or
+        // invoke any more, so JavaScript is told here, or its close would wait for an end that never comes.
+        if (!enabled && gesture) {
+          gesture = false
+          sendEvent("onBackCancel", emptyMap<String, Any>())
+        }
+        wanted = enabled
         current.isEnabled = enabled
       }
       true
