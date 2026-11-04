@@ -548,13 +548,127 @@ whatsapp_scn() { # the real WhatsApp page over a fake whatsapp-mobile-v1 engine;
   [ -z "$(find_node "$OUT/$n-x1.xml" "Get pairing code")" ] && log "ok: no link UI without the capability" || { log "FAIL $n: link UI shown without whatsapp-mobile-v1"; FAIL=1; }
   adb shell input keyevent 4; sleep 1.2; check "$n-none-back" || return; home
 }
+
+# ---------------- build 11.2 (zoom-close, predictive back, colour picker) ----------------
+DENS=$(adb shell wm density | grep -oE '[0-9]+' | tail -1); DENS=${DENS:-420}
+close_last() { adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'E2ECLOSE.*' | tail -1; }
+close_count() { adb logcat -d -s ReactNativeJS 2>/dev/null | grep -c 'E2ECLOSE done'; }
+cancel_count() { adb logcat -d -s ReactNativeJS 2>/dev/null | grep -c 'E2ECLOSE cancel'; }
+# $1 name $2 expected mode (button|gesture) $3 row bounds px "x1 y1 x2 y2" (uiautomator, before the open)
+close_land() {
+  local n=$1 want=$2 rowpx=$3 line
+  line=$(close_last); log "  close ($n): $line"; echo "$n $line" >> "$OUT/close-summary.txt"
+  local res; res=$(python3 - "$line" "$want" "$rowpx" "$DENS" <<'PYL'
+
+import sys,re
+line,want,rowpx,dens=sys.argv[1],sys.argv[2],sys.argv[3],int(sys.argv[4])
+d=dict(re.findall(r"(\w+)=(\S+)",line))
+ok=True;out=[]
+if not line.startswith("E2ECLOSE done"): print("FAIL: no E2ECLOSE done line"); sys.exit()
+if d.get("mode")!=want: out.append(f"FAIL: mode={d.get('mode')} (want {want})"); ok=False
+if d.get("land","none")=="none" or d.get("row","none")=="none": out.append("FAIL: no land/row rect"); ok=False
+else:
+    L=[float(v) for v in d["land"].split(",")]; R=[float(v) for v in d["row"].split(",")]
+    dj=max(abs(a-b) for a,b in zip(L,R))
+    out.append(("ok" if dj<=2 else "FAIL")+f": landed on the row (JS), max diff {dj:.1f} dp"); ok&=dj<=2
+    if rowpx.strip():
+        x1,y1,x2,y2=map(int,rowpx.split()); s=dens/160
+        U=[x1/s,y1/s,(x2-x1)/s,(y2-y1)/s]; du=max(abs(a-b) for a,b in zip(L,U))
+        out.append(("ok" if du<=3 else "FAIL")+f": landed on the row bounds (uiautomator {rowpx}), max diff {du:.1f} dp"); ok&=du<=3
+if float(d.get("centre","1"))>0.01: out.append(f"FAIL: centre fallback used ({d.get('centre')})"); ok=False
+if abs(float(d.get("p","1")))>0.02: out.append(f"FAIL: ended at p={d.get('p')}"); ok=False
+if want=="gesture": out.append(("ok" if float(d.get("maxP","0"))>=0.2 else "FAIL")+f": gesture drove the shrink (max progress {d.get('maxP')})")
+for o in out: print(o)
+PYL
+)
+  while read -r l; do log "$l"; done <<< "$res"
+  grep -q "FAIL" <<< "$res" && FAIL=1
+  dump "$n-home"; [ -n "$(find_node "$OUT/$n-home.xml" "Toggle ColorOS")" ] && log "ok: home after close ($n)" || { log "FAIL $n: not home after close"; FAIL=1; home; }
+}
+row_px() { dump "$1"; node "$OUT/$1.xml" "E2E Zoom chat" b; }
+# A slow left-edge back swipe as motion events (gesture navigation): out to $2 px, back to $3 px, release.
+edge_swipe() { # $1 name $2 out_x $3 end_x
+  local y=1300 x
+  adb shell "screenrecord --time-limit 4 --bit-rate 20000000 /sdcard/$1.mp4" & local rec=$!
+  sleep 0.6
+  adb shell input motionevent DOWN 3 $y
+  for x in $(seq 30 60 $2); do adb shell input motionevent MOVE $x $y; done
+  if [ "$3" -lt "$2" ]; then for x in $(seq $2 -90 $3); do adb shell input motionevent MOVE $x $y; done; fi
+  adb shell input motionevent UP $3 $y
+  sleep 2.4; wait $rec 2>/dev/null
+  adb pull /sdcard/$1.mp4 "$OUT/$1.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$1.mp4
+}
+close_scn() { # $1 name $2 ON|OFF
+  local n=$1 rp c0
+  log "== zoom-close ($n, colorOS=$2, nav=$(adb shell settings get secure navigation_mode | tr -d '\r'))"
+  home; rp=$(row_px "$n-r0"); c0=$(close_count)
+  # 1. system Back key (no predictive start: React Native's Back -> non-interactive reverse zoom)
+  zoom_open "$n-a" "$2" || return
+  adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n-a-close.mp4" & local rec=$!
+  sleep 0.6; adb shell input keyevent 4; sleep 2.2; wait $rec 2>/dev/null
+  adb pull /sdcard/$n-a-close.mp4 "$OUT/$n-a-close.mp4" >/dev/null 2>&1; check "$n-a-close" || return
+  if [ "$2" = OFF ]; then
+    [ "$(close_count)" = "$c0" ] && log "ok: OFF closes with the classic pop (no zoom-close)" || { log "FAIL $n: zoom-close ran with ColorOS OFF"; FAIL=1; }
+    dump "$n-a-home"; [ -n "$(find_node "$OUT/$n-a-home.xml" "Toggle ColorOS")" ] || { log "FAIL $n: OFF back did not return home"; FAIL=1; home; }
+    blur_max "$n-off"; return
+  fi
+  close_land "$n-a" button "$rp"
+  # 2. header Back
+  zoom_open "$n-b" "$2" || return
+  tapl_last "Back" "$n-b-h" || { log "FAIL $n: no header Back"; FAIL=1; }
+  sleep 2; check "$n-b-close" || return; close_land "$n-b" button "$rp"
+  # 3. predictive back: slow edge swipe, released past the threshold
+  zoom_open "$n-c" "$2" || return
+  edge_swipe "$n-c-swipe" 640 640; check "$n-c-close" || return; close_land "$n-c" gesture "$rp"
+  # 4. predictive back cancelled: out and back to the edge -> springs back, the chat stays
+  zoom_open "$n-d" "$2" || return
+  local k0; k0=$(cancel_count)
+  edge_swipe "$n-d-swipe" 520 10; check "$n-d-cancel" || return
+  [ "$(cancel_count)" -gt "$k0" ] && log "ok: gesture cancel reported" || { log "FAIL $n: no gesture cancel"; FAIL=1; }
+  expect_text "E2E CHAT OPEN" 5 "$n-d-chat"; shot "$n-d-chat"
+  adb shell input keyevent 4; sleep 2; check "$n-d-back" || return; close_land "$n-d2" button "$rp"
+  blur_max "$n-close"
+}
+picker_scn() { # $1 name $2 ON|OFF
+  local n=$1 xy b
+  log "== picker ($n, colorOS=$2)"
+  home; tapl "E2E Picker" 10 "$n-0" || { FAIL=1; return; }
+  expect_text "PICKER OPEN colorOS=$2 cap=1" 10 "$n-1"; shot "$n-open"
+  [ -n "$(find_node "$OUT/$n-1.xml" "Red")" ] && [ -n "$(find_node "$OUT/$n-1.xml" "Automatic")" ] && log "ok: 10 swatches + A present" || { log "FAIL $n: swatches/A missing"; FAIL=1; }
+  b=$(node "$OUT/$n-1.xml" "Hue" b)
+  if [ -z "$b" ] && [ "$2" = ON ]; then adb shell input swipe 540 1700 540 1100 400; sleep 1; dump "$n-1s"; b=$(node "$OUT/$n-1s.xml" "Hue" b); cp "$OUT/$n-1s.xml" "$OUT/$n-1.xml"; fi
+  if [ "$2" = OFF ]; then
+    [ -z "$b" ] && log "ok: no wheel with ColorOS OFF (build 11 picker)" || { log "FAIL $n: wheel shown with ColorOS OFF"; FAIL=1; }
+    adb shell input keyevent 4; sleep 1; check "$n-back"; return
+  fi
+  [ -n "$b" ] || { log "FAIL $n: no colour wheel"; FAIL=1; adb shell input keyevent 4; return; }
+  set -- $b; local cx=$(( ($1+$3)/2 )) cy=$(( ($2+$4)/2 )) r=$(( ($3-$1)/3 ))
+  adb shell input swipe $((cx+r)) $cy $((cx+r/2)) $((cy-r)) 500; sleep 1.2; check "$n-drag" || return
+  dump "$n-2"; shot "$n-custom"
+  grep -qE 'CUSTOM=#[0-9a-fA-F]{6}' "$OUT/$n-2.xml" && log "ok: custom colour saved on release ($(grep -oE 'CUSTOM=#[0-9a-fA-F]{6}' "$OUT/$n-2.xml" | head -1))" || { log "FAIL $n: no custom colour after a wheel drag"; FAIL=1; }
+  [ -n "$(find_node "$OUT/$n-2.xml" "Saturation")" ] && [ -n "$(find_node "$OUT/$n-2.xml" "Brightness")" ] && log "ok: hue/saturation/brightness controls labelled" || { log "FAIL $n: wheel a11y labels"; FAIL=1; }
+  xy=$(find_node "$OUT/$n-2.xml" "Red"); adb shell input tap $xy; sleep 1; dump "$n-3"
+  grep -q 'CUSTOM=none HUE=0' "$OUT/$n-3.xml" && log "ok: a preset clears the custom colour" || { log "FAIL $n: preset did not clear the custom colour"; FAIL=1; }
+  adb shell input keyevent 4; sleep 1; check "$n-back" || return
+  # A host without avatar-color-v1: the wheel snaps to the nearest preset, with the note.
+  adb shell am start -a android.intent.action.VIEW -d "openbotlocal://e2e-picker?cap=0" $PKG >/dev/null 2>&1; sleep 2
+  dump "$n-4"
+  if grep -q "cap=0" "$OUT/$n-4.xml"; then
+    b=$(node "$OUT/$n-4.xml" "Hue" b); set -- $b; cx=$(( ($1+$3)/2 )); cy=$(( ($2+$4)/2 )); r=$(( ($3-$1)/3 ))
+    adb shell input swipe $((cx+r)) $cy $((cx+r/2)) $((cy-r)) 500; sleep 1.2; dump "$n-5"
+    grep -qE 'CUSTOM=none HUE=[0-9]+' "$OUT/$n-5.xml" && log "ok: stock host snapped to preset ($(grep -oE 'HUE=[0-9]+' "$OUT/$n-5.xml" | head -1))" || { log "FAIL $n: stock host did not snap"; FAIL=1; }
+    grep -q "preset colors only" "$OUT/$n-5.xml" && log "ok: preset-only note shown" || { log "FAIL $n: preset-only note missing"; FAIL=1; }
+    adb shell input keyevent 4; sleep 1
+  else log "  stock-host picker: deep link did not open (info)"; adb shell input keyevent 4; sleep 1; fi
+  check "$n-end"; blur_max "$n"
+}
 toggle_to() { # $1 name $2 expected
   ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
   local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
-round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; close_scn "$1-close" $2; retry_infra picker_scn "$1-picker" $2; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
 
 # Run 41718194068 started while the emulator was still delivering BOOT_COMPLETED (skipped 315 frames,
 # JS timers seconds late): wait for it (max 240 s) and let the system settle before the app starts.
@@ -570,6 +684,9 @@ adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; 
 adb shell settings put global hide_error_dialogs 1
 adb shell settings put secure anr_show_background 0
 adb shell pm disable-user --user 0 com.google.android.apps.nexuslauncher >/dev/null 2>&1 || true
+# Build 11.2: gesture navigation, so a left-edge swipe is a predictive back gesture (API 34).
+adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 || true
+sleep 2; echo "[$(date +%T)] navigation_mode=$(adb shell settings get secure navigation_mode | tr -d '\r') (2 = gesture)" | tee -a "$OUT/steps.txt"
 adb shell settings put global window_animation_scale 1
 adb shell settings put global transition_animation_scale 1
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1

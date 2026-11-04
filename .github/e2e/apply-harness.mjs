@@ -134,9 +134,13 @@ function __e2eMark(name: string, at: number) {
     console.log(\`E2EZOOM \${text}\`);
   }
 }`);
-    rep("useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });", `for (const k of Object.keys(__e2eZ)) delete __e2eZ[k];
+    // Build 11.2 changed the request (it carries the close source): mark the tap before either form.
+    const setReq = f.includes("useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });")
+      ? "useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });"
+      : "useZoomStore.setState({\n    request: { key: nextKey++, rect, radius, navigate, source";
+    rep(setReq, `for (const k of Object.keys(__e2eZ)) delete __e2eZ[k];
   __e2eZ.tap = Date.now();
-  useZoomStore.setState({ request: { key: nextKey++, rect, radius, navigate } });`);
+  ${setReq}`);
     rep("function clear() {", "function clear() {\n  if (__e2eZ.uncover !== undefined) __e2eMark(\"clear\", Date.now());");
     rep("    uncovered.current = true;", "    uncovered.current = true;\n    __e2eMark(\"uncover\", Date.now());\n    if (__e2eZ.via === undefined) __e2eZ.via = \"ready\";");
     rep("    done.current = true;", "    done.current = true;\n    __e2eMark(\"push\", Date.now());");
@@ -187,6 +191,55 @@ function __e2eMark(name: string, at: number) {
     writeFileSync(chat, f);
     console.log("composer + menu applied");
   }
+}
+// Build 11.2: zoom-close (header/system Back, predictive back) and the colour picker.
+if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
+  const index = "apps/mobile/src/app/index.tsx";
+  const chat = "apps/mobile/src/app/e2e-chat.tsx";
+  // The harness row hands the zoom a close source, as chat-link-pressable does.
+  let f = readFileSync(index, "utf8");
+  const z = "if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0)) go();";
+  if (!f.includes(z)) throw new Error("zoom row anchor missing (11.2)");
+  f = `import { snapshotNavigator as __snap } from "@/shared/motion/ColorOSMotionRoot";\n${f}`.replace(
+    z,
+    `if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0, { home: __snap(), measure: (done) => { const v = zoomRow.current; if (!v) { done(null); return; } v.measureInWindow((a, b, c, d) => done(c && d ? { x: a, y: b, width: c, height: d } : null)); } })) go();`,
+  );
+  const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
+  if (!f.includes(toggle)) throw new Error("picker anchor missing");
+  f = f.replace(toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E Picker" onPress={() => router.push("/e2e-picker")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#7a5b3b", borderRadius: 12 }}><Text style={{ color: "#fff" }}>Picker</Text></Pressable>`);
+  writeFileSync(index, f);
+  // The stand-in chat closes like ChatView (useZoomClose on its route key).
+  let c = readFileSync(chat, "utf8");
+  const k = "  const __routeKey = __useRoute().key;";
+  if (!c.includes(k)) throw new Error("e2e-chat route key missing (11.2)");
+  c = `import { useZoomClose as __useZoomClose } from "@/shared/motion/useZoomClose";\n${c}`.replace(k, `${k}\n  __useZoomClose(__routeKey);`);
+  writeFileSync(chat, c);
+  // Close marks: where the still landed vs where the row is then (dp), mode, gesture progress, cancels.
+  const ov = "apps/mobile/src/shared/motion/ZoomCloseOverlay.tsx";
+  let o = readFileSync(ov, "utf8");
+  const orep = (a, b) => {
+    if (!o.includes(a)) throw new Error(`close mark anchor missing: ${a.slice(0, 60)}`);
+    o = o.replace(a, b);
+  };
+  orep("  let committed = false;", "  let committed = false;\n  let __maxP = 0;\n  const __t0 = Date.now();");
+  orep("      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);", "      __maxP = Math.max(__maxP, value);\n      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);");
+  orep("    if (request?.key !== key) return;\n    useCloseStore.setState({ request: null });\n    disposeLater(request.chat);", `    if (request?.key !== key) return;
+    {
+      const t = target.value;
+      const c = centre.value;
+      const pe = p.value;
+      source.measure((row) => {
+        const r = (v: { x: number; y: number; width: number; height: number } | null) => (v ? [v.x, v.y, v.width, v.height].map((n) => n.toFixed(1)).join(",") : "none");
+        console.log(\`E2ECLOSE done mode=\${home ? "gesture" : "button"} land=\${r(t)} row=\${r(row)} centre=\${c.toFixed(2)} p=\${pe.toFixed(3)} maxP=\${__maxP.toFixed(2)} ms=\${Date.now() - __t0}\`);
+      });
+    }
+    useCloseStore.setState({ request: null });
+    disposeLater(request.chat);`);
+  orep("function clearCancelled(key: number) {", "function clearCancelled(key: number) {\n  console.log(\"E2ECLOSE cancel\");");
+  writeFileSync(ov, o);
+  cpSync(".github/e2e/harness-b112/app/e2e-picker.tsx", "apps/mobile/src/app/e2e-picker.tsx");
+  src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-picker" options={{ headerShown: false }} />`);
+  console.log("build 11.2 zoom-close + picker applied");
 }
 writeFileSync(path, src);
 console.log("harness applied");
