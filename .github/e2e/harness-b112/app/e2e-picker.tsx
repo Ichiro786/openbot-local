@@ -5,7 +5,7 @@ import type { AvatarColor, AvatarHue } from "@openbot/contracts/ipc";
 import { useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text } from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput } from "react-native";
 import { AgentAppearancePicker } from "@/features/agents/components/agent-appearance-picker";
 import { isAndroid } from "@/shared/lib/platform";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -21,13 +21,16 @@ export default function E2EPickerRoute() {
 
 function E2EPicker() {
   "use no memo";
-  const { cap, save } = useLocalSearchParams<{ cap?: string; save?: string }>();
+  const { cap, save, info } = useLocalSearchParams<{ cap?: string; save?: string; info?: string }>();
   // ?save=1: like the agent Appearance page (EditAgentScreen): an unsaved change guards Back with the
   // discard alert, Save clears it (build 11.2 stuck-Back regression).
   const guarded = save === "1";
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(0);
-  usePreventRemove(guarded && dirty, ({ repeat }) => {
+  // EditAgentScreen guards while saving too (the update is async).
+  const [saving, setSaving] = useState(false);
+  const [bio, setBio] = useState("E2E bio");
+  usePreventRemove(guarded && (dirty || saving), ({ repeat }) => {
     Alert.alert("Discard changes?", undefined, [
       { text: "Keep editing", style: "cancel" },
       { text: "Discard", style: "destructive", onPress: () => { setDirty(false); repeat(); } },
@@ -44,9 +47,12 @@ function E2EPicker() {
         {`PICKER OPEN colorOS=${colorOS ? "ON" : "OFF"} cap=${supported ? 1 : 0} CUSTOM=${color ?? "none"} HUE=${hue ?? "auto"} DIRTY=${dirty ? 1 : 0} SAVED=${saved}`}
       </Text>
       {guarded ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="E2E Save" onPress={() => { setDirty(false); setSaved((n) => n + 1); }} style={{ margin: 12, padding: 10, backgroundColor: "#2e7d32", borderRadius: 10, alignSelf: "flex-start" }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="E2E Save" onPress={() => { if (saving) return; setSaving(true); setTimeout(() => { setDirty(false); setSaving(false); setSaved((n) => n + 1); }, 400); }} style={{ margin: 12, padding: 10, backgroundColor: "#2e7d32", borderRadius: 10, alignSelf: "flex-start" }}>
           <Text style={{ color: "#fff" }}>Save</Text>
         </Pressable>
+      ) : null}
+      {info === "1" ? (
+        <TextInput accessibilityLabel="E2E Bio" value={bio} onChangeText={(v) => { setBio(v); setDirty(true); }} style={{ color: "#fff", borderColor: "#555", borderWidth: 1, margin: 12, padding: 8 }} />
       ) : null}
       <AgentAppearancePicker
         agentId={E2E_AGENT.id}

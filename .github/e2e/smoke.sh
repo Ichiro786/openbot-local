@@ -647,13 +647,19 @@ close_scn() { # $1 name $2 ON|OFF
 # Build 11.2 stuck-Back regression (Syed's phone, a94d5ec): zoom-open chat -> agent page -> Appearance ->
 # change colour -> Save -> back to the chat: header Back and system Back must both leave the chat.
 at_home() { dump "$1"; [ -n "$(find_node "$OUT/$1.xml" "Toggle ColorOS")" ]; }
-to_appearance_and_back() { # $1 name $2 key|swipe: how to come back to the chat
+to_appearance_and_back() { # $1 name $2 key|swipe: how to come back to the chat $3 info: edit the bio instead of the colour
   local n=$1 xy
   tapl "E2E Open agent page" 6 "$n-ag0" || { log "FAIL $n: no agent page button"; FAIL=1; return 1; }; sleep 1.5
   expect_text "E2E AGENT PAGE OPEN" 8 "$n-ag1"
-  tapl "E2E Appearance" 6 "$n-ap0" || { log "FAIL $n: no Appearance button"; FAIL=1; return 1; }; sleep 1.5
-  expect_text "PICKER OPEN" 8 "$n-ap1"
-  xy=$(find_node "$OUT/$n-ap1.xml" "Blue"); [ -n "$xy" ] && adb shell input tap $xy; sleep 0.8
+  if [ "${3:-}" = info ]; then
+    tapl "E2E Edit info" 6 "$n-ap0" || { log "FAIL $n: no Edit info button"; FAIL=1; return 1; }; sleep 1.5
+    expect_text "PICKER OPEN" 8 "$n-ap1"
+    tapl "E2E Bio" 5 "$n-bio" || FAIL=1; sleep 0.5; adb shell input text "x"; sleep 0.5; adb shell input keyevent 111; sleep 0.5
+  else
+    tapl "E2E Appearance" 6 "$n-ap0" || { log "FAIL $n: no Appearance button"; FAIL=1; return 1; }; sleep 1.5
+    expect_text "PICKER OPEN" 8 "$n-ap1"
+    xy=$(find_node "$OUT/$n-ap1.xml" "Blue"); [ -n "$xy" ] && adb shell input tap $xy; sleep 0.8
+  fi
   tapl "E2E Save" 5 "$n-ap2" || FAIL=1; sleep 0.8; dump "$n-ap3"
   grep -q 'DIRTY=0 SAVED=1' "$OUT/$n-ap3.xml" && log "ok: colour saved ($n)" || log "note $n: save state $(grep -oE 'DIRTY=[0-9] SAVED=[0-9]+' "$OUT/$n-ap3.xml" | head -1)"
   if [ "$2" = swipe ]; then edge_swipe "$n-sw1" 640 640; edge_swipe "$n-sw2" 640 640
@@ -690,6 +696,19 @@ stuck_scn() { # $1 name
   tapl "E2E Open agent page" 6 "$n-5-ag" || FAIL=1; sleep 1.5; adb shell input keyevent 4; sleep 1.5
   adb shell input keyevent 4; sleep 2.5; check "$n-5-left" || return
   at_home "$n-5-home" && log "ok: system Back left the chat after push/pop" || { log "FAIL $n: system Back stuck after push/pop"; FAIL=1; home; }
+  # 6-8. Syed 12:00 IST: the same after saving the agent's bio/info (any agent save), header / system / gesture
+  zoom_open "$n-6" ON || return
+  to_appearance_and_back "$n-6" key info || return
+  tapl_last "Back" "$n-6-h" || FAIL=1; sleep 2.5; check "$n-6-left" || return
+  at_home "$n-6-home" && log "ok: header Back left the chat after bio Save" || { log "FAIL $n: header Back stuck after bio Save"; FAIL=1; home; }
+  zoom_open "$n-7" ON || return
+  to_appearance_and_back "$n-7" swipe info || return
+  adb shell input keyevent 4; sleep 2.5; check "$n-7-left" || return
+  at_home "$n-7-home" && log "ok: system Back left the chat after bio Save" || { log "FAIL $n: system Back stuck after bio Save"; FAIL=1; home; }
+  zoom_open "$n-8" ON || return
+  to_appearance_and_back "$n-8" key info || return
+  edge_swipe "$n-8-sw" 640 640; sleep 1; check "$n-8-left" || return
+  at_home "$n-8-home" && log "ok: back gesture left the chat after bio Save" || { log "FAIL $n: back gesture stuck after bio Save"; FAIL=1; home; }
   blur_max "$n"
 }
 picker_scn() { # $1 name $2 ON|OFF

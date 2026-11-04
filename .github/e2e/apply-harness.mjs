@@ -212,6 +212,12 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
   let c = readFileSync(chat, "utf8");
   const k = "  const __routeKey = __useRoute().key;";
   if (!c.includes(k)) throw new Error("e2e-chat route key missing (11.2)");
+  // Header Back as the real chat does it (AgentChatScreen onLeave = useLeaveChat), not a bare router.back().
+  if (existsSync("apps/mobile/src/features/chat/components/use-leave-chat.ts")) {
+    const ob = "onBack={() => router.back()}";
+    if (!c.includes(ob)) throw new Error("e2e-chat onBack anchor missing (11.2)");
+    c = `import { useLeaveChat as __useLeaveChat } from "@/features/chat/components/use-leave-chat";\n${c}`.replace(ob, "onBack={__leave}").replace(k, `${k}\n  const __leave = __useLeaveChat();`);
+  }
   c = `import { useZoomClose as __useZoomClose } from "@/shared/motion/useZoomClose";\n${c}`.replace(k, `${k}\n  __useZoomClose(__routeKey);`);
   writeFileSync(chat, c);
   // Close marks: where the still landed vs where the row is then (dp), mode, gesture progress, cancels.

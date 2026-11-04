@@ -17,6 +17,10 @@ export default function E2EAgentPage() {
         <Pressable accessibilityRole="button" accessibilityLabel="E2E Appearance" onPress={() => router.push("/e2e-picker?save=1")} style={{ marginTop: 12, padding: 10, backgroundColor: "#7a5b3b", borderRadius: 10, alignSelf: "flex-start" }}>
           <Text style={{ color: "#fff" }}>Appearance</Text>
         </Pressable>
+        {/* Syed 12:00 IST: Back also sticks after saving the agent's bio/info: the info page with the same guarded, async Save. */}
+        <Pressable accessibilityRole="button" accessibilityLabel="E2E Edit info" onPress={() => router.push("/e2e-picker?save=1&info=1")} style={{ marginTop: 12, padding: 10, backgroundColor: "#3b7a5b", borderRadius: 10, alignSelf: "flex-start" }}>
+          <Text style={{ color: "#fff" }}>Edit info</Text>
+        </Pressable>
       </ScrollView>
     </FakeWorkspace>
   );
