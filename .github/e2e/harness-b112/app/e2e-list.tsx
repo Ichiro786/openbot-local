@@ -56,6 +56,8 @@ const target = {
   name: E2E_AGENT.name,
   avatarSeed: E2E_AGENT.avatarSeed,
   avatarHue: E2E_AGENT.avatarHue as never,
+  // Build 11.2: an exact agent-colors-v1 colour, so the activity row's plush draws a custom hex.
+  avatarColor: "#123456" as never,
 };
 
 function E2EList() {

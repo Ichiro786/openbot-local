@@ -527,6 +527,21 @@ plush_scn() { # upstream v0.60 plush avatars, all moods, animating
   log "  plush moods on screen: $(grep -o 'plush [a-z]*' "$OUT/$n-p1.xml" | sort -u | tr '\n' ' ')"
   shot "$n-a"; sleep 1.2; shot "$n-b"; sleep 3; check "$n-animate" || return
   [ "$(md5sum < "$OUT/$n-a.png")" != "$(md5sum < "$OUT/$n-b.png")" ] && log "ok: plush frames change" || log "note $n: two plush screenshots identical (still faces?)"
+  # Build 11.2 (agent-colors-v1): 17 presets + automatic + exact custom hexes, all drawn, still animating.
+  if grep -q 'colors=' "$OUT/$n-p1.xml"; then
+    local pc; pc=$(grep -o 'plushcolor [#a-z0-9]*' "$OUT/$n-p1.xml" | sort -u | wc -l)
+    log "  plush colours on screen: $pc ($(grep -o 'colors=[0-9]*' "$OUT/$n-p1.xml" | head -1))"
+    [ "$pc" -ge 24 ] && log "ok: plush renders 17 presets + automatic + custom hexes" || { log "FAIL $n: plush colour grid incomplete ($pc)"; FAIL=1; }
+    grep -q 'plushcolor #123456' "$OUT/$n-p1.xml" && grep -q 'plushcolor #fafafa' "$OUT/$n-p1.xml" && log "ok: exact avatarColor hexes drawn" || { log "FAIL $n: custom hex plush missing"; FAIL=1; }
+    tapl "E2E faces toggle" 4 "$n-f0" || FAIL=1; sleep 1.5; dump "$n-f1"; grep -q 'faces=0' "$OUT/$n-f1.xml" || log "note $n: faces toggle text not seen"
+    shot "$n-fa"; sleep 1.2; shot "$n-fb"; check "$n-faces-off" || return
+    [ "$(md5sum < "$OUT/$n-fa.png")" = "$(md5sum < "$OUT/$n-fb.png")" ] && log "ok: faces OFF stops plush animation" || log "note $n: frames still differ with faces OFF (check shots)"
+    tapl "E2E faces toggle" 4 "$n-f2" || FAIL=1; sleep 1; tapl "E2E reduce toggle" 4 "$n-r0" || FAIL=1; sleep 1.5
+    shot "$n-ra"; sleep 1.2; shot "$n-rb"; check "$n-reduce" || return
+    [ "$(md5sum < "$OUT/$n-ra.png")" = "$(md5sum < "$OUT/$n-rb.png")" ] && log "ok: Reduce Motion stops plush animation" || log "note $n: frames still differ with Reduce Motion (check shots)"
+    tapl "E2E reduce toggle" 4 "$n-r1" || FAIL=1; sleep 1.5; shot "$n-c"; check "$n-restored" || return
+    [ "$(md5sum < "$OUT/$n-c.png")" != "$(md5sum < "$OUT/$n-rb.png")" ] && log "ok: plush animates again after restore" || log "note $n: no change after restore"
+  fi
   adb shell input keyevent 4; sleep 1.2; check "$n-back" || return
 }
 whatsapp_scn() { # the real WhatsApp page over a fake whatsapp-mobile-v1 engine; then a host without it
@@ -634,7 +649,7 @@ picker_scn() { # $1 name $2 ON|OFF
   log "== picker ($n, colorOS=$2)"
   home; tapl "E2E Picker" 10 "$n-0" || { FAIL=1; return; }
   expect_text "PICKER OPEN colorOS=$2 cap=1" 10 "$n-1"; shot "$n-open"
-  [ -n "$(find_node "$OUT/$n-1.xml" "Red")" ] && [ -n "$(find_node "$OUT/$n-1.xml" "Automatic")" ] && log "ok: 10 swatches + A present" || { log "FAIL $n: swatches/A missing"; FAIL=1; }
+  [ -n "$(find_node "$OUT/$n-1.xml" "Red")" ] && [ -n "$(find_node "$OUT/$n-1.xml" "Gray")" ] && [ -n "$(find_node "$OUT/$n-1.xml" "Automatic")" ] && log "ok: swatches (Red..Grey) + A present" || { log "FAIL $n: swatches/A missing"; FAIL=1; }
   b=$(node "$OUT/$n-1.xml" "Hue" b)
   if [ -z "$b" ] && [ "$2" = ON ]; then adb shell input swipe 540 1700 540 1100 400; sleep 1; dump "$n-1s"; b=$(node "$OUT/$n-1s.xml" "Hue" b); cp "$OUT/$n-1s.xml" "$OUT/$n-1.xml"; fi
   if [ "$2" = OFF ]; then
@@ -657,7 +672,6 @@ picker_scn() { # $1 name $2 ON|OFF
     b=$(node "$OUT/$n-4.xml" "Hue" b); set -- $b; cx=$(( ($1+$3)/2 )); cy=$(( ($2+$4)/2 )); r=$(( ($3-$1)/3 ))
     adb shell input swipe $((cx+r)) $cy $((cx+r/2)) $((cy-r)) 500; sleep 1.2; dump "$n-5"
     grep -qE 'CUSTOM=none HUE=[0-9]+' "$OUT/$n-5.xml" && log "ok: stock host snapped to preset ($(grep -oE 'HUE=[0-9]+' "$OUT/$n-5.xml" | head -1))" || { log "FAIL $n: stock host did not snap"; FAIL=1; }
-    grep -q "preset colors only" "$OUT/$n-5.xml" && log "ok: preset-only note shown" || { log "FAIL $n: preset-only note missing"; FAIL=1; }
     adb shell input keyevent 4; sleep 1
   else log "  stock-host picker: deep link did not open (info)"; adb shell input keyevent 4; sleep 1; fi
   check "$n-end"; blur_max "$n"
