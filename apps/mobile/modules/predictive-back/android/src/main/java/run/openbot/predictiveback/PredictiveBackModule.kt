@@ -19,6 +19,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
  */
 class PredictiveBackModule : Module() {
   private var callback: OnBackPressedCallback? = null
+  /** The activity [callback] is registered on: a recreated activity gets its own (the old one is gone). */
+  private var owner: ComponentActivity? = null
   private var gesture = false
   /** What JavaScript asked for last; a Back handed on to React Native restores this, not `true`. */
   private var wanted = false
@@ -33,6 +35,11 @@ class PredictiveBackModule : Module() {
     Function("setEnabled") { enabled: Boolean ->
       val activity = appContext.currentActivity as? ComponentActivity ?: return@Function false
       activity.runOnUiThread {
+        if (owner !== activity) {
+          callback = null
+          owner = activity
+          installReactBack(activity)
+        }
         val current = callback ?: object : OnBackPressedCallback(false) {
           override fun handleOnBackStarted(backEvent: BackEventCompat) {
             gesture = true
@@ -76,9 +83,40 @@ class PredictiveBackModule : Module() {
       true
     }
 
+    // The base Back must be in the dispatcher before any screen's callback, so from the first activity on.
+    OnActivityEntersForeground {
+      (appContext.currentActivity as? ComponentActivity)?.let { activity -> activity.runOnUiThread { installReactBack(activity) } }
+    }
+
     OnDestroy {
       callback?.remove()
       callback = null
+      owner = null
     }
+  }
+
+  private val reactBackOn = java.util.Collections.newSetFromMap(java.util.WeakHashMap<ComponentActivity, Boolean>())
+
+  /**
+   * Build 11.2 fix (Back did nothing / left the app): predictiveBackGestureEnabled puts
+   * enableOnBackInvokedCallback in the manifest, and from Android 13 the system then never calls
+   * Activity.onBackPressed, which is how React Native hears Back (BackHandler, React Navigation's pop).
+   * React Native adds its own dispatcher callback for that only on Android 16 (API 36). Below it, this
+   * one does the same: the lowest callback, it hands Back to ReactActivity.onBackPressed. When
+   * JavaScript lets Back through (invokeDefaultOnBackPressed), the activity's default runs.
+   */
+  private fun installReactBack(activity: ComponentActivity) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || Build.VERSION.SDK_INT >= 36) return
+    if (!reactBackOn.add(activity)) return
+    activity.onBackPressedDispatcher.addCallback(activity, object : OnBackPressedCallback(true) {
+      @Suppress("DEPRECATION")
+      override fun handleOnBackPressed() {
+        isEnabled = false
+        // JavaScript let this Back through: the default (leave the app) instead of asking it again.
+        if (Throwable().stackTrace.any { it.methodName == "invokeDefaultOnBackPressed" }) activity.onBackPressedDispatcher.onBackPressed()
+        else activity.onBackPressed()
+        isEnabled = true
+      }
+    })
   }
 }
