@@ -177,6 +177,13 @@ function __e2eMark(name: string, at: number) {
     f = `import { useChatAttachments as __useChatAttachments } from "@/features/chat/components/use-chat-attachments";\n${f}`
       .replace(a1, `${a1}\n  const __files = __useChatAttachments();`)
       .replace(a2, `${a2}\n          attachments={__files}\n          onUseSkill={() => setLog("USE SKILL")}`);
+    // Hotfix 11.1: the composer reads the chat's keyboard height for the + menu anchor (as ChatView passes it).
+    if (readFileSync("apps/mobile/src/features/chat/components/chat-composer.tsx", "utf8").includes("keyboardHeight?: SharedValue<number>")) {
+      const kp = "keyboardProgress={motion.keyboardProgress}";
+      if (!f.includes(kp)) throw new Error("keyboardProgress anchor missing in e2e-chat");
+      f = f.replace(kp, `${kp}\n          keyboardHeight={motion.keyboardHeight}`);
+      console.log("composer keyboardHeight applied");
+    }
     writeFileSync(chat, f);
     console.log("composer + menu applied");
   }

@@ -375,6 +375,7 @@ PYY
     else log "FAIL $n: no ••• node"; FAIL=1; fi
   fi
   [ "$2" = ON ] && { plus_menu_scn "$n-plus" || return; }
+  [ "$2" = ON ] && { plus_kb_scn "$n-pkb" || return; }
   # composer: multiline + send
   dump "$n-k0"; set -- $(edit_xy "$OUT/$n-k0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return; }
   local fy=$3; adb shell input tap $1 $2; sleep 1.8; check "$n-focus" || return
@@ -386,6 +387,64 @@ PYY
   expect_text 'SENT=line1\nline2\nline3' 5 "$n-k3"
   adb shell input keyevent 4; sleep 1.2; dump "$n-kb"; if [ -n "$(find_node "$OUT/$n-kb.xml" "E2E CHAT OPEN")" ]; then adb shell input keyevent 4; sleep 1.5; fi; check "$n-chat-back" || return
   dump "$n-k4"; [ -n "$(find_node "$OUT/$n-k4.xml" "Toggle ColorOS")" ] && log "ok: back returned home" || { log "FAIL $n: back did not return"; FAIL=1; home; }
+}
+ime_top() { # IME window top in screen px, or 0 when the keyboard is not shown
+  local d; d=$(adb shell dumpsys input_method 2>/dev/null | grep -oE "mInputShown=(true|false)" | head -1)
+  [ "$d" = "mInputShown=true" ] || { echo 0; return; }
+  adb shell dumpsys window 2>/dev/null > "$OUT/.winwin"
+  python3 - "$OUT/.winwin" <<'PYI'
+import re,sys
+t=open(sys.argv[1],errors="ignore").read()
+m=[x for x in re.finditer(r"type=ime frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\] visible=true",t)]
+if m: print(m[0].group(2)); sys.exit()
+m=re.search(r"mGivenContentInsets=\[\d+,(\d+)\]",t)
+print(m.group(1) if m and int(m.group(1))>0 else 0)
+PYI
+}
+plus_geom() { # $1 xml -> "rowsTop rowsBottom rowCount composerTop" (rows: the + menu's four rows; composer: min top of field and +)
+  python3 - "$1" <<'PYG'
+import re,sys,html
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read()
+rows=[];ct=[]
+for n in re.findall(r'<node [^>]*>',xml):
+    t=re.search(r' text="([^"]*)"',n); d=re.search(r' content-desc="([^"]*)"',n)
+    vals={html.unescape(t.group(1)) if t else "", html.unescape(d.group(1)) if d else ""}
+    b=re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',n)
+    if not b: continue
+    x1,y1,x2,y2=map(int,b.groups())
+    if vals & {"Use skill or app","Files","Photos","Camera"}: rows.append((y1,y2))
+    if 'class="android.widget.EditText"' in n or vals & {"Add attachment"}: ct.append(y1)
+print(min([r[0] for r in rows],default=-1),max([r[1] for r in rows],default=-1),len(rows),min(ct,default=-1))
+PYG
+}
+plus_kb_scn() { # hotfix 11.1: the + menu sits above the composer and the IME, with the keyboard closed and open
+  local n=$1 xy g ime ime2 k i
+  for k in closed open; do
+    if [ $k = open ]; then
+      dump "$n-f0"; set -- $(edit_xy "$OUT/$n-f0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return 0; }
+      adb shell input tap $1 $2; ime=0
+      for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; ime=$(ime_top); [ "${ime:-0}" -gt 0 ] && break; done
+      [ "${ime:-0}" -gt 0 ] || { log "FAIL $n: keyboard did not open"; FAIL=1; return 0; }
+      sleep 1.2; ime=$(ime_top)
+    else ime=0; fi
+    dump "$n-$k-0"; g=$(plus_geom "$OUT/$n-$k-0.xml"); set -- $g; local ctop=$4
+    xy=$(find_node "$OUT/$n-$k-0.xml" "Add attachment") || true
+    [ -n "$xy" ] || { log "FAIL $n ($k): no +"; FAIL=1; return 0; }
+    adb shell input tap $xy; sleep 1.5; check "$n-$k-open" || return 1
+    dump "$n-$k-1"; shot "$n-$k"; ime2=$( [ $k = open ] && ime_top || echo 0 )
+    set -- $(plus_geom "$OUT/$n-$k-1.xml")
+    log "  + menu keyboard $k: rows y ${1}..${2} (n=$3), composer top ${ctop}, IME top ${ime} (after open ${ime2}), + at ${xy}"
+    if [ "$3" -lt 4 ]; then log "FAIL $n ($k): + menu rows missing (n=$3)"; FAIL=1
+    elif [ "$2" -ge "$ctop" ]; then log "FAIL $n ($k): + menu rows reach below the composer top ($2 >= $ctop)"; FAIL=1
+    elif [ "${ime2:-0}" -gt 0 ] && [ "$2" -ge "$ime2" ]; then log "FAIL $n ($k): + menu rows under the IME ($2 >= $ime2)"; FAIL=1
+    else log "ok: + menu above the composer$( [ "${ime2:-0}" -gt 0 ] && echo " and the IME") (keyboard $k)"; fi
+    [ $k = open ] && [ "${ime2:-0}" = 0 ] && log "note $n: the keyboard closed when the + menu opened"
+    # outside tap (with the IME up, back would go to the keyboard first)
+    adb shell input tap 540 520; sleep 1.2; check "$n-$k-close" || return 1
+    dump "$n-$k-2"; [ "$(count "$OUT/$n-$k-2.xml" "Use skill or app")" = 0 ] || { log "FAIL $n ($k): + menu not closed by an outside tap"; FAIL=1; close_menu_if_open "$n-$k-left"; }
+  done
+  [ "$(ime_top)" -gt 0 ] && { adb shell input keyevent 4; sleep 1; }
+  return 0
 }
 plus_menu_scn() { # item 7: composer + -> GlassMenu (rows, blur count, framestats), back / outside close, an action
   local n=$1 xy rows i
