@@ -176,56 +176,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Smoke result
-        if: steps.emu1.outcome == 'failure' && hashFiles('e2e-out/steps.txt') != ''
-        run: exit 1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: e2e-apk
-          path: |
-            e2e.apk
-            target-sha.txt
-          retention-days: 3
-
-  emulator:
-    needs: [plan, build]
-    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    # Build 11.3: Syed's phone is Android 17 (API 37); test only on API 36 and 37 (Syed 14:17 IST).
-    strategy:
-      fail-fast: false
-      matrix:
-        api: [36]
-    steps:
-      - name: Available system images (API 36/37)
-        run: |
-          SDKM=$(ls $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | head -1)
-          $SDKM --list 2>/dev/null | grep -E "system-images;android-(36|37)|Baklava|CANARY" | sort -u | head -60 || true
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: APK from this run
-        if: needs.plan.outputs.reuse == ''
-        uses: actions/download-artifact@v4
-        with:
-          name: e2e-apk
-          path: apk
-      - name: APK from an earlier run
-        if: needs.plan.outputs.reuse != ''
-        uses: actions/download-artifact@v4
-        with:
-          name: e2e-apk
-          path: apk
-          run-id: ${{ needs.plan.outputs.reuse }}
-          github-token: ${{ github.token }}
-      - run: ls -la apk && cat apk/target-sha.txt
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
       - name: Smoke test on emulator
+        id: emu1
+        # Build 11.3: API 37.0 boot can report done before the input service is up; the runner's own
+        # `input keyevent 82` then fails (41809028530, Broken pipe). One retry when the smoke never started.
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         env:
           APK: ${{ github.workspace }}/apk/e2e.apk
@@ -240,6 +195,25 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash .github/e2e/smoke.sh
+      - name: Smoke test on emulator (retry boot)
+        if: steps.emu1.outcome == 'failure' && hashFiles('e2e-out/steps.txt') == ''
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          APK: ${{ github.workspace }}/apk/e2e.apk
+          OUT: ${{ github.workspace }}/e2e-out
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
+          disk-size: 8G
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash .github/e2e/smoke.sh
+      - name: Smoke result
+        if: steps.emu1.outcome == 'failure' && hashFiles('e2e-out/steps.txt') != ''
+        run: exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
