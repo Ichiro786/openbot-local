@@ -41,8 +41,8 @@ import {
   AgentTaskLimitField,
 } from "@/features/agents/components/agent-host-fields";
 import { AgentInformation } from "@/features/agents/components/agent-information";
-import { AgentInstructionsFileEditor } from "@/features/agents/components/agent-instructions-file";
 import { AgentPageHero } from "@/features/agents/components/agent-page-hub";
+import { AgentInstructionsFileEditor } from "@/features/agents/components/agent-instructions-file";
 import { type AgentPhotoDraft, AgentPhotoPicker } from "@/features/agents/components/agent-photo-picker";
 import { AgentPublish } from "@/features/agents/components/agent-publish";
 import { AgentRuntimeFields, useProviderAccounts } from "@/features/agents/components/agent-runtime-fields";
@@ -52,14 +52,11 @@ import { AgentTasksRow } from "@/features/agents/components/agent-tasks-row";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { InstructionsLimit, instructionsTooLong } from "@/features/agents/components/instructions-limit";
 import { AgentPageFullContext } from "@/features/agents/model/agent-page-presentation";
-import { agentTint, nearestPresetHue } from "@/features/agents/model/avatar-color";
-import { useAgentAvatarColor, useSetAvatarColor } from "@/features/agents/model/use-avatar-colors";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import {
   type MobileAgent,
   type MobileServer,
   useMobileWorkspace,
-  useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { showsOnline } from "@/features/workspace/model/server-status";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
@@ -237,38 +234,10 @@ function AgentForm({
     setEdits((current) => ({ ...current, avatarSeed }));
     setError(null);
   }, []);
-  // Build 11.2: a custom colour saves on release through `avatar-color-v1`; a host without it saves
-  // the nearest preset with the rest of the page (the picker shows a note).
-  const customColor = useAgentAvatarColor(agent.serverId, agent.id);
-  const customSupported = useMobileWorkspaceSelector((current) => current.hasAvatarColors(agent.serverId));
-  const setAvatarColor = useSetAvatarColor(agent.serverId);
-  const changeAvatarHue = useCallback(
-    (avatarHue: AvatarHue | null) => {
-      setEdits((current) => ({ ...current, avatarHue }));
-      setError(null);
-      // A preset or Automatic replaces the custom colour.
-      if (customColor !== undefined) void setAvatarColor(agent.id, null);
-    },
-    [agent.id, customColor, setAvatarColor],
-  );
-  const changeCustomColor = useCallback(
-    (hex: string) => {
-      setError(null);
-      if (!customSupported) {
-        setEdits((current) => ({ ...current, avatarHue: nearestPresetHue(hex) }));
-        return;
-      }
-      // The host sets the preset hue to the nearest one itself; no edit is left to save.
-      setEdits((current) => {
-        const { avatarHue: _saved, ...rest } = current;
-        return rest;
-      });
-      void setAvatarColor(agent.id, hex).then((saved) => {
-        if (!saved) setError(t("mobile.agent.appearance.custom.saveFailed"));
-      });
-    },
-    [agent.id, customSupported, setAvatarColor, t],
-  );
+  const changeAvatarHue = useCallback((avatarHue: AvatarHue | null) => {
+    setEdits((current) => ({ ...current, avatarHue }));
+    setError(null);
+  }, []);
   const hasPhoto = photo === undefined ? Boolean(agent.avatarUrl) : Boolean(photo);
   const photoField = useMemo(
     () => (
@@ -352,14 +321,7 @@ function AgentForm({
       {page === "usage" ? (
         <Stack.Screen options={{ title: t("mobile.agent.info.usage.agentTitle", { name: agent.name }) }} />
       ) : null}
-      {hub ? (
-        <AgentPageHero
-          agent={agent}
-          avatarSeed={avatarSeed}
-          avatarHue={edits.avatarHue === undefined ? agentTint(avatarHue, customColor) : avatarHue}
-          available={available}
-        />
-      ) : null}
+      {hub ? <AgentPageHero agent={agent} avatarSeed={avatarSeed} avatarHue={avatarHue} available={available} /> : null}
       {page === "profile" || (page === "info" && !hub) ? (
         <>
           <View className="gap-6">
@@ -436,9 +398,6 @@ function AgentForm({
           disabled={saving || pickingPhoto}
           onSeedChange={changeAvatarSeed}
           onHueChange={changeAvatarHue}
-          customColor={edits.avatarHue === undefined ? customColor : undefined}
-          customSupported={customSupported}
-          onCustomColor={changeCustomColor}
         />
       ) : null}
       {page === "runtime" ? (

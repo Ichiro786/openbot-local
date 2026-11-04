@@ -54,7 +54,6 @@ import { ChatListRail } from "@/features/agents/components/chat-list-rail";
 import { EmptyAgentsScene, type WelcomeHandOff } from "@/features/agents/components/empty-agents-scene";
 import { PinnedAgentsGrid } from "@/features/agents/components/pinned-agents-grid";
 import { SidebarSectionHeader } from "@/features/agents/components/sidebar-section-header";
-import { useAvatarColorsSync } from "@/features/agents/model/use-avatar-colors";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import {
   AppUpdateBlock,
@@ -405,8 +404,6 @@ function openFromMenu(href: Href): void {
 export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "pane" }) {
   const pane = variant === "pane";
   const { t, sourceText } = useText();
-  // Build 11.2: custom avatar colours of the active server (`avatar-color-v1`).
-  useAvatarColorsSync();
   const { isLoaderPresent } = useAppLoadingOverlay();
   const { openDrawer } = useAppDrawer();
   const workspace = useMobileWorkspaceReader();

@@ -1,8 +1,8 @@
 import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
+import type { AvatarHue } from "@openbot/contracts/ipc";
 import { ImageFormat, Skia } from "@shopify/react-native-skia";
 import { Directory, File, Paths } from "expo-file-system";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
-import type { AvatarTint } from "../avatar-color";
 import { loadPlushArt } from "./plush-assets";
 import { drawPlush } from "./plush-draw";
 import { plushGeometry, plushRestFrame } from "./plush-frames";
@@ -23,7 +23,7 @@ const EVICT_EVERY = 50;
 
 export interface PlushPictureSpec {
   seed: string;
-  hue: AvatarTint;
+  hue: AvatarHue | null;
   mood: AvatarMood;
   /** The width of the picture in pixels. */
   pixels: number;

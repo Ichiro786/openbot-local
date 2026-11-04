@@ -450,8 +450,6 @@ export interface MobileWorkspaceContextValue {
   canManageConnectors: (serverId: string) => boolean;
   /** OpenBot Local: an owner or admin of a host that serves `whatsapp-mobile-v1` (engine 0.60.0-2+). */
   canManageWhatsApp: (serverId: string) => boolean;
-  /** OpenBot Local (build 11.2): the host keeps custom avatar colours (`avatar-color-v1`, engine 0.60.0-3+). */
-  hasAvatarColors: (serverId: string) => boolean;
   /** The same for the host's 1Password connection (`onepassword-connector-v1`). */
   canManageOnePasswordConnector: (serverId: string) => boolean;
   /** The same for the host's Bitwarden connection (`bitwarden-connector-v1`). */
@@ -534,8 +532,6 @@ export interface MobileWorkspaceContextValue {
   loadMessagingConnections: (platform: ConnectorMessagingPlatform, serverId: string) => Promise<MessagingOverview>;
   /** OpenBot Local (`whatsapp-mobile-v1`): one WhatsApp admin route of the host; the answer is checked by the caller. */
   whatsappRequest: (serverId: string, route: string, body: TeamProtocolV2Json) => Promise<unknown>;
-  /** OpenBot Local (`avatar-color-v1`): one avatar colour route of the host; the answer is checked by the caller. */
-  avatarColorRequest: (serverId: string, route: string, body: TeamProtocolV2Json) => Promise<unknown>;
   /** The platform's page that the phone opens. The host opens no page. */
   connectMessaging: (input: HostMessagingConnectInput, serverId: string) => Promise<MessagingConnectorPage>;
   /** Sends the sealed grant of a Slack or Discord install to the host that started it. */
@@ -1021,7 +1017,6 @@ type MobileWorkspaceStateKey =
   | "hasAgentAccessLimits"
   | "canManageConnectors"
   | "canManageWhatsApp"
-  | "hasAvatarColors"
   | "canManageOnePasswordConnector"
   | "canManageBitwardenConnector"
   | "canManageVault"

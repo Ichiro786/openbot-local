@@ -25,7 +25,6 @@ import { AGENT_PLAN_CARD_CAPABILITY } from "@openbot/contracts/team-protocol/age
 import { AGENT_PUBLISH_CAPABILITY } from "@openbot/contracts/team-protocol/agent-publish-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { AGENT_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/agent-update-v1";
-import { AVATAR_COLOR_CAPABILITY } from "@openbot/contracts/team-protocol/avatar-color-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/bitwarden-connector-v1";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { CONNECTORS_CAPABILITY } from "@openbot/contracts/team-protocol/connectors-v1";
@@ -2185,9 +2184,6 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       },
       canManageConnectors: (serverId) => administers(serverId, CONNECTORS_CAPABILITY),
       canManageWhatsApp: (serverId) => administers(serverId, WHATSAPP_MOBILE_CAPABILITY),
-      hasAvatarColors: (serverId) =>
-        servers.some((server) => server.id === serverId && showsOnline(server)) &&
-        hasCapability(serverCapabilities.current, serverId, AVATAR_COLOR_CAPABILITY),
       canManageOnePasswordConnector: (serverId) => administers(serverId, ONEPASSWORD_CONNECTOR_CAPABILITY),
       canManageBitwardenConnector: (serverId) => administers(serverId, BITWARDEN_CONNECTOR_CAPABILITY),
       canManageVault: (serverId) => administers(serverId, VAULT_CAPABILITY),

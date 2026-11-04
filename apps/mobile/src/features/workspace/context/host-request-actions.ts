@@ -78,7 +78,6 @@ import { AGENT_THREAD_FILES_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { AGENT_THREAD_READS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-thread-reads-v1";
 import { AGENT_THREADS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-threads-v1";
 import { AGENT_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/agent-update-v1";
-import { AVATAR_COLOR_CAPABILITY } from "@openbot/contracts/team-protocol/avatar-color-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/bitwarden-connector-v1";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
@@ -397,7 +396,6 @@ type HostRequestActions = Pick<
   | "updateAgentBrowserProfile"
   | "loadMessagingConnections"
   | "whatsappRequest"
-  | "avatarColorRequest"
   | "connectMessaging"
   | "completeMessagingInstall"
   | "reconnectMessaging"
@@ -690,13 +688,6 @@ export function createHostRequestActions({
       runTeamRequest(updateHostAgentBrowserProfile(browserProfilesAdmin(serverId), input)),
     whatsappRequest: async (serverId, route, body) =>
       capabilityApi(serverId, WHATSAPP_MOBILE_CAPABILITY, "mobile.server.connectors.unsupported")(
-        "POST",
-        route,
-        (value: unknown) => value,
-        body,
-      ),
-    avatarColorRequest: async (serverId, route, body) =>
-      capabilityApi(serverId, AVATAR_COLOR_CAPABILITY, "mobile.agent.appearance.custom.unsupported")(
         "POST",
         route,
         (value: unknown) => value,

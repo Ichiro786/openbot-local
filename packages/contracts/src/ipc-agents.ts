@@ -6,7 +6,6 @@ import {
   type AgentReasoningEffort,
   type AvatarHue,
   isAgentModel,
-  isAvatarColor,
   isAvatarHue,
   isAvatarSeed,
   isReasoningEffort,
@@ -299,12 +298,6 @@ export interface AgentSummary {
    * hidden agents through `agent-hidden-v1`. Absent means the agent is not hidden.
    */
   hiddenAt?: string;
-  /**
-   * OpenBot Local: a custom avatar colour, lowercase `#rrggbb`. Local-only, like `hiddenAt`: a remote
-   * client reads and sets it through `avatar-color-v1`. `avatarHue` then holds the nearest preset.
-   * Absent means the preset hue (or the automatic one) is the colour.
-   */
-  avatarColor?: string;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -363,7 +356,6 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.usageLimitReturn === undefined || isAgentUsageLimitReturn(value.usageLimitReturn)) &&
     (value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)) &&
     (value.hiddenAt === undefined || isHiddenAt(value.hiddenAt)) &&
-    (value.avatarColor === undefined || isAvatarColor(value.avatarColor)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
