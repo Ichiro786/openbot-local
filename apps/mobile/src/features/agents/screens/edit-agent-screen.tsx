@@ -331,7 +331,15 @@ function AgentForm({
       {page === "usage" ? (
         <Stack.Screen options={{ title: t("mobile.agent.info.usage.agentTitle", { name: agent.name }) }} />
       ) : null}
-      {hub ? <AgentPageHero agent={agent} avatarSeed={avatarSeed} avatarHue={avatarHue} available={available} /> : null}
+      {hub ? (
+        <AgentPageHero
+          agent={agent}
+          avatarSeed={avatarSeed}
+          avatarHue={avatarHue}
+          avatarColor={avatarColor}
+          available={available}
+        />
+      ) : null}
       {page === "profile" || (page === "info" && !hub) ? (
         <>
           <View className="gap-6">

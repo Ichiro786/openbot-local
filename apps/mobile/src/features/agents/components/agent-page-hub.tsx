@@ -41,11 +41,13 @@ export function AgentPageHero({
   agent,
   avatarSeed,
   avatarHue,
+  avatarColor,
   available,
 }: {
   agent: MobileAgent;
   avatarSeed: string;
   avatarHue: MobileAgent["avatarHue"];
+  avatarColor: MobileAgent["avatarColor"];
   available: boolean;
 }) {
   const { t } = useText();
@@ -65,7 +67,14 @@ export function AgentPageHero({
         accessibilityLabel={t("mobile.agent.edit.appearance")}
         onPress={() => openSubPage(agent, "appearance")}
       >
-        <BloubAvatarPreview agentId={agent.id} serverId={agent.serverId} seed={avatarSeed} hue={avatarHue} size={104} />
+        <BloubAvatarPreview
+          agentId={agent.id}
+          serverId={agent.serverId}
+          seed={avatarSeed}
+          hue={avatarHue}
+          color={avatarColor}
+          size={104}
+        />
       </Pressable>
       <View style={styles.identity}>
         <Typography.Paragraph className="font-semibold" numberOfLines={2} style={styles.name}>
