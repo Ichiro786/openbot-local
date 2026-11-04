@@ -27,7 +27,7 @@ export const REAL_AGENT = {
   preview: "",
   updatedLabel: "",
   avatarSeed: "e2e-seed",
-  avatarHue: 270,
+  avatarHue: null, // 41809028530: a number is no AvatarHue id (avatarHeadColor -> undefined -> voicePalette .trim crash)
   avatarColor: null,
   avatarUrl: null,
   pinned: false,

@@ -147,7 +147,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [36]
+        api: [36, "37.0"]
     steps:
       - name: Available system images (API 36/37)
         run: |
