@@ -5,7 +5,7 @@ import {
   avatarHeadColor,
   isAvatarColorChoice,
 } from "@openbot/brand/bloub-avatar";
-import type { AvatarColor, AvatarHue } from "@openbot/contracts/ipc";
+import { type AvatarColor, type AvatarHue, nearestAvatarHue } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
@@ -13,12 +13,14 @@ import Shuffle from "lucide-react-native/icons/shuffle";
 import { memo, type ReactNode, useCallback, useState } from "react";
 import { View } from "react-native";
 import { AgentColorGlow } from "@/features/agents/components/agent-color-glow";
+import { AgentColorWheel } from "@/features/agents/components/agent-color-wheel";
 import { AvatarThumbnail, BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { createAvatarCandidates } from "@/features/agents/model/avatar-candidates";
 import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import type { AgentPhotoProps } from "./agent-photo";
 
 const PREVIEW_SIZE = 144;
@@ -94,7 +96,21 @@ export function AgentAppearancePicker({
   const { t } = useText();
   const [candidates, setCandidates] = useState(() => createAvatarCandidates(seed));
   const shuffle = useCallback(() => setCandidates((current) => createAvatarCandidates(seed, current)), [seed]);
-  const targetColor = avatarHeadColor(seed, hue, color);
+  // Build 11.2: the custom wheel (ColorOS ON, Android). While dragging, only the preview follows;
+  // release saves through onColorChange like a swatch, with the nearest hue for older peers.
+  const { enabled: colorOS } = useColorOSMotion();
+  const [preview, setPreview] = useState<AvatarColor | null>(null);
+  const savedColor = avatarHeadColor(seed, hue, color);
+  const shownColor = preview ?? color;
+  const targetColor = preview ?? savedColor;
+  const onWheelPreview = useCallback((hex: AvatarColor) => setPreview(hex), []);
+  const onWheelCommit = useCallback(
+    (next: AvatarColor) => {
+      setPreview(null);
+      onColorChange({ hue: nearestAvatarHue(next), color: next });
+    },
+    [onColorChange],
+  );
 
   return (
     <View className="gap-4">
@@ -112,7 +128,7 @@ export function AgentAppearancePicker({
           imageUrl={imageUrl}
           seed={seed}
           hue={hue}
-          color={color}
+          color={shownColor}
           size={PREVIEW_SIZE}
           transition="pop"
         />
@@ -131,6 +147,14 @@ export function AgentAppearancePicker({
             photoField={photoField}
           />
           <AvatarColorOptions hue={hue} color={color} disabled={disabled} onColorChange={onColorChange} />
+          {isAndroid && colorOS ? (
+            <AgentColorWheel
+              initial={savedColor}
+              disabled={disabled}
+              onPreview={onWheelPreview}
+              onCommit={onWheelCommit}
+            />
+          ) : null}
         </>
       ) : photoField ? (
         <View className="flex-row flex-wrap items-center justify-center gap-2">{photoField}</View>
