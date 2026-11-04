@@ -147,7 +147,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [36, "37.0"]
+        api: ["37.0"]
     steps:
       - name: Available system images (API 36/37)
         run: |
@@ -186,6 +186,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
+          disk-size: 8G
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash .github/e2e/smoke.sh

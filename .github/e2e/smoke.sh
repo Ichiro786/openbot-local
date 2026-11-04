@@ -803,7 +803,7 @@ check launch || true
 # each looped REALN times. After a lane, the chat must be gone within ~3 s. If not: probe 1 = one settled
 # header Back tap (gone now = "IGNORED": the lane's taps were lost, e.g. under the open overlay); still
 # there = probe 2 = system Back key; still there = "STUCK" (Syed's bug). STUCK fails the run.
-REALN=${REALN:-20}
+REALN=${REALN:-$(cat .github/e2e/realn 2>/dev/null || echo 20)}
 real_row() { [ -s "$OUT/.realrow" ] || { wait_for "E2E Real chat" 10 rr0 > "$OUT/.realrow" || return 1; }; cat "$OUT/.realrow"; }
 real_open() { local xy; xy=$(real_row) || return 1; adb shell input tap $xy; sleep "${1:-2.6}"; }
 real_tap() { adb shell input tap $1 $2; }
@@ -864,6 +864,13 @@ real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
         L7) real_open 2.6 || return; [ -n "$EDITXY" ] && real_tap $EDITXY; sleep 1.5; adb shell input keyevent 111; sleep 0.6; real_tap $BACKXY ;;  # keyboard up/down, header Back
         L8) real_open 2.6 || return; edge_quick 640 640 ;;                                                          # back gesture released
         L9) real_open 2.6 || return; real_tap $BACKXY; sleep 0.25; real_tap $BACKXY ;;                              # double tap (second during the close)
+        L10) real_open 2.6 || return; adb shell input keyevent 4; real_tap $BACKXY; real_tap $BACKXY ;;               # header taps right after a system Back (predictive start/invoke on 36+)
+        L11) real_open 2.6 || return; edge_quick 400 400; real_tap $BACKXY; sleep 0.1; real_tap $BACKXY ;;           # header taps right after a committed back gesture
+        L12) real_open 2.6 || return; real_tap $BACKXY; sleep 0.1; adb shell input keyevent 4 ;;                     # system Back during the header zoom-close
+        L13) real_open 2.6 || return; [ -n "$PILLXY" ] && real_tap $PILLXY; sleep 0.4; real_tap $BACKXY; sleep 0.3; real_tap $BACKXY; sleep 0.3; real_tap $BACKXY ;;  # taps during the thread menu open
+        L14) real_open 2.6 || return; adb shell input swipe 540 900 540 1500 250; real_tap $BACKXY ;;                # list drag, header Back at once
+        L15) real_open 2.6 || return; edge_quick 520 10; edge_quick 520 10; real_tap $BACKXY; sleep 0.15; adb shell input keyevent 4 ;;  # 2 cancelled gestures, tap, key
+        L16) real_open 1.0 || return; edge_quick 400 400; sleep 0.2; real_open 0.6; real_tap $BACKXY; sleep 0.1; real_tap $BACKXY ;;  # back gesture, reopen during the close, rapid taps
       esac
       real_judge $L $i $m
     done
@@ -887,7 +894,7 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
-  if real_setup; then real_lanes ON $REALN "L1 L2 L3 L4 L5 L6 L7 L8 L9"; fi
+  if real_setup; then real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
   log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"
