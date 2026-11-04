@@ -227,6 +227,25 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
     if (!o.includes(a)) throw new Error(`close mark anchor missing: ${a.slice(0, 60)}`);
     o = o.replace(a, b);
   };
+  if (o.includes("export function zoomCloseStart(")) {
+    // Build 11.3 zoomfix overlay (zoomCloseStart, visual only): same marks on its own anchors.
+    orep("  let committed = false;", "  let committed = false;\n  let __maxP = 0;\n  const __t0 = Date.now();");
+    orep("      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);", "      __maxP = Math.max(__maxP, value);\n      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);");
+    orep("    if (request?.key === key) {\n      useCloseStore.setState({ request: null });\n      // The home still", `    if (request?.key === key && committed && popped) {
+      const t = target.value;
+      const c = centre.value;
+      const pe = p.value;
+      const still = request.chat ? "still" : "surface";
+      source.measure((row) => {
+        const r = (v: { x: number; y: number; width: number; height: number } | null) => (v ? [v.x, v.y, v.width, v.height].map((n) => n.toFixed(1)).join(",") : "none");
+        console.log(\`E2ECLOSE done mode=\${interactive ? "gesture" : "button"} \${still} land=\${r(t)} row=\${r(row)} centre=\${c.toFixed(2)} p=\${pe.toFixed(3)} maxP=\${__maxP.toFixed(2)} ms=\${Date.now() - __t0}\`);
+      });
+    }
+    if (request?.key === key) {
+      useCloseStore.setState({ request: null });
+      // The home still`);
+    orep("    cancel: () => {\n      if (committed || finished) return;", "    cancel: () => {\n      if (committed || finished) return;\n      console.log(\"E2ECLOSE cancel\");");
+  } else {
   orep("  let committed = false;", "  let committed = false;\n  let __maxP = 0;\n  const __t0 = Date.now();");
   orep("      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);", "      __maxP = Math.max(__maxP, value);\n      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);");
   orep("    if (request?.key !== key) return;\n    useCloseStore.setState({ request: null });\n    disposeLater(request.chat);", `    if (request?.key !== key) return;
@@ -242,6 +261,7 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
     useCloseStore.setState({ request: null });
     disposeLater(request.chat);`);
   orep("function clearCancelled(key: number) {", "function clearCancelled(key: number) {\n  console.log(\"E2ECLOSE cancel\");");
+  }
   writeFileSync(ov, o);
   cpSync(".github/e2e/harness-b112/app/e2e-picker.tsx", "apps/mobile/src/app/e2e-picker.tsx");
   src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-picker" options={{ headerShown: false }} />`);
