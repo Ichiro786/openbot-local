@@ -24,6 +24,13 @@ const BEGIN_MS = 700;
  * taken the chat off the top of the stack within this, for any reason, pops it the plain way.
  */
 export const BACK_WATCHDOG_MS = 300;
+/**
+ * Build 11.3 option B (Back still stuck on Syed's Android 17 phone, not reproduced on the emulator):
+ * false = no Back ever runs the zoom-close. The chat holds no removal and no predictive callback, so
+ * header Back, system Back and the edge swipe are the stack's own plain pop (normal pop animation).
+ * true = build 11.2/11.3 zoom-close with the watchdog.
+ */
+export const ZOOM_CLOSE_ON_BACK = false;
 
 /** zoomCloseBegin, bounded: null on timeout or error; a still that comes later is cancelled. */
 function beginWithin(source: ZoomSource, pop: () => void, interactive: boolean): Promise<ZoomCloseHandle | null> {
@@ -76,7 +83,7 @@ export function useZoomClose(routeKey: string) {
   const { enabled, reduceMotion } = useColorOSMotion();
   const active = isAndroid && enabled && !reduceMotion;
   const held = useSyncExternalStore(watchChatBackHolds, chatBackHeld);
-  const zoomed = active && zoomSource(routeKey) !== undefined;
+  const zoomed = ZOOM_CLOSE_ON_BACK && active && zoomSource(routeKey) !== undefined;
   // A close of this chat is under way (a gesture or a Back). Build 11.3: a second Back never waits for it.
   const pending = useRef(false);
   // Build 11.3: bumped whenever a close is dropped or the chat pops the plain way; a close whose epoch
@@ -190,7 +197,7 @@ export function useZoomClose(routeKey: string) {
 
   // Predictive back (Android 14+, gesture navigation): the gesture holds the close open.
   useEffect(() => {
-    if (!active || !predictiveBack) return;
+    if (!ZOOM_CLOSE_ON_BACK || !active || !predictiveBack) return;
     const module = predictiveBack;
     const subscriptions = [
       module.addListener("onBackStart", () => {
