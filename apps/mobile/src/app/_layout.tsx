@@ -53,6 +53,8 @@ import { useText } from "@/shared/lib/text";
 import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
 import { ColorOSMotionRoot } from "@/shared/motion/ColorOSMotionRoot";
+import { BackDebugPill } from "@/shared/debug/BackDebugPill";
+import { loadBackDebug } from "@/shared/debug/backDebug";
 import { GlassMenuHost } from "@/shared/motion/GlassMenu";
 import { ZoomCloseHost } from "@/shared/motion/ZoomCloseOverlay";
 import { ZoomOpenHost } from "@/shared/motion/ZoomOpenOverlay";
@@ -171,6 +173,7 @@ function RootNavigator() {
                     <GlassMenuHost />
                     <ZoomOpenHost />
                     <ZoomCloseHost />
+                    <BackDebugPill />
                   </>
                 }
               >
@@ -247,6 +250,7 @@ export default function RootLayout() {
       void loadThemeStyle().catch(() => undefined);
       void loadHapticsPreference().catch(() => undefined);
       void loadAvatarScale().catch(() => undefined);
+      void loadBackDebug().catch(() => undefined);
       void loadAgentColorMessages().catch(() => undefined);
       void loadLiveActivitiesPreference().catch(() => undefined);
       void loadPushNotificationPreference().catch(() => undefined);

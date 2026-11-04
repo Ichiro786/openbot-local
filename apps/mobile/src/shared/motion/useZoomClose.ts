@@ -8,6 +8,7 @@ import {
   usePreventRemove,
 } from "expo-router/react-navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { logBack, registerBackFlags } from "@/shared/debug/backDebug";
 import { isAndroid } from "@/shared/lib/platform";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
@@ -141,6 +142,7 @@ export function useZoomClose(routeKey: string) {
       watchdog.current = null;
       const state = navigation.getState();
       if (state.routes[state.index]?.key !== routeKey) return;
+      logBack("watchdog fired", `${routeKey}; pop dispatched`);
       reset();
       disablePrevention.current();
       navigation.dispatch({ ...StackActions.pop(), source: routeKey, target: state.key });
@@ -152,6 +154,35 @@ export function useZoomClose(routeKey: string) {
     },
     [],
   );
+
+  const zoomedNow = useRef(zoomed);
+  zoomedNow.current = zoomed;
+  // Build 11.3 Back debug: this chat's lifecycle and Back flags (no-op while Back debug is off).
+  useEffect(() => {
+    logBack("chat mount", routeKey);
+    const unregister = registerBackFlags("chat", () => ({
+      key: routeKey,
+      focused: navigation.isFocused(),
+      zoomed: zoomedNow.current,
+      pending: pending.current,
+      epoch: epoch.current,
+      gesture: gesture.current !== null,
+      watchdog: watchdog.current !== null,
+    }));
+    const subscriptions = [
+      navigation.addListener("beforeRemove", (e) => logBack("beforeRemove", `${routeKey} ${e.data.action.type}`)),
+      navigation.addListener("focus", () => logBack("chat focus", routeKey)),
+      navigation.addListener("blur", () => logBack("chat blur", routeKey)),
+      navigation.addListener("transitionStart", (e) => logBack("transitionStart", `closing=${e.data.closing}`)),
+      navigation.addListener("transitionEnd", (e) => logBack("transitionEnd", `closing=${e.data.closing}`)),
+      navigation.addListener("gestureCancel", () => logBack("gestureCancel", routeKey)),
+    ];
+    return () => {
+      unregister();
+      for (const unsubscribe of subscriptions) unsubscribe();
+      logBack("chat unmount", routeKey);
+    };
+  }, [navigation, routeKey]);
 
   // A blur (the agent page, any push over the chat) or a new focus ends any close still under way.
   useEffect(() => {
@@ -165,6 +196,7 @@ export function useZoomClose(routeKey: string) {
   // goes back: the removal is held, the still covers the chat, then the chat pops under it.
   disablePrevention.current = usePreventRemove(zoomed, ({ data }) => {
     const action = data.action;
+    logBack("prevented", `${action.type} pending=${pending.current}`);
     if (action.type === "GO_BACK" || action.type === "POP") arm();
     if (pending.current) {
       // Build 11.3: a Back while a close is under way (or one that never ended) never waits for it:

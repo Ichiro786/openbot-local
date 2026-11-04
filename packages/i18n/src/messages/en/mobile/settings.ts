@@ -64,6 +64,13 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.appearance.agentColorMessages": "Agent color on my messages",
   "mobile.settings.appearance.agentColorMessagesFooter":
     "Your messages in an agent chat use that agent’s color. Turn off if the text is hard to read.",
+  "mobile.settings.backDebug.label": "Back debug",
+  "mobile.settings.backDebug.footer":
+    "Shows a small panel with what Back sees (screens, flags, last Back presses) and a button to copy the log. For finding the stuck Back bug.",
+  "mobile.settings.backDebug.copy": "Copy log",
+  "mobile.settings.backDebug.copied": "Copied",
+  "mobile.settings.backDebug.hide": "Hide",
+  "mobile.settings.backDebug.show": "Back debug",
   "mobile.settings.appearance.avatarSize": "Avatar size",
   "mobile.settings.appearance.avatarSizeValue": "{percent}%",
   "mobile.settings.appearance.avatarSizeFooter":

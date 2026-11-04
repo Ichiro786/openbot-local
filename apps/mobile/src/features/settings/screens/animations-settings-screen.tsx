@@ -4,6 +4,7 @@ import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settin
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { type MotionPreference, useMotionPreferences } from "@/features/settings/model/motion";
 import { saveMotionPreference } from "@/features/settings/model/motion-storage";
+import { saveBackDebug, useBackDebug } from "@/shared/debug/backDebug";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
@@ -15,6 +16,7 @@ export function AnimationsSettingsScreen() {
   // Reduced motion, from the device or from the first switch, holds the other animations off.
   const reduced = useReducedMotion();
   const [error, setError] = useState<string | null>(null);
+  const backDebug = useBackDebug();
   function save(name: MotionPreference, enabled: boolean) {
     setError(null);
     void saveMotionPreference(name, enabled).catch(() => {
@@ -75,6 +77,20 @@ export function AnimationsSettingsScreen() {
           </SettingsRow>
         </SettingsSection>
       ))}
+      {/* Build 11.3 diagnostic: Back debug pill (ColorOS ON only). */}
+      {preferences.colorOSMotion ? (
+        <SettingsSection footer={t("mobile.settings.backDebug.footer")}>
+          <SettingsRow>
+            <SettingsSwitch
+              value={backDebug.enabled}
+              disabled={!backDebug.ready}
+              label={t("mobile.settings.backDebug.label")}
+              dark={theme === "dark"}
+              onValueChange={(enabled) => void saveBackDebug(enabled).catch(() => undefined)}
+            />
+          </SettingsRow>
+        </SettingsSection>
+      ) : null}
     </SettingsContent>
   );
 }

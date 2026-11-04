@@ -3,6 +3,7 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
+import { logBack, registerBackFlags } from "@/shared/debug/backDebug";
 
 /**
  * Build 11.3: how long one close holds the next Back. A close that has not taken the chat off the
@@ -31,6 +32,14 @@ export function useLeaveChat(): () => void {
   const route = useRoute();
   const closingAt = useRef(0);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () =>
+      registerBackFlags("leave", () => ({
+        latchAgoMs: closingAt.current ? Date.now() - closingAt.current : null,
+        retryArmed: retry.current !== null,
+      })),
+    [],
+  );
   useEffect(() => {
     const clear = () => {
       closingAt.current = 0;
@@ -51,7 +60,11 @@ export function useLeaveChat(): () => void {
     };
   }, [navigation]);
   return useCallback(() => {
-    if (Date.now() - closingAt.current < HOLD_MS) return;
+    if (Date.now() - closingAt.current < HOLD_MS) {
+      logBack("header tap", `latched ${Date.now() - closingAt.current} ms`);
+      return;
+    }
+    logBack("header tap", `goBack canGoBack=${router.canGoBack()} route=${route.key}`);
     closingAt.current = Date.now();
     void KeyboardController.dismiss();
     if (!router.canGoBack()) {
@@ -66,6 +79,7 @@ export function useLeaveChat(): () => void {
       // pops a repeated Back the plain way), so the chat leaves.
       const state = navigation.getState();
       if (state.routes[state.index]?.key !== route.key) return;
+      logBack("header retry fired", `top ${state.routes[state.index]?.name}; pop dispatched`);
       closingAt.current = Date.now();
       navigation.dispatch({ ...StackActions.pop(), source: route.key, target: state.key });
     }, RETRY_MS);
