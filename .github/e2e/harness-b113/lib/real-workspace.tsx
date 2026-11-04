@@ -49,7 +49,17 @@ const conversationStore = {
   cachedPage: () => undefined,
 };
 const server = { id: "e2e-server", name: "E2E", status: "online", online: true, connected: true, initialConnectionPending: false };
-const live = { get: () => ({ activityByServer: {} }), subscribe: () => () => undefined };
+// Every live map the chat reads (use-live-workspace, use-live-activity), empty and stable.
+const liveSnapshot = {
+  activityByServer: {},
+  approvalRequests: {},
+  browserRequests: {},
+  browserTabs: {},
+  turnLinesByServer: {},
+  unreadAgentIds: [],
+  unreadCounts: {},
+};
+const live = { get: () => liveSnapshot, subscribe: () => () => undefined };
 const known: Record<string, unknown> = {
   agents: [REAL_AGENT],
   servers: [server],
@@ -65,10 +75,15 @@ const known: Record<string, unknown> = {
   browserViewSupport: () => ({ view: true, control: true }),
 };
 const value: any = new Proxy({}, { get: (_t, key) => (typeof key === "string" && key in known ? known[key] : anything) });
+const channelState = { channels: [], loaded: true };
+const knownActions: Record<string, unknown> = {
+  channelStore: { subscribe: () => () => undefined, get: () => channelState, observe: () => undefined },
+};
+const actions: any = new Proxy({}, { get: (_t, key) => (typeof key === "string" && key in knownActions ? knownActions[key] : anything) });
 
 export function RealWorkspace({ children }: PropsWithChildren) {
   return (
-    <WorkspaceContexts value={value} actions={anything}>
+    <WorkspaceContexts value={value} actions={actions}>
       {children}
     </WorkspaceContexts>
   );
