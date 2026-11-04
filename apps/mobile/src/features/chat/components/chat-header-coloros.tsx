@@ -4,7 +4,7 @@ import { Typography } from "heroui-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
-import { type RefObject, useState } from "react";
+import type { RefObject } from "react";
 import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,7 +16,7 @@ import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { MenuView } from "@/shared/components/menu-view";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
-import { GlassBand, type GlassBandShape } from "@/shared/glass/GlassBand";
+import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
@@ -43,6 +43,8 @@ export const COLOROS_CHAT_HEADER_BOTTOM = ROW_TOP + ROW_HEIGHT;
 const SIDE_BOX = 64;
 const EDGE_PAD = 16;
 const MORE_WIDTH = 60;
+/** Build 11.3: how far the header's frost fades out below the pill. */
+const BAND_FADE = 28;
 /**
  * Build 11.2: the header's geometry for the zoom-open skeleton (ZoomOpenOverlay), from the constants
  * above, so the skeleton draws the shapes exactly where this header puts them. Offsets are from the
@@ -79,6 +81,11 @@ export const COLOROS_CHAT_HEADER_GEOMETRY = {
  * (`GlassBand`, a sibling region; this header is outside it), with the Notes press physics on each. The
  * band pauses while a frosted glass menu is open, so the chat draws at most two blurs (band + composer;
  * a message menu pauses the composer too). Without a target the glass is the solid material.
+ *
+ * Build 11.3 (Syed's reference): the band is a full-width progressive frost under the status bar,
+ * avatar, pill and both buttons (strong blur + a slight dim, fading out below the pill), so text that
+ * scrolls under the header is unreadable mush. Before, the blur was masked to the three glass shapes
+ * only, so the text between and around them stayed sharp.
  */
 export function ColorOSChatHeader({
   target,
@@ -113,49 +120,10 @@ export function ColorOSChatHeader({
   const pillPress = useGlassPress();
   const morePress = useGlassPress();
   const pillHandlers = useGlassPressHandlers(pillPress, PILL_HEIGHT, true, reduceMotion);
-  const [pillFrame, setPillFrame] = useState<{ x: number; width: number } | null>(null);
-  const [rowWidth, setRowWidth] = useState(0);
   const padLeft = insets.left + EDGE_PAD;
   const padRight = insets.right + EDGE_PAD;
-  const shapes: GlassBandShape[] = rowWidth
-    ? [
-        ...(showBack
-          ? [
-              {
-                key: "back",
-                x: padLeft + BUTTON_INSET,
-                y: SIDE_TOP + BUTTON_INSET,
-                width: BUTTON,
-                height: BUTTON,
-                radius: BUTTON / 2,
-                press: backPress,
-              },
-            ]
-          : []),
-        ...(pillFrame
-          ? [
-              {
-                key: "pill",
-                x: pillFrame.x,
-                y: AVATAR - OVERLAP,
-                width: pillFrame.width,
-                height: PILL_HEIGHT,
-                radius: PILL_HEIGHT / 2,
-                press: pillPress,
-              },
-            ]
-          : []),
-        {
-          key: "more",
-          x: rowWidth - padRight - 60 + BUTTON_INSET,
-          y: SIDE_TOP + BUTTON_INSET,
-          width: 60 - BUTTON_INSET * 2,
-          height: BUTTON,
-          radius: BUTTON / 2,
-          press: morePress,
-        },
-      ]
-    : [];
+  // Build 11.3: the frosted band covers the status bar, avatar, pill and side buttons, then fades out.
+  const bandHeight = topInset + ROW_TOP + ROW_HEIGHT + BAND_FADE;
   // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
   const subtitle = useMobileWorkspaceSelector((current) => {
     const agent = current.agents.find((item) => item.id === target.id && item.serverId === target.serverId);
@@ -195,11 +163,10 @@ export function ColorOSChatHeader({
       <GlassBand
         target={frostTarget}
         shown={bandOn}
-        shapes={shapes}
-        style={[styles.band, { top: topInset + ROW_TOP, height: ROW_HEIGHT }]}
+        solid={(bandHeight - BAND_FADE - PILL_HEIGHT / 2) / bandHeight}
+        style={[styles.band, { top: 0, height: bandHeight }]}
       />
       <View
-        onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         pointerEvents="box-none"
         accessibilityElementsHidden={accessibilityHidden}
         importantForAccessibility={accessibilityHidden ? "no-hide-descendants" : "auto"}
@@ -223,10 +190,7 @@ export function ColorOSChatHeader({
           <Animated.View
             style={{ marginTop: AVATAR - OVERLAP }}
             onLayout={(event) => {
-              const { x, width } = event.nativeEvent.layout;
-              // The middle column starts after the leading side box.
-              const left = padLeft + SIDE_BOX + x;
-              if (left !== pillFrame?.x || width !== pillFrame?.width) setPillFrame({ x: left, width });
+              const { width } = event.nativeEvent.layout;
               // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
               recordZoomSkeleton(target.id, {
                 pillWidth: width,
