@@ -1263,6 +1263,7 @@ export function ChatView({
                   onSend={send}
                   onStop={requestStop}
                   keyboardProgress={motion.keyboardProgress}
+                  keyboardHeight={motion.keyboardHeight}
                   frostTarget={frostChat && colorOSMotion ? frostTarget : undefined}
                   onInputFocus={motion.anticipateKeyboard}
                   menuOpen={attachments.menuOpen}

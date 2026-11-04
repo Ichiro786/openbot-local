@@ -193,6 +193,8 @@ interface ChatComposerProps {
   onStop?: () => void;
   /** 0 with the keyboard down, 1 with it up, and every value a swipe passes through. */
   keyboardProgress: SharedValue<number>;
+  /** Build 11.1: the keyboard height the chat lifts the composer by (the + menu opens above it). */
+  keyboardHeight?: SharedValue<number>;
   /**
    * Build 10 (ColorOS motion, Android 12+): the chat's message-list blur target. With it the card is
    * frosted glass (ComposerFrost) instead of its solid fill.
@@ -302,6 +304,7 @@ export const ChatComposer = memo(function ChatComposer({
   onSend,
   onStop,
   keyboardProgress,
+  keyboardHeight,
   frostTarget,
   onInputFocus,
   menuOpen = false,
@@ -860,8 +863,10 @@ export const ChatComposer = memo(function ChatComposer({
   const openPlusGlassMenu = (files: NonNullable<typeof attachments>): boolean => {
     const box = glassMenuHostBox();
     if (!box) return false;
-    // The + rides the keyboard's lift, as the classic card does.
-    const lift = Math.max(0, (Keyboard.metrics()?.height ?? 0) - (Math.max(bottomInset, 10) - 10));
+    // The + rides the keyboard's lift, read from the value the chat lifts the composer by (as the
+    // classic card does), so the anchor is where the + is drawn now.
+    const keyboard = keyboardHeight ? keyboardHeight.get() : (Keyboard.metrics()?.height ?? 0);
+    const lift = Math.max(0, keyboard - (Math.max(bottomInset, 10) - 10));
     const size = attachmentAnchor.size;
     const anchor = {
       x: box.x + attachmentAnchor.left,
@@ -873,6 +878,8 @@ export const ChatComposer = memo(function ChatComposer({
     const key = openGlassMenu({
       anchor,
       stagger: true,
+      // Below the + are the composer and the keyboard (inside the host's frame): never flip there.
+      above: true,
       items: [
         ...(onUseSkill ? [{ id: "skill", title: t("mobile.chat.attachment.useSkill"), icon: icon(Sparkles) }] : []),
         { id: "files", title: t("mobile.chat.attachment.files"), icon: icon(Paperclip), disabled: files.preparing },

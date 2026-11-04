@@ -84,6 +84,11 @@ type GlassMenuRequest = {
   dim?: boolean;
   /** Build 11: the rows arrive one after another, nearest the anchor first (composer + menu). */
   stagger?: boolean;
+  /**
+   * Build 11.1: always above the anchor, never flipped below (composer +: below it is the composer and
+   * the keyboard, which the host's frame includes).
+   */
+  above?: boolean;
   /** Runs once, after the menu has closed and unmounted. */
   onSelect: (id: string) => void;
   /**
@@ -330,7 +335,7 @@ function GlassMenuOverlay({
     const a = anchor;
     const below = box.height - safe.bottom - EDGE - (a.y + a.height + menu.anchorGap + barOffset);
     const above = a.y - safe.top - EDGE - menu.anchorGap - barOffset;
-    if (side.current === null) side.current = below >= naturalHeight || below >= above;
+    if (side.current === null) side.current = !request.above && (below >= naturalHeight || below >= above);
     const placeBelow = side.current;
     const height = Math.max(cardShown ? menu.rowPitch : 0, Math.min(naturalHeight, placeBelow ? below : above));
     const alignRight = a.x + a.width / 2 > box.width / 2;
@@ -344,7 +349,7 @@ function GlassMenuOverlay({
     const originX = Math.max(0, Math.min(WIDTH, a.x + a.width / 2 - left));
     const originY = placeBelow ? -barOffset : height;
     return { left, top, height, originX, originY, barLeft, scrollable: naturalHeight > height };
-  }, [anchor, box, safe.top, safe.bottom, naturalHeight, barOffset, groupWidth, barWidth, cardShown]);
+  }, [anchor, box, safe.top, safe.bottom, naturalHeight, barOffset, groupWidth, barWidth, cardShown, request.above]);
   const barTop = frame.top - barOffset;
   // The emoji grid grows down from the bar's top, kept on screen.
   const pickerTop = Math.max(safe.top + EDGE, Math.min(barTop, box.height - safe.bottom - EDGE - PICKER_HEIGHT));
