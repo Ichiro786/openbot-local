@@ -779,6 +779,14 @@ adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 if ! wait_for "E2E READY" 120 "00-launch" >/dev/null; then log "FAIL: harness never showed"; shot "00-launch"; FAIL=1; fi
 shot "00-launch"; grep -o 'E2E READY[a-z ]*colorOS=[A-Z]*' "$OUT/00-launch.xml" | head -1 | tee -a "$OUT/steps.txt"
 check launch || true
+# Quick lane (release deadline): .github/e2e/quick = stuck-Back regression + zoom-close only, on a reused APK.
+if [ -f .github/e2e/quick ]; then
+  log "== QUICK lane: stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null))"
+  ensure_running q; stuck_scn q-stuck; close_scn q-close ON
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
+  log "RESULT FAIL=$FAIL"; exit $FAIL
+fi
 round on1 ON
 toggle_to t1 OFF
 round off OFF
