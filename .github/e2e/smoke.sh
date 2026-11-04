@@ -421,17 +421,21 @@ sys.exit(0 if ok else 1)
 PYC
   log "ok: compact agent pill, name only, Back centred on the group"
 }
-ime_top() { # IME window top in screen px, or 0 when the keyboard is not shown
-  local d; d=$(adb shell dumpsys input_method 2>/dev/null | grep -oE "mInputShown=(true|false)" | head -1)
-  [ "$d" = "mInputShown=true" ] || { echo 0; return; }
-  adb shell dumpsys window 2>/dev/null > "$OUT/.winwin"
-  python3 - "$OUT/.winwin" <<'PYI'
+ime_top() { # IME top in screen px, or 0 when the keyboard is not shown (raw dumps kept in $OUT/ime-raw-*.txt)
+  local k=$((${IMEK:-0}+1)); IMEK=$k
+  adb shell dumpsys input_method 2>/dev/null > "$OUT/ime-raw-$k-im.txt"
+  adb shell dumpsys window 2>/dev/null > "$OUT/ime-raw-$k-win.txt"
+  python3 - "$OUT/ime-raw-$k-im.txt" "$OUT/ime-raw-$k-win.txt" <<'PYI'
 import re,sys
-t=open(sys.argv[1],errors="ignore").read()
-m=[x for x in re.finditer(r"type=ime frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\] visible=true",t)]
-if m: print(m[0].group(2)); sys.exit()
-m=re.search(r"mGivenContentInsets=\[\d+,(\d+)\]",t)
-print(m.group(1) if m and int(m.group(1))>0 else 0)
+im=open(sys.argv[1],errors="ignore").read(); w=open(sys.argv[2],errors="ignore").read()
+shown=bool(re.search(r"(mInputShown|mIsInputViewShown|isInputViewShown|mDecorViewVisible|mWindowVisible)=true",im))
+m=re.search(r"type=ime frame=\[(\d+),(\d+)\]\[(\d+),(\d+)\] visible=true",w)
+if m: print(m.group(2)); sys.exit()
+blk=re.search(r"Window\{[^}]*InputMethod\}.*?(?=\n  Window #|\Z)",w,re.S)
+b=blk.group(0) if blk else ""
+vis=("mViewVisibility=0x0" in b) or ("isOnScreen=true" in b) or shown
+g=re.search(r"mGivenContentInsets=\[\d+,(\d+)\]",b or w)
+print(g.group(1) if (vis and g and int(g.group(1))>0) else 0)
 PYI
 }
 plus_geom() { # $1 xml -> "rowsTop rowsBottom rowCount composerTop" (rows: the + menu's four rows; composer: min top of field and +)
@@ -457,7 +461,8 @@ plus_kb_scn() { # hotfix 11.1: the + menu sits above the composer and the IME, w
       dump "$n-f0"; set -- $(edit_xy "$OUT/$n-f0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; return 0; }
       adb shell input tap $1 $2; ime=0
       for i in 1 2 3 4 5 6 7 8 9 10; do sleep 1; ime=$(ime_top); [ "${ime:-0}" -gt 0 ] && break; done
-      [ "${ime:-0}" -gt 0 ] || { log "FAIL $n: keyboard did not open"; FAIL=1; return 0; }
+      dump "$n-f1"; set -- $(edit_xy "$OUT/$n-f1.xml")
+      [ "${ime:-0}" -gt 0 ] || { log "FAIL $n: keyboard did not open (field bottom ${3:-?}, ime-raw-${IMEK})"; FAIL=1; adb shell input keyevent 4; return 0; }
       sleep 1.2; ime=$(ime_top)
     else ime=0; fi
     dump "$n-$k-0"; g=$(plus_geom "$OUT/$n-$k-0.xml"); set -- $g; local ctop=$4
