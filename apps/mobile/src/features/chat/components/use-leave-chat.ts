@@ -5,33 +5,64 @@ import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
 
 /**
+ * Build 11.3: how long one close holds the next Back. A close that has not taken the chat off the
+ * screen by then (a Back that something swallowed, a transition that never reported its end) never
+ * holds Back again.
+ */
+const HOLD_MS = 900;
+/** Build 11.3: a Back that has left the chat on top this long is sent once more (the chat must leave). */
+const RETRY_MS = 1200;
+
+/**
  * Leaves the chat, once. A swipe back can close the chat while Back is pressed. Two closes put the
  * native stack out of step with JS, so Back does nothing while the chat closes.
+ *
+ * Build 11.3 fix (Back stuck on the real phone): the "closing" mark was a plain flag that only a
+ * transition event cleared. A Back whose pop never happened (or a closing transition with no end)
+ * left it set, and every later header Back and edge swipe did nothing. It is now a time: it holds a
+ * second Back for at most HOLD_MS, a focus clears it, the pop is this route's own (a late second
+ * Back can never pop the screen under the chat), and a Back that left the chat on top is sent again.
  */
 export function useLeaveChat(): () => void {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
-  const closing = useRef(false);
+  const closingAt = useRef(0);
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    const clear = () => {
+      closingAt.current = 0;
+    };
     const unsubscribes = [
       navigation.addListener("transitionStart", (event) => {
-        if (event.data.closing) closing.current = true;
+        if (event.data.closing) closingAt.current = Date.now();
       }),
       navigation.addListener("transitionEnd", (event) => {
-        if (!event.data.closing) closing.current = false;
+        if (!event.data.closing) clear();
       }),
-      navigation.addListener("gestureCancel", () => {
-        closing.current = false;
-      }),
+      navigation.addListener("gestureCancel", clear),
+      navigation.addListener("focus", clear),
     ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
+      if (retry.current) clearTimeout(retry.current);
     };
   }, [navigation]);
   return useCallback(() => {
-    if (closing.current) return;
-    closing.current = true;
+    if (Date.now() - closingAt.current < HOLD_MS) return;
+    closingAt.current = Date.now();
     void KeyboardController.dismiss();
-    if (router.canGoBack()) router.back();
-    else router.replace("/connected");
-  }, []);
+    if (!router.canGoBack()) {
+      router.replace("/connected");
+      return;
+    }
+    navigation.goBack();
+    if (retry.current) clearTimeout(retry.current);
+    retry.current = setTimeout(() => {
+      retry.current = null;
+      // Still on top: the first Back was swallowed. This one meets no close in progress (useZoomClose
+      // pops a repeated Back the plain way), so the chat leaves.
+      if (!navigation.isFocused()) return;
+      closingAt.current = Date.now();
+      navigation.goBack();
+    }, RETRY_MS);
+  }, [navigation]);
 }

@@ -18,8 +18,6 @@ import { markZoomClosing, takeZoomSource, type ZoomSource, zoomSource } from "./
  * late still is dropped). Back must always leave the chat.
  */
 const BEGIN_MS = 700;
-/** A close that has not popped the chat by then is stale: the next Back pops it the plain way. */
-const STALE_MS = 2500;
 
 /** zoomCloseBegin, bounded: null on timeout or error; a still that comes later is cancelled. */
 function beginWithin(source: ZoomSource, pop: () => void, interactive: boolean): Promise<ZoomCloseHandle | null> {
@@ -59,6 +57,12 @@ function beginWithin(source: ZoomSource, pop: () => void, interactive: boolean):
  * Build 11.2 fix (stuck Back): a close that cannot run, never answers, or was cut off (the chat lost
  * focus mid gesture, the native callback was turned off) never holds Back: the close state resets on
  * blur and focus, a stale close is dropped, and Back then pops the chat the plain way.
+ *
+ * Build 11.3 fix (Back still stuck at random on the phone): no Back ever waits for a close. A Back that
+ * comes while a close is under way (or after one that never ended) drops it and pops the chat the
+ * plain way at once, and a system Back the callback did not start pops it too. Each close carries an
+ * epoch: a close that was dropped never pops later (no second pop of the screen below) and its still
+ * springs away.
  */
 export function useZoomClose(routeKey: string) {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
@@ -67,32 +71,38 @@ export function useZoomClose(routeKey: string) {
   const active = isAndroid && enabled && !reduceMotion;
   const held = useSyncExternalStore(watchChatBackHolds, chatBackHeld);
   const zoomed = active && zoomSource(routeKey) !== undefined;
-  // A close of this chat is under way (a gesture or a Back) since `pendingAt`: a second Back waits for it.
+  // A close of this chat is under way (a gesture or a Back). Build 11.3: a second Back never waits for it.
   const pending = useRef(false);
-  const pendingAt = useRef(0);
+  // Build 11.3: bumped whenever a close is dropped or the chat pops the plain way; a close whose epoch
+  // is old never pops (its still is cancelled).
+  const epoch = useRef(0);
   const gesture = useRef<{ handle: Promise<ZoomCloseHandle | null>; progress: number } | null>(null);
   const disablePrevention = useRef<() => void>(() => undefined);
 
   const startPending = useRef(() => {
     pending.current = true;
-    pendingAt.current = Date.now();
+    epoch.current += 1;
+    return epoch.current;
   }).current;
   // Drops a close that did not pop the chat: its still (if any) springs away, Back is free again.
   const reset = useRef(() => {
     const current = gesture.current;
     gesture.current = null;
     pending.current = false;
+    epoch.current += 1;
     if (current) void current.handle.then((handle) => handle?.cancel());
   }).current;
 
   const pop = useRef((action: NavigationAction | null) => {
-    startPending();
+    const mine = startPending();
     takeZoomSource(routeKey);
     markZoomClosing(routeKey);
     // The options function reads the closing mark: the pop takes animation "none" (one frame later,
     // so react-native-screens has the new animation before the screen is removed).
     navigation.setOptions({});
     requestAnimationFrame(() => {
+      // A plain pop (a repeated Back) already took the chat: never pop a second time.
+      if (epoch.current !== mine) return;
       disablePrevention.current();
       if (action) navigation.dispatch(action);
       else navigation.goBack();
@@ -103,6 +113,7 @@ export function useZoomClose(routeKey: string) {
   const plain = useRef((action: NavigationAction | null) => {
     pending.current = false;
     gesture.current = null;
+    epoch.current += 1;
     disablePrevention.current();
     if (action) navigation.dispatch(action);
     else navigation.goBack();
@@ -121,8 +132,8 @@ export function useZoomClose(routeKey: string) {
   disablePrevention.current = usePreventRemove(zoomed, ({ data }) => {
     const action = data.action;
     if (pending.current) {
-      // A close is running: it pops the chat itself. A stale one never will: pop now.
-      if (Date.now() - pendingAt.current < STALE_MS) return;
+      // Build 11.3: a Back while a close is under way (or one that never ended) never waits for it:
+      // the close is dropped (its still springs away) and the chat pops now.
       reset();
       plain(action);
       return;
@@ -133,8 +144,13 @@ export function useZoomClose(routeKey: string) {
       plain(action);
       return;
     }
-    startPending();
+    const mine = startPending();
     void beginWithin(source, () => pop(action), false).then((handle) => {
+      if (epoch.current !== mine) {
+        // Dropped meanwhile (a repeated Back popped the chat, a blur): this close never pops.
+        handle?.cancel();
+        return;
+      }
       if (handle) {
         handle.commit();
         return;
@@ -150,8 +166,9 @@ export function useZoomClose(routeKey: string) {
     const module = predictiveBack;
     const subscriptions = [
       module.addListener("onBackStart", () => {
-        if (gesture.current && Date.now() - pendingAt.current >= STALE_MS) reset();
-        if (!navigation.isFocused() || pending.current || gesture.current) return;
+        // Build 11.3: a gesture left over from a start with no end never blocks the new one.
+        if (gesture.current) reset();
+        if (!navigation.isFocused() || pending.current) return;
         const source = zoomSource(routeKey);
         if (!source || zoomClosing()) return;
         startPending();
@@ -171,10 +188,19 @@ export function useZoomClose(routeKey: string) {
         gesture.current = null;
         if (!current) {
           // The callback took a Back that this chat did not start (or a cut-off one): never swallow it.
-          if (navigation.isFocused() && !pending.current) plain(null);
+          // Build 11.3: a close under way (a header Back) is dropped and the chat pops now.
+          if (navigation.isFocused()) {
+            reset();
+            plain(null);
+          }
           return;
         }
+        const mine = epoch.current;
         void current.handle.then((handle) => {
+          if (epoch.current !== mine) {
+            handle?.cancel();
+            return;
+          }
           if (handle) {
             handle.commit();
             return;

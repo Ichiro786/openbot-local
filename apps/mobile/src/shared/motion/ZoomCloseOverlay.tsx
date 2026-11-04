@@ -165,6 +165,8 @@ export async function zoomCloseBegin(
       p.value = withSpring(1, CANCEL_SPRING, () => {
         runOnJS(clearCancelled)(key);
       });
+      // Build 11.3: the still never outlives a cancel, even if the spring is cut off.
+      setTimeout(() => clearCancelled(key), SAFETY_MS);
     },
   };
 }
@@ -236,7 +238,9 @@ function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
   });
 
   return (
-    <View pointerEvents="auto" style={StyleSheet.absoluteFill} importantForAccessibility="no-hide-descendants">
+    // Build 11.3: the still never takes a touch. A close that lingers (a slow spring, a lost gesture end)
+    // must not freeze the screen: taps reach the live chat (or home) under it.
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} importantForAccessibility="no-hide-descendants">
       {home ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, homeStyle]}>
           <Canvas style={StyleSheet.absoluteFill}>
