@@ -785,7 +785,11 @@ for i in $(seq 1 60); do l=$(adb shell cat /proc/loadavg | cut -d' ' -f1 | cut -
 echo "[$(date +%T)] load before start $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
 adb logcat -c; adb logcat -b crash -c
 # API 37.0 (41806961872): "Failure calling service package: Broken pipe" once; retry while the package service settles.
-for t in 1 2 3 4; do adb wait-for-device; adb shell pm path android >/dev/null 2>&1 && adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 && break; echo "[$(date +%T)] install try $t failed: $(tail -1 "$OUT/install.txt" 2>/dev/null)" | tee -a "$OUT/steps.txt"; sleep 20; done
+# API 37.0 (41812759046): 4 streamed installs all "Broken pipe" at load ~21. Push the APK first, then a
+# non-streamed pm install from /data/local/tmp (no 350 MB binder pipe); wait for the package service each try.
+adb push "$APK" /data/local/tmp/e2e.apk > "$OUT/push.txt" 2>&1 || cat "$OUT/push.txt"
+for t in 1 2 3 4 5 6; do adb wait-for-device; for w in $(seq 1 30); do adb shell pm path android >/dev/null 2>&1 && break; sleep 2; done; adb shell pm install -r -g /data/local/tmp/e2e.apk > "$OUT/install.txt" 2>&1 && grep -q Success "$OUT/install.txt" && break; [ $t -ge 4 ] && adb install -r -g --no-streaming "$APK" > "$OUT/install.txt" 2>&1 && break; echo "[$(date +%T)] install try $t failed: $(tail -1 "$OUT/install.txt" 2>/dev/null)" | tee -a "$OUT/steps.txt"; sleep 20; done
+adb shell rm -f /data/local/tmp/e2e.apk
 grep -q Success "$OUT/install.txt" || { cat "$OUT/install.txt"; exit 1; }
 # Emulator launcher ANRs ("Pixel Launcher isn't responding") ate taps in runs 41698820646 and 41693238776:
 # hide error dialogs system-wide (an app ANR is still caught from logcat, below) and stop the launcher.

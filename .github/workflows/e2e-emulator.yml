@@ -192,6 +192,9 @@ jobs:
           profile: pixel_6
           # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
           disk-size: 8G
+          # Build 11.3: API 37.0 sat at load ~21 at install (41812759046): all runner cores, more RAM.
+          cores: 4
+          ram-size: 4096M
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash .github/e2e/smoke.sh
@@ -208,6 +211,9 @@ jobs:
           profile: pixel_6
           # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
           disk-size: 8G
+          # Build 11.3: API 37.0 sat at load ~21 at install (41812759046): all runner cores, more RAM.
+          cores: 4
+          ram-size: 4096M
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash .github/e2e/smoke.sh
