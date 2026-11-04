@@ -241,5 +241,18 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
   src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-picker" options={{ headerShown: false }} />`);
   console.log("build 11.2 zoom-close + picker applied");
 }
+// Build 11.2: the real chat list + composer route (stutter / entrance / jank measurements). Also
+// applied to the "before" target, so both sides of the comparison run the same scenario.
+if (existsSync("apps/mobile/src/features/chat/components/chat-message-list.tsx") && existsSync(".github/e2e/harness-b112/app/e2e-list.tsx")) {
+  const index = "apps/mobile/src/app/index.tsx";
+  cpSync(".github/e2e/harness-b112/app/e2e-list.tsx", "apps/mobile/src/app/e2e-list.tsx");
+  let f = readFileSync(index, "utf8");
+  const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
+  if (!f.includes(toggle)) throw new Error("list anchor missing");
+  f = f.replace(toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E List" onPress={() => router.push("/e2e-list")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#3b7a5b", borderRadius: 12 }}><Text style={{ color: "#fff" }}>List</Text></Pressable>`);
+  writeFileSync(index, f);
+  src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-list" options={{ headerShown: false }} />`);
+  console.log("list route applied");
+}
 writeFileSync(path, src);
 console.log("harness applied");

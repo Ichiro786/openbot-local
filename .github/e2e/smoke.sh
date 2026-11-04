@@ -662,13 +662,37 @@ picker_scn() { # $1 name $2 ON|OFF
   else log "  stock-host picker: deep link did not open (info)"; adb shell input keyevent 4; sleep 1; fi
   check "$n-end"; blur_max "$n"
 }
+
+list_scn() { # $1 name $2 ON|OFF: the real chat list: focus -> keyboard up, send -> row + streamed reply (jank, back-steps, blur)
+  local n=$1 xy rec
+  log "== list ($n, colorOS=$2)"
+  home; tapl "E2E List" 10 "$n-0" || { FAIL=1; return; }
+  if ! wait_for "E2E LIST OPEN" 10 "$n-1" >/dev/null; then
+    dump "$n-1e"; log "FAIL $n: list route did not open ($(grep -oE 'E2E LIST ERROR[^"]*' "$OUT/$n-1e.xml" | head -1))"; FAIL=1; home; return
+  fi
+  sleep 1.5; shot "$n-open"
+  dump "$n-f0"; set -- $(edit_xy "$OUT/$n-f0.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; home; return; }
+  gfx_reset; adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n-focus.mp4" & rec=$!
+  sleep 0.5; adb shell input tap $1 $2; sleep 2.2; wait $rec 2>/dev/null
+  gfx "$n-focus"; adb pull /sdcard/$n-focus.mp4 "$OUT/$n-focus.mp4" >/dev/null 2>&1; check "$n-focus" || return
+  dump "$n-f1"; local kb; kb=$(grep -oE 'E2EKB[^"&]*' "$OUT/$n-f1.xml" | head -1); log "  keyboard lift ($n): $kb"; echo "$n $kb" >> "$OUT/kb-summary.txt"
+  local bs; bs=$(echo "$kb" | sed -E 's/.*backsteps=([0-9]+).*/\1/'); [ "${bs:-x}" = 0 ] && log "ok: keyboard lift never stepped back ($n)" || log "WARN $n: keyboard lift stepped back ($kb)"
+  adb shell input text "hello%sfrom%se2e"; sleep 0.6
+  dump "$n-s0"; xy=$(find_node "$OUT/$n-s0.xml" "Send message"); [ -n "$xy" ] || { log "FAIL $n: no Send"; FAIL=1; adb shell input keyevent 4; home; return; }
+  gfx_reset; adb shell "screenrecord --time-limit 4 --bit-rate 20000000 /sdcard/$n-send.mp4" & rec=$!
+  sleep 0.5; adb shell input tap $xy; sleep 3.4; wait $rec 2>/dev/null
+  gfx "$n-send"; adb pull /sdcard/$n-send.mp4 "$OUT/$n-send.mp4" >/dev/null 2>&1; check "$n-send" || return
+  expect_text "replied=1" 6 "$n-s1"; shot "$n-replied"
+  blur_max "$n"
+  adb shell input keyevent 4; sleep 1; home
+}
 toggle_to() { # $1 name $2 expected
   ensure_running "$1"; home
   local xy; xy=$(wait_for "Toggle ColorOS" 10 "$1") || { log "FAIL $1: toggle not found"; FAIL=1; return; }
   adb shell input tap $xy; sleep 1; check "$1-toggle" || return
   local st; st=$(state "$1b"); log "$st (live toggle, expect colorOS=$2)"; [ "$st" = "colorOS=$2" ] || { log "FAIL $1: toggle"; FAIL=1; }
 }
-round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; close_scn "$1-close" $2; retry_infra picker_scn "$1-picker" $2; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
+round() { log "== round $1 (colorOS=$2)"; ensure_running "$1"; retry_infra menu_scn "$1-dots" $2; blur_max "$1-after-dots"; retry_infra row_scn "$1-row" $2; blur_max "$1-after-row"; zoom_scn "$1-zoom" $2; chat_scn "$1-chat" $2; blur_max "$1-after-chat"; close_scn "$1-close" $2; retry_infra picker_scn "$1-picker" $2; list_scn "$1-list" $2; retry_infra plush_scn "$1-plush"; retry_infra whatsapp_scn "$1-wa"; }
 
 # Run 41718194068 started while the emulator was still delivering BOOT_COMPLETED (skipped 315 frames,
 # JS timers seconds late): wait for it (max 240 s) and let the system settle before the app starts.
@@ -712,6 +736,7 @@ if wait_for "E2E READY" 60 "dk-0" >/dev/null; then
     hold $(find_node "$OUT/dark-chat.xml" "E2E agent message"); sleep 1.5; shot "dark-msgmenu"; adb shell input keyevent 4; sleep 1
     check dark-shots || true
     blur_max dark-after
+    adb shell input keyevent 4; sleep 1.5; list_scn dark-list ON
   fi
 else log "  dark mode: harness did not come back"; fi
 adb shell cmd uimode night no
