@@ -9,6 +9,7 @@ import { isAndroid } from "@/shared/lib/platform";
 import { snapshotNavigator } from "@/shared/motion/ColorOSMotionRoot";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
+import { measureZoomRow, registerZoomRow } from "@/shared/motion/zoomPush";
 
 export const ChatNavigationGateContext = createContext<ReturnType<typeof createChatNavigationGate> | null>(null);
 
@@ -51,6 +52,8 @@ export function ChatLinkPressable({
       mounted.current = false;
     };
   }, []);
+  // Build 11.3 zoomfix: the close finds this chat's row here even after the row it opened from remounted.
+  useEffect(() => (zoom && chatId ? registerZoomRow(chatId, self) : undefined), [zoom, chatId]);
 
   return (
     <Pressable
@@ -93,13 +96,10 @@ export function ChatLinkPressable({
           const source = {
             skeletonKey: chatId,
             home: snapshotNavigator(),
+            // Build 11.3 zoomfix: this row if it still shows the chat, else the chat's current row (pinned or not).
             measure: (done: (rect: { x: number; y: number; width: number; height: number } | null) => void) => {
-              const row = self.current;
-              if (!mounted.current || !row || shownChat.current !== openedChat) {
-                done(null);
-                return;
-              }
-              row.measureInWindow((rx, ry, rw, rh) => done(rw && rh ? { x: rx, y: ry, width: rw, height: rh } : null));
+              const row = mounted.current && shownChat.current === openedChat ? self.current : null;
+              measureZoomRow(openedChat, row, done);
             },
           };
           if (!zoomOpen({ x, y, width, height }, go, 0, source)) {

@@ -62,8 +62,15 @@ export function disarmZoomPush(): void {
   pendingSource = null;
 }
 
+/**
+ * Build 11.3 zoomfix: a closing overlay can still draw the home still for a moment after the route
+ * closes (it drops it 200 ms after the pop): dispose well after that.
+ */
+const DISPOSE_LATER_MS = 2000;
 function disposeSource(source: ZoomSource | null): void {
-  void source?.home.then((image) => image?.dispose());
+  void source?.home.then((image) => {
+    if (image) setTimeout(() => image.dispose(), DISPOSE_LATER_MS);
+  });
 }
 
 /**
@@ -134,4 +141,64 @@ export function takeZoomSource(routeKey: string): ZoomSource | undefined {
 /** Build 11.2: this route is being zoom-closed; the caller re-reads its options before it pops. */
 export function markZoomClosing(routeKey: string): void {
   closing.add(routeKey);
+}
+
+/** Build 11.3 zoomfix: the route is in front again (its close did not take it): normal options. */
+export function unmarkZoomClosing(routeKey: string): boolean {
+  return closing.delete(routeKey);
+}
+
+/**
+ * Build 11.3 zoomfix: every zoom row on screen, by the chat it opens. A row can remount (a settings
+ * change re-renders the pinned grid, a list recycles) between the open and the close: the close finds
+ * the chat's current row here, pinned or not.
+ */
+type MeasurableRow = {
+  measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+};
+const rows = new Map<string, Set<{ current: MeasurableRow | null }>>();
+
+export function registerZoomRow(chatId: string, ref: { current: MeasurableRow | null }): () => void {
+  let set = rows.get(chatId);
+  if (!set) {
+    set = new Set();
+    rows.set(chatId, set);
+  }
+  set.add(ref);
+  return () => {
+    const current = rows.get(chatId);
+    current?.delete(ref);
+    if (current?.size === 0) rows.delete(chatId);
+  };
+}
+
+/**
+ * Measures the chat's row: `preferred` (the row it opened from) first, then any other row now showing
+ * that chat. `done(null)` when none answers with a size. A row whose measure never answers stalls only
+ * this lookup (the caller never waits on it).
+ */
+export function measureZoomRow(
+  chatId: string | undefined,
+  preferred: MeasurableRow | null,
+  done: (rect: ZoomSource["rect"] | null) => void,
+): void {
+  const list: MeasurableRow[] = preferred ? [preferred] : [];
+  for (const ref of (chatId && rows.get(chatId)) || []) {
+    if (ref.current && ref.current !== preferred) list.push(ref.current);
+  }
+  const next = (index: number) => {
+    const row = list[index];
+    if (!row) {
+      done(null);
+      return;
+    }
+    try {
+      row.measureInWindow((x, y, width, height) =>
+        width && height && Number.isFinite(x) && Number.isFinite(y) ? done({ x, y, width, height }) : next(index + 1),
+      );
+    } catch {
+      next(index + 1);
+    }
+  };
+  next(0);
 }

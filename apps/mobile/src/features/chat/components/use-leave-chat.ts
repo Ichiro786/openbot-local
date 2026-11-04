@@ -4,6 +4,7 @@ import { type ParamListBase, StackActions, useNavigation, useRoute } from "expo-
 import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
 import { logBack, registerBackFlags } from "@/shared/debug/backDebug";
+import { runChatBack } from "@/shared/motion/useZoomClose";
 
 /**
  * Build 11.3: how long one close holds the next Back. A close that has not taken the chat off the
@@ -60,6 +61,11 @@ export function useLeaveChat(): () => void {
     };
   }, [navigation]);
   return useCallback(() => {
+    // Build 11.3 zoomfix: a zoom-opened chat (ColorOS on) closes by its zoom, bounded in useZoomClose.
+    if (runChatBack(route.key)) {
+      void KeyboardController.dismiss();
+      return;
+    }
     if (Date.now() - closingAt.current < HOLD_MS) {
       logBack("header tap", `latched ${Date.now() - closingAt.current} ms`);
       return;
