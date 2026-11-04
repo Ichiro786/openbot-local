@@ -240,14 +240,20 @@ export function ChatAttachmentPanel({
     morph.set(withSpring(0, MORPH));
   }, [morph]);
 
+  // Build 11.3: a card the ColorOS + menu opened straight on the camera has no
+  // options of its own to go back to (the glass menu already closed), so
+  // leaving the camera closes the card; returning to the plain options list
+  // showed the ColorOS-off menu after Back.
+  const leaveCamera = anchor.camera ? dismiss : showOptions;
+
   useEffect(() => {
     const back = addChatBackListener(() => {
-      if (mode === "camera") showOptions();
+      if (mode === "camera") leaveCamera();
       else dismiss();
       return true;
     });
     return () => back.remove();
-  }, [dismiss, mode, showOptions]);
+  }, [dismiss, mode, leaveCamera]);
 
   // No opacity here, and none on anything above the glass. An animated
   // opacity on a GlassView's ancestor makes iOS composite that subtree
@@ -443,7 +449,7 @@ export function ChatAttachmentPanel({
                 onBusyChange={(busy) => {
                   busyRef.current = busy;
                 }}
-                onCancel={showOptions}
+                onCancel={leaveCamera}
                 onCaptured={(uri) => {
                   captured.current = uri;
                   dismiss();
