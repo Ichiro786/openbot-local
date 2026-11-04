@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import { type RefObject, useState } from "react";
 import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
@@ -22,14 +22,21 @@ import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import type { AgentChatTarget } from "../model/chat-target";
 
-const AVATAR = 34;
+/** Hotfix 11.1 (Syed, ChatGPT-style reference): a big avatar right over a compact name pill. */
+const AVATAR = 52;
 /** How far the avatar sits over the pill's top edge. */
-const OVERLAP = 10;
-const PILL_HEIGHT = 46;
+const OVERLAP = 4;
+const PILL_HEIGHT = 32;
 /** The back and ••• glass: 40 dp in the 48 dp side boxes. */
 const BUTTON = 40;
 const BUTTON_INSET = 4;
+/** Row top below the status bar; the plush fur reaches ~3 dp above the avatar box. */
+const ROW_TOP = 4;
 const ROW_HEIGHT = AVATAR - OVERLAP + PILL_HEIGHT;
+/** The 48 dp side boxes are centred on the avatar + pill group. */
+const SIDE_TOP = (ROW_HEIGHT - 48) / 2;
+/** Where the ColorOS agent header ends under the status bar (the chat's list starts a little below). */
+export const COLOROS_CHAT_HEADER_BOTTOM = ROW_TOP + ROW_HEIGHT;
 
 /**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
@@ -86,7 +93,7 @@ export function ColorOSChatHeader({
               {
                 key: "back",
                 x: padLeft + BUTTON_INSET,
-                y: BUTTON_INSET,
+                y: SIDE_TOP + BUTTON_INSET,
                 width: BUTTON,
                 height: BUTTON,
                 radius: BUTTON / 2,
@@ -110,7 +117,7 @@ export function ColorOSChatHeader({
         {
           key: "more",
           x: rowWidth - padRight - 60 + BUTTON_INSET,
-          y: BUTTON_INSET,
+          y: SIDE_TOP + BUTTON_INSET,
           width: 60 - BUTTON_INSET * 2,
           height: BUTTON,
           radius: BUTTON / 2,
@@ -118,10 +125,11 @@ export function ColorOSChatHeader({
         },
       ]
     : [];
-  const subtitle = useMobileWorkspaceSelector(
-    (current) =>
-      current.agents.find((agent) => agent.id === target.id && agent.serverId === target.serverId)?.title.trim() ?? "",
-  );
+  // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
+  const subtitle = useMobileWorkspaceSelector((current) => {
+    const agent = current.agents.find((item) => item.id === target.id && item.serverId === target.serverId);
+    return agent?.title.trim() || agent?.description.trim() || "";
+  });
   // The glass press gives the one tick (review R2-2).
   const openAgentPage = () => {
     router.push({ pathname: "/agent-info/[agentId]", params: { agentId: target.id, serverId: target.serverId } });
@@ -132,21 +140,22 @@ export function ColorOSChatHeader({
       : t("mobile.chat.threads.menu", { name: target.name })
     : t("mobile.chat.header.info", { name: target.name });
   const pillContent = (
-    <View accessible accessibilityRole="button" accessibilityLabel={nameLabel} style={styles.pillContent}>
+    <View
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={nameLabel}
+      accessibilityHint={subtitle || undefined}
+      style={styles.pillContent}
+    >
       <View style={styles.nameRow}>
         <Typography.Paragraph className="font-semibold min-w-0 shrink" numberOfLines={1} style={styles.name}>
           {target.name}
         </Typography.Paragraph>
-        {threadMenu ? <ChevronDown color={iconColor} size={14} strokeWidth={2.5} /> : null}
+        <ChevronRight color={iconColor} size={14} strokeWidth={2.5} style={styles.chevron} />
         {threadMenu && threadMenu.attention > 0 ? (
           <View style={[styles.badge, { backgroundColor: threadMenu.color }]} />
         ) : null}
       </View>
-      {subtitle ? (
-        <Typography.Paragraph type="body-xs" numberOfLines={1} className="text-muted" style={styles.subtitle}>
-          {subtitle}
-        </Typography.Paragraph>
-      ) : null}
     </View>
   );
   return (
@@ -155,14 +164,14 @@ export function ColorOSChatHeader({
         target={frostTarget}
         shown={bandOn}
         shapes={shapes}
-        style={[styles.band, { top: topInset + 8, height: ROW_HEIGHT }]}
+        style={[styles.band, { top: topInset + ROW_TOP, height: ROW_HEIGHT }]}
       />
       <View
         onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
         pointerEvents="box-none"
         accessibilityElementsHidden={accessibilityHidden}
         importantForAccessibility={accessibilityHidden ? "no-hide-descendants" : "auto"}
-        style={[styles.row, { top: topInset + 8, paddingLeft: padLeft, paddingRight: padRight }]}
+        style={[styles.row, { top: topInset + ROW_TOP, paddingLeft: padLeft, paddingRight: padRight }]}
       >
         <View style={styles.side}>
           {showBack ? (
@@ -233,7 +242,14 @@ export function ColorOSChatHeader({
         </View>
       </View>
       <SheetScrollEdgeEffect
-        style={{ height: topInset + 82, left: 0, position: "absolute", right: 0, top: 0, zIndex: 10 }}
+        style={{
+          height: topInset + ROW_TOP + ROW_HEIGHT + 4,
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: 0,
+          zIndex: 10,
+        }}
       />
     </>
   );
@@ -242,21 +258,22 @@ export function ColorOSChatHeader({
 const styles = StyleSheet.create({
   row: { position: "absolute", left: 0, right: 0, zIndex: 20, flexDirection: "row", alignItems: "flex-start" },
   band: { position: "absolute", left: 0, right: 0, zIndex: 19 },
-  side: { width: 64, height: 48 },
+  side: { width: 64, height: 48, marginTop: SIDE_TOP },
   trailing: { alignItems: "flex-end" },
   middle: { flex: 1, alignItems: "center" },
+  // Hugs the name (up to 220 dp, then ellipsis); never narrower than the avatar over it.
   pillContent: {
     height: PILL_HEIGHT,
-    maxWidth: 240,
-    minWidth: 120,
-    paddingHorizontal: 18,
-    paddingTop: OVERLAP,
+    maxWidth: 220,
+    minWidth: AVATAR + 16,
+    paddingLeft: 14,
+    paddingRight: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 4, minWidth: 0 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 2, minWidth: 0 },
   name: { fontSize: 15, lineHeight: 19 },
-  subtitle: { fontSize: 11, lineHeight: 14 },
+  chevron: { opacity: 0.6 },
   badge: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
   avatar: { position: "absolute", top: 0 },
 });

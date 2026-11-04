@@ -87,6 +87,7 @@ import {
   QuestionSecretComposer,
 } from "./browser-secret-card";
 import { ChatAttachmentPanel } from "./chat-attachment-panel";
+import { COLOROS_CHAT_HEADER_BOTTOM } from "./chat-header-coloros";
 import type { OutboxRowStatus } from "./chat-outbox-status";
 import { ChatQueueButton } from "./chat-queue-button";
 import { ChatSelectionBar } from "./chat-selection-bar";
@@ -570,8 +571,11 @@ export function ChatView({
   const routeKey = useRoute().key;
   const [zoomed] = useState(() => isZoomPush(routeKey));
   const rowsShown = useRowsAfterOpenTransition(zoomed);
+  // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
+  const colorOSHeaderOn = useColorOSMotion().enabled;
+  const colorOSAgentHeader = isAndroid && colorOSHeaderOn && target.kind === "agent";
   const motion = useChatMotion(
-    insets.top + 84,
+    colorOSAgentHeader ? insets.top + COLOROS_CHAT_HEADER_BOTTOM + 6 : insets.top + 84,
     keyboardOffset,
     // The list takes its place at the latest message once its rows render.
     ready && rowsShown,
