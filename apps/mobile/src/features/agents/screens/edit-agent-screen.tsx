@@ -66,9 +66,7 @@ import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { haptics } from "@/shared/lib/haptics";
-import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 type AgentEdits = Pick<
   UpdateAgentInput,
@@ -244,8 +242,6 @@ function AgentForm({
   const customColor = useAgentAvatarColor(agent.serverId, agent.id);
   const customSupported = useMobileWorkspaceSelector((current) => current.hasAvatarColors(agent.serverId));
   const setAvatarColor = useSetAvatarColor(agent.serverId);
-  // The wheel is a ColorOS-toggle feature: OFF keeps build 11's swatches + "A" only.
-  const colorWheel = useColorOSMotion().enabled && isAndroid;
   const changeAvatarHue = useCallback(
     (avatarHue: AvatarHue | null) => {
       setEdits((current) => ({ ...current, avatarHue }));
@@ -442,7 +438,7 @@ function AgentForm({
           onHueChange={changeAvatarHue}
           customColor={edits.avatarHue === undefined ? customColor : undefined}
           customSupported={customSupported}
-          onCustomColor={colorWheel ? changeCustomColor : undefined}
+          onCustomColor={changeCustomColor}
         />
       ) : null}
       {page === "runtime" ? (
