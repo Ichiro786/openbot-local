@@ -815,6 +815,12 @@ edge_quick() { # $1 out_x $2 end_x : left-edge swipe as motion events, no record
   if [ "$2" -lt "$1" ]; then for x in $(seq $1 -120 $2); do adb shell input motionevent MOVE $x $y; done; fi
   adb shell input motionevent UP $2 $y
 }
+edge_cancel_tap() { # $1 delay: back gesture out and back (cancel); the release and a header Back tap in ONE adb shell, tap $1 s after the release
+  local y=1300 x; adb shell input motionevent DOWN 3 $y
+  for x in 120 240 360 420; do adb shell input motionevent MOVE $x $y; done
+  for x in 300 180 60 10; do adb shell input motionevent MOVE $x $y; done
+  adb shell "(sleep $1; input tap $BACKXY) & input motionevent UP 10 $y; wait"
+}
 on_home() { dump "$1"; [ -n "$(find_node "$OUT/$1.xml" "Toggle ColorOS")" ]; }
 on_real() { grep -q "E2E REAL OPEN" "$OUT/$1.xml"; }
 real_judge() { # $1 lane $2 iter $3 mode
@@ -872,6 +878,8 @@ real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
         L13) real_open 2.6 || return; [ -n "$PILLXY" ] && real_tap $PILLXY; sleep 0.4; real_tap $BACKXY; sleep 0.3; real_tap $BACKXY; sleep 0.3; real_tap $BACKXY ;;  # taps during the thread menu open
         L14) real_open 2.6 || return; adb shell input swipe 540 900 540 1500 250; real_tap $BACKXY ;;                # list drag, header Back at once
         L15) real_open 2.6 || return; edge_quick 520 10; edge_quick 520 10; real_tap $BACKXY; sleep 0.15; adb shell input keyevent 4 ;;  # 2 cancelled gestures, tap, key
+        L17) real_open 2.6 || return; d=$(echo "0 0.08 0.16 0.24 0.32" | cut -d' ' -f$(( (i-1)%5+1 ))); edge_cancel_tap $d ;;  # header tap DURING the predictive cancel (before onBackCancelled)
+        L18) real_open 2.6 || return; d=$(echo "0 0.08 0.16 0.24 0.32" | cut -d' ' -f$(( (i-1)%5+1 ))); edge_cancel_tap $d; sleep 1.5; real_tap $BACKXY ;;  # same, then one settled header Back
         L16) real_open 1.0 || return; edge_quick 400 400; sleep 0.2; real_open 0.6; real_tap $BACKXY; sleep 0.1; real_tap $BACKXY ;;  # back gesture, reopen during the close, rapid taps
       esac
       real_judge $L $i $m
