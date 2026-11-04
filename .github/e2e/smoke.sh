@@ -288,6 +288,7 @@ PYZ
   elif [ "$set" -gt 450 ]; then log "WARN $1: tap->settled ${set} ms (<=700 emulator gate, >450 device target)"
   else log "ok: tap->settled ${set} ms (<=450)"; fi
   echo "$r" | grep -q "via=fallback" && log "WARN $1: uncover came from the 600 ms fallback, not the ready signal"
+  return 0 # a ready-signal uncover (no WARN) must not read as a failed zoom_open (41791315569 lane 2)
 }
 zoom_scn() { # three opens (spec gate: 3 recorded opens + 3 backs with framestats); the third stays in the chat
   local n=$1 i
