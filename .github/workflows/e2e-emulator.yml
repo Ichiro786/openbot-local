@@ -143,12 +143,16 @@ jobs:
     if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    # Build 11.3: Syed's phone is Android 15 (API 35); API 34 kept as before.
+    # Build 11.3: Syed's phone is Android 17 (API 37); test only on API 36 and 37 (Syed 14:17 IST).
     strategy:
       fail-fast: false
       matrix:
-        api: [34, 35]
+        api: [36, 37]
     steps:
+      - name: Available system images (API 36/37)
+        run: |
+          SDKM=$(ls $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | head -1)
+          $SDKM --list 2>/dev/null | grep -E "system-images;android-(36|37)|Baklava|CANARY" | sort -u | head -60 || true
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
