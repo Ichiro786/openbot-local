@@ -855,6 +855,16 @@ PYB
   PILLXY=$(find_node "$OUT/real0.xml" "VEYR, threads"); EDITXY=$(edit_xy "$OUT/real0.xml" | cut -d' ' -f1,2)
   log "real chat rendered: Back=[$BACKXY] pill=[$PILLXY] composer=[$EDITXY] threadMenu=$( [ -n "$PILLXY" ] && echo yes || echo no)"
   [ -n "$BACKXY" ] || { log "FAIL real: no header Back"; FAIL=1; home; return 1; }
+  # Build 11.3 frost: the header with the thread menu open (dark), for the before/after with a menu up.
+  if [ -n "$PILLXY" ]; then
+    adb shell cmd uimode night yes; sleep 1.5; real_tap $PILLXY; sleep 1.5; shot real-menu; blur_max real-menu
+    python3 - "$OUT/real-menu.png" "$OUT/real-menu-top.png" <<'PYM' || true
+import sys
+from PIL import Image
+im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.4))).save(sys.argv[2])
+PYM
+    adb shell input keyevent 4; sleep 1; adb shell cmd uimode night no; sleep 1.5; dump real0; on_real real0 || { home; real_open 3.5; }
+  fi
   real_tap $BACKXY; sleep 2.5; on_home real0h && log "ok: real chat left by header Back" || { log "FAIL real: first header Back did not leave"; FAIL=1; home; }
 }
 real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
