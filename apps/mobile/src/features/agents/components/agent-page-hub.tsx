@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
+import type { AvatarTint } from "@/features/agents/model/avatar-color";
 import { useBrowserFeature } from "@/features/browser/components/use-browser-feature";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
@@ -45,7 +46,8 @@ export function AgentPageHero({
 }: {
   agent: MobileAgent;
   avatarSeed: string;
-  avatarHue: MobileAgent["avatarHue"];
+  /** Build 11.2: a tint (preset hue, null, or the custom colour). */
+  avatarHue: AvatarTint;
   available: boolean;
 }) {
   const { t } = useText();

@@ -7,8 +7,10 @@ import Shuffle from "lucide-react-native/icons/shuffle";
 import { memo, type ReactNode, useCallback, useState } from "react";
 import { View } from "react-native";
 import { AgentColorGlow } from "@/features/agents/components/agent-color-glow";
+import { AgentColorWheel } from "@/features/agents/components/agent-color-wheel";
 import { AvatarThumbnail, BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { createAvatarCandidates } from "@/features/agents/model/avatar-candidates";
+import type { AvatarTint } from "@/features/agents/model/avatar-color";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
@@ -17,6 +19,8 @@ import { useText } from "@/shared/lib/text";
 import type { AgentPhotoProps } from "./agent-photo";
 
 const PREVIEW_SIZE = 144;
+/** Build 11.2: a custom colour is chosen, so no preset and not Automatic shows as checked. */
+const CUSTOM = "custom" as const;
 // Centred on the avatar. In a sheet with a clear header it reaches up behind the header's blur.
 const GLOW_HEIGHT = 340;
 
@@ -45,6 +49,12 @@ interface AgentAppearancePickerProps extends AgentPhotoProps {
   disabled: boolean;
   onSeedChange: (seed: string) => void;
   onHueChange: (hue: AvatarHue | null) => void;
+  /** Build 11.2: the agent's custom colour (`avatar-color-v1`), when it has one. */
+  customColor?: string;
+  /** Build 11.2: with this, the screen shows the colour wheel; called on release with the chosen colour. */
+  onCustomColor?: (hex: string) => void;
+  /** Build 11.2: false on a host without `avatar-color-v1`: the wheel saves the nearest preset, with a note. */
+  customSupported?: boolean;
 }
 
 export function AgentAppearancePicker({
@@ -61,11 +71,31 @@ export function AgentAppearancePicker({
   disabled,
   onSeedChange,
   onHueChange,
+  customColor,
+  onCustomColor,
+  customSupported = true,
 }: AgentAppearancePickerProps) {
   const { t } = useText();
   const [candidates, setCandidates] = useState(() => createAvatarCandidates(seed));
   const shuffle = useCallback(() => setCandidates((current) => createAvatarCandidates(seed, current)), [seed]);
-  const targetColor = getBloubAvatarColor(seed, hue);
+  // Build 11.2: the wheel's colour while it is dragged (throttled), until the saved colour catches up.
+  const [previewColor, setPreviewColor] = useState<string | null>(null);
+  const tint: AvatarTint = previewColor ?? customColor ?? hue;
+  const targetColor = getBloubAvatarColor(seed, tint);
+  const commitCustom = useCallback(
+    (hex: string) => {
+      setPreviewColor(customSupported ? hex : null);
+      onCustomColor?.(hex);
+    },
+    [customSupported, onCustomColor],
+  );
+  const changeHue = useCallback(
+    (next: AvatarHue | null) => {
+      setPreviewColor(null);
+      onHueChange(next);
+    },
+    [onHueChange],
+  );
 
   return (
     <View className="gap-4">
@@ -82,7 +112,7 @@ export function AgentAppearancePicker({
           serverId={serverId}
           imageUrl={imageUrl}
           seed={seed}
-          hue={hue}
+          hue={tint}
           size={PREVIEW_SIZE}
           transition="pop"
         />
@@ -93,13 +123,32 @@ export function AgentAppearancePicker({
           <AvatarFaceOptions
             seeds={candidates.seeds}
             seed={seed}
-            hue={hue}
+            hue={customColor ?? hue}
             disabled={disabled}
             onSeedChange={onSeedChange}
             onShuffle={shuffle}
             photoField={photoField}
           />
-          <AvatarHueOptions hue={hue} disabled={disabled} onHueChange={onHueChange} />
+          <AvatarHueOptions
+            hue={customColor === undefined ? hue : CUSTOM}
+            disabled={disabled}
+            onHueChange={changeHue}
+          />
+          {onCustomColor ? (
+            <>
+              <AgentColorWheel
+                initial={customColor ?? getBloubAvatarColor(seed, hue)}
+                disabled={disabled}
+                onPreview={setPreviewColor}
+                onCommit={commitCustom}
+              />
+              {customSupported ? null : (
+                <Typography type="body-xs" className="px-6 text-center text-muted">
+                  {t("mobile.agent.appearance.custom.presetOnly")}
+                </Typography>
+              )}
+            </>
+          ) : null}
         </>
       ) : photoField ? (
         <View className="flex-row flex-wrap items-center justify-center gap-2">{photoField}</View>
@@ -120,7 +169,8 @@ const AvatarFaceOptions = memo(function AvatarFaceOptions({
 }: {
   seeds: string[];
   seed: string;
-  hue: AvatarHue | null;
+  /** The saved tint, not the one being dragged: twelve still pictures would redraw for each step. */
+  hue: AvatarTint;
   disabled: boolean;
   onSeedChange: (seed: string) => void;
   onShuffle: () => void;
@@ -173,7 +223,7 @@ const AvatarHueOptions = memo(function AvatarHueOptions({
   disabled,
   onHueChange,
 }: {
-  hue: AvatarHue | null;
+  hue: AvatarHue | null | typeof CUSTOM;
   disabled: boolean;
   onHueChange: (hue: AvatarHue | null) => void;
 }) {
@@ -186,7 +236,7 @@ const AvatarHueOptions = memo(function AvatarHueOptions({
     >
       {AVATAR_HUE_CHOICES.map((option) => {
         // A stored hue 100 or 280 shows as its same-color choice.
-        const checked = hue !== null && avatarHueSwatch(hue) === avatarHueSwatch(option.hue);
+        const checked = hue !== null && hue !== CUSTOM && avatarHueSwatch(hue) === avatarHueSwatch(option.hue);
         return (
           <Button
             key={option.hue}

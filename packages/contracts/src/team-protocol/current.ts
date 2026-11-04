@@ -29,6 +29,7 @@ import { AGENT_THREAD_READS_CAPABILITY } from "./agent-thread-reads-v1";
 import { AGENT_THREAD_REPLIES_CAPABILITY } from "./agent-thread-replies-v1";
 import { AGENT_THREADS_CAPABILITY } from "./agent-threads-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
+import { AVATAR_COLOR_CAPABILITY } from "./avatar-color-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "./bitwarden-connector-v1";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "./browser-navigation-v1";
 import { BROWSER_PAGE_STATE_CAPABILITY } from "./browser-page-state-v1";
@@ -118,10 +119,10 @@ import { VAULT_IMPORT_CAPABILITY } from "./vault-import-v1";
 import { VAULT_CAPABILITY } from "./vault-v1";
 import { VAULT_V2_CAPABILITY } from "./vault-v2";
 import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
+import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
 import { WORKFLOWS_GITHUB_CAPABILITY } from "./workflows-github-v1";
 import { WORKFLOWS_CAPABILITY } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
-import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
 
 export const TEAM_SEMANTIC_TAGS_CAPABILITY = "installed-skills";
 export const TEAM_AGENT_ACTIVITY_CAPABILITY = "agent-activity";
@@ -192,6 +193,7 @@ export {
   AGENT_THREADS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
   ANDROID_PUSH_NOTIFICATIONS_CAPABILITY,
+  AVATAR_COLOR_CAPABILITY,
   BITWARDEN_CONNECTOR_CAPABILITY,
   BROWSER_PAGE_STATE_CAPABILITY,
   BROWSER_PROFILES_CAPABILITY,
@@ -278,9 +280,9 @@ export {
   VAULT_IMPORT_CAPABILITY,
   VAULT_V2_CAPABILITY,
   WEBHOOK_TESTS_CAPABILITY,
+  WHATSAPP_MOBILE_CAPABILITY,
   WORKFLOWS_CAPABILITY,
   WORKFLOWS_GITHUB_CAPABILITY,
-  WHATSAPP_MOBILE_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
 };
 
@@ -425,6 +427,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   MODEL_VISIBILITY_CAPABILITY,
   AGENT_THREAD_REPLIES_CAPABILITY,
   WHATSAPP_MOBILE_CAPABILITY,
+  AVATAR_COLOR_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -583,7 +586,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== COMPUTER_ACTIVITY_CAPABILITY &&
     capability !== MODEL_VISIBILITY_CAPABILITY &&
     capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
-    capability !== WHATSAPP_MOBILE_CAPABILITY,
+    capability !== WHATSAPP_MOBILE_CAPABILITY &&
+    capability !== AVATAR_COLOR_CAPABILITY,
 );
 /**
  * The capabilities that only a protocol 9 peer sends and gets. Protocols 7 and 8 read at most 128
@@ -618,6 +622,7 @@ export const TEAM_PROTOCOL_V9_ONLY_CAPABILITIES: ReadonlySet<string> = new Set<T
   MODEL_VISIBILITY_CAPABILITY,
   AGENT_THREAD_REPLIES_CAPABILITY,
   WHATSAPP_MOBILE_CAPABILITY,
+  AVATAR_COLOR_CAPABILITY,
 ]);
 // A v8 host reads at most 128 capabilities, so a client sends the protocol 9 ones only after it
 // negotiates protocol 9.
@@ -735,6 +740,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== COMPUTER_ACTIVITY_CAPABILITY &&
       capability !== MODEL_VISIBILITY_CAPABILITY &&
       capability !== AGENT_THREAD_REPLIES_CAPABILITY &&
-      capability !== WHATSAPP_MOBILE_CAPABILITY,
+      capability !== WHATSAPP_MOBILE_CAPABILITY &&
+      capability !== AVATAR_COLOR_CAPABILITY,
   );
 }

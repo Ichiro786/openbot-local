@@ -96,6 +96,8 @@ import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 
 export type { OptionalRouteCodec } from "./admin-wire";
+
+import { AVATAR_COLOR_CODECS } from "./avatar-color-v1";
 import { WHATSAPP_MOBILE_CODECS } from "./whatsapp-mobile-v1";
 
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
@@ -192,6 +194,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...VAULT_IMPORT_CODECS,
   ...VAULT_V2_CODECS,
   ...WHATSAPP_MOBILE_CODECS,
+  ...AVATAR_COLOR_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

@@ -86,6 +86,33 @@ export function isAvatarHue(value: unknown): value is AvatarHue {
 }
 
 /**
+ * OpenBot Local: a custom avatar colour, lowercase `#rrggbb`. It rides beside `avatarHue`, which then
+ * holds the nearest preset, so a peer that knows only the presets still draws a close colour.
+ */
+export const AVATAR_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
+
+export function isAvatarColor(value: unknown): value is string {
+  return isString(value) && AVATAR_COLOR_PATTERN.test(value);
+}
+
+/** The preset whose hue is nearest on the colour circle to the hue of `color` (a valid avatar colour). */
+export function nearestAvatarHue(color: string): AvatarHue {
+  const channel = (start: number) => Number.parseInt(color.slice(start, start + 2), 16) / 255;
+  const [r, g, b] = [channel(1), channel(3), channel(5)];
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  let hue = 0;
+  if (delta > 0) {
+    if (max === r) hue = ((g - b) / delta) % 6;
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    hue = (hue * 60 + 360) % 360;
+  }
+  const distance = (preset: number) => Math.min(Math.abs(preset - hue), 360 - Math.abs(preset - hue));
+  return AVATAR_HUES.reduce((best, preset) => (distance(preset) < distance(best) ? preset : best));
+}
+
+/**
  * How the model picker of a server lists a model. `new`: the model came out in the last days, and the
  * picker labels it. `older`: the server shows a newer model in its place, so the picker folds it
  * under Older models. Absent: a plain row.
@@ -137,4 +164,28 @@ function hasAgentModelOptionFields(value: DynamicRecord): boolean {
     (value.fastServiceTier === undefined || isBoundedString(value.fastServiceTier, INPUT_LIMITS.serviceTier)) &&
     (value.listing === undefined || isOneOf(AGENT_MODEL_LISTINGS, value.listing))
   );
+}
+
+/** OpenBot Local (`avatar-color-v1`): every agent with a custom avatar colour. */
+export interface AvatarColorsSnapshot {
+  agents: { agentId: string; color: string }[];
+}
+
+/** OpenBot Local (`avatar-color-v1`): a null colour goes back to the preset hue that the agent has. */
+export interface SetAgentAvatarColorInput {
+  agentId: string;
+  color: string | null;
+}
+
+export function parseSetAgentAvatarColorInput(value: unknown): SetAgentAvatarColorInput {
+  if (
+    !isDynamicRecord(value) ||
+    Object.keys(value).some((key) => key !== "agentId" && key !== "color") ||
+    !isString(value.agentId) ||
+    value.agentId.length === 0 ||
+    value.agentId.length > 128 ||
+    !(value.color === null || isAvatarColor(value.color))
+  )
+    throw new Error("Invalid avatar colour request.");
+  return { agentId: value.agentId, color: value.color };
 }

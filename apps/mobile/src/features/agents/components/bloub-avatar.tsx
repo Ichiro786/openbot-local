@@ -1,5 +1,4 @@
 import { type AvatarMood, avatarMoodIsBusy, avatarMoodPresentation } from "@openbot/brand/bloub-avatar-motion";
-import type { AvatarHue } from "@openbot/contracts/ipc";
 import { Canvas, createPicture, Picture } from "@shopify/react-native-skia";
 import { Image } from "expo-image";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { usePlushFrame } from "@/features/agents/components/use-plush-frame";
+import type { AvatarTint } from "@/features/agents/model/avatar-color";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { loadedPlushArt, loadPlushArt, plushPixels } from "@/features/agents/model/plush/plush-assets";
 import { drawPlush, type PlushArt } from "@/features/agents/model/plush/plush-draw";
@@ -28,6 +28,7 @@ import {
   plushPictureName,
   savedPlushPicture,
 } from "@/features/agents/model/plush/plush-picture";
+import { useAgentAvatarColor } from "@/features/agents/model/use-avatar-colors";
 import { useAgentActivity } from "@/features/workspace/components/use-agent-activity";
 import {
   DISCONNECTED_APPEARANCE,
@@ -42,7 +43,7 @@ import { AgentPhoto, type AgentPhotoProps } from "./agent-photo";
 
 interface BloubAvatarProps extends AgentPhotoProps {
   agentId: string;
-  hue: AvatarHue | null;
+  hue: AvatarTint;
   seed: string;
   size?: number;
   animateIdle?: boolean;
@@ -56,6 +57,16 @@ interface BloubAvatarProps extends AgentPhotoProps {
  * one out, as the desktop does in the agent editor.
  */
 type PlushTransition = "pop" | "cut";
+
+/**
+ * Build 11.2: an agent's custom colour (`avatar-color-v1`) wins over the preset hue its record carries,
+ * so every avatar of the agent shows it without each caller looking it up. A tint that already is a
+ * colour (the Appearance preview while dragging) is drawn as given.
+ */
+function useCustomTint(serverId: string | undefined, agentId: string | undefined, hue: AvatarTint): AvatarTint {
+  const custom = useAgentAvatarColor(serverId ?? "", agentId ?? "");
+  return typeof hue === "string" ? hue : (custom ?? hue);
+}
 
 export function BloubAvatar({
   agentId,
@@ -98,6 +109,7 @@ export const BloubAvatarPreview = memo(function BloubAvatarPreview(
   props: Omit<BloubAvatarProps, "agentId"> & AgentPhotoProps & AvatarPreviewOptions,
 ) {
   const size = props.size ?? 54;
+  const tint = useCustomTint(props.serverId, props.agentId, props.hue);
   return (
     <AgentPhoto
       {...props}
@@ -106,7 +118,7 @@ export const BloubAvatarPreview = memo(function BloubAvatarPreview(
     >
       <PlushAvatar
         seed={props.seed}
-        hue={props.hue}
+        hue={tint}
         size={size}
         mood={props.mood}
         animateIdle={props.animateIdle}
@@ -132,7 +144,7 @@ const PlushAvatar = memo(function PlushAvatar({
   transition = "cut",
 }: {
   seed: string;
-  hue: AvatarHue | null;
+  hue: AvatarTint;
   size: number;
   mood?: AvatarMood;
   animateIdle?: boolean;
@@ -191,7 +203,7 @@ const PlushAvatar = memo(function PlushAvatar({
 });
 
 /** The old plush shrinks away, the new one springs out. `cut`, or reduced motion, swaps at once. */
-function usePlushPop(seed: string, hue: AvatarHue | null, pop: boolean) {
+function usePlushPop(seed: string, hue: AvatarTint, pop: boolean) {
   const [shown, setShown] = useState({ seed, hue });
   const target = useRef({ seed, hue });
   target.current = { seed, hue };
@@ -222,7 +234,7 @@ function usePlushPop(seed: string, hue: AvatarHue | null, pop: boolean) {
   return { shown: changed && !pop ? { seed, hue } : shown, style };
 }
 
-function usePlushArt(seed: string, hue: AvatarHue | null, pixels: number): PlushArt | null {
+function usePlushArt(seed: string, hue: AvatarTint, pixels: number): PlushArt | null {
   const { shape } = plushGeometry(seed);
   const color = getBloubAvatarColor(seed, hue);
   const key = `${shape}|${color}|${pixels}`;
@@ -256,7 +268,7 @@ function PlushCanvas({
   fallback,
 }: {
   seed: string;
-  hue: AvatarHue | null;
+  hue: AvatarTint;
   mood: AvatarMood;
   size: number;
   pixels: number;
@@ -339,9 +351,10 @@ function PlushPicture({
 export const BloubAvatarThumbnail = memo(function BloubAvatarThumbnail(
   props: Omit<BloubAvatarProps, "agentId"> & AgentPhotoProps & { disconnected?: boolean },
 ) {
+  const tint = useCustomTint(props.serverId, props.agentId, props.hue);
   return (
     <AgentPhoto {...props} size={props.size ?? 48}>
-      <AvatarThumbnail {...props} />
+      <AvatarThumbnail {...props} hue={tint} />
     </AgentPhoto>
   );
 });
