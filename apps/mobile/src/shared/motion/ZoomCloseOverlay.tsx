@@ -51,8 +51,9 @@ export type ZoomCloseHandle = {
 
 /** How far the gesture alone shrinks the chat (p 1 → 1 − PEEK) before it is released. */
 const PEEK = 0.45;
-/** After the pop, how long until the row is re-measured on the attached home screen. */
-const MEASURE_MS = 48;
+/** After the pop, when the row is re-measured, and the one retry when it is not there yet. */
+const MEASURE_MS = 32;
+const RETRY_MS = 100;
 const SAFETY_MS = 1600;
 const CANCEL_SPRING = { damping: 34, stiffness: 420, mass: 1 } as const;
 
@@ -85,8 +86,9 @@ function clearCancelled(key: number) {
 
 /**
  * Takes the still of the chat and covers the screen with it. `pop` must take the route's source
- * (takeZoomSource) before it pops, so the route's close does not dispose the home still in use. Null (the caller pops normally) when no
- * host is mounted, a close is already running, or the capture fails.
+ * (takeZoomSource) before it pops, so the route's close does not dispose the home still in use.
+ * Null (the caller pops normally) when no host is mounted, a close is already running, or the
+ * capture fails.
  */
 export async function zoomCloseBegin(
   source: ZoomSource,
@@ -134,12 +136,14 @@ export async function zoomCloseBegin(
       p.value = withSpring(0, zoom.closeSpring, (ok) => {
         if (ok) runOnJS(done)();
       });
-      // The home screen is attached under the still now: land on the row where it is now.
-      setTimeout(() => {
+      // Land on the row where it is now (Fabric measures from the layout, so this holds while the
+      // home screen re-attaches). One retry before the centre fallback, for a row mid-remount.
+      const land = (retry: boolean) =>
         source.measure((rect) => {
           if (finished) return;
           if (!rect) {
-            centre.value = withTiming(1, { duration: 120 });
+            if (retry) setTimeout(() => land(false), RETRY_MS);
+            else centre.value = withTiming(1, { duration: 120 });
             return;
           }
           const moved =
@@ -152,7 +156,7 @@ export async function zoomCloseBegin(
           homeShown.value = 0;
           target.value = withTiming(rect, { duration: 140 });
         });
-      }, MEASURE_MS);
+      setTimeout(() => land(true), MEASURE_MS);
     },
     cancel: () => {
       if (committed || finished) return;
