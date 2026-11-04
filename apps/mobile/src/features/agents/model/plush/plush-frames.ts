@@ -8,6 +8,7 @@ import {
 } from "@norbert_bodziony/bloub";
 import { bloubAvatarProfile } from "@openbot/brand/bloub-avatar";
 import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
+import { Platform } from "react-native";
 import {
   ballBox,
   type DecorTrack,
@@ -35,8 +36,13 @@ import {
   toggleDecor,
 } from "./plush-felt";
 
-/** The desktop caps the avatar at 30 fps; the eyes of a 24 to 144 point plush show no difference. */
-export const PLUSH_FPS = 30;
+/**
+ * The desktop (and iOS) cap the avatar at 30 fps. Build 11.2: Android plays 60 fps, so the gaze and the
+ * lids glide on 60/120 Hz panels. Every timing below is in seconds and scales with it: the 6 s loop is
+ * 360 frames there, the 1.5 s dots and 3 s z's still close it, and a glide samples the same curve.
+ * Frames hold geometry only (no colour, no bitmaps), so an exact `avatarColor` draws every one.
+ */
+export const PLUSH_FPS = Platform.OS === "android" ? 60 : 30;
 /**
  * One loop of a state. The thinking dots pulse every 1.5 s and the z's of sleep rise every 3 s, so
  * the loop holds a whole number of both.
