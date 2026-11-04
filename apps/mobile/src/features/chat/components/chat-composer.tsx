@@ -1034,6 +1034,7 @@ export const ChatComposer = memo(function ChatComposer({
                   agentId={agent.id}
                   serverId={agent.serverId}
                   hue={agent.avatarHue}
+                  color={agent.avatarColor}
                   seed={agent.avatarSeed}
                   size={28}
                 />

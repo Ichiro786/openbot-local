@@ -1,3 +1,4 @@
+import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
@@ -10,7 +11,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
-import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { ChatGlassButton, ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
@@ -228,7 +228,10 @@ export function ColorOSChatHeader({
               const left = padLeft + SIDE_BOX + x;
               if (left !== pillFrame?.x || width !== pillFrame?.width) setPillFrame({ x: left, width });
               // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
-              recordZoomSkeleton(target.id, { pillWidth: width, avatarColor: getBloubAvatarColor(target.avatarSeed, target.avatarHue) });
+              recordZoomSkeleton(target.id, {
+                pillWidth: width,
+                avatarColor: avatarHeadColor(target.avatarSeed, target.avatarHue, target.avatarColor),
+              });
             }}
             {...pillHandlers}
           >

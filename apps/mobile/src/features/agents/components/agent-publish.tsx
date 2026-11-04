@@ -133,6 +133,7 @@ export function AgentPublish({ agent, available }: { agent: MobileAgent; availab
             serverId={agent.serverId}
             seed={agent.avatarSeed}
             hue={agent.avatarHue}
+            color={agent.avatarColor}
             size={80}
           />
         </View>
