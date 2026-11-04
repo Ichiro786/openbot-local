@@ -4,6 +4,8 @@
  */
 export const COMPOSER_TOOLBAR_HEIGHT = 48;
 export const COMPOSER_FIELD_VERTICAL_PADDING = 26;
+/** The gap between the composer card and the screen edge (the zoom-open skeleton copies it). */
+export const COMPOSER_BAR_INSET = 16;
 /** At rest the composer gives up this much of the height of its single line. */
 const COMPOSER_REST_HEIGHT_LOSS = 8;
 

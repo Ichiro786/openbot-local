@@ -1239,6 +1239,7 @@ export function ChatView({
                 />
               ) : (
                 <ChatComposer
+                  skeletonKey={target.id}
                   sendRetryVersion={sendRetryVersion}
                   replyTarget={replyTarget}
                   replyFocusVersion={replyFocusVersion}

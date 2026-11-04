@@ -91,6 +91,7 @@ export function ChatLinkPressable({
           // still of this screen behind the chat while a predictive back gesture is undecided.
           const openedChat = chatId;
           const source = {
+            skeletonKey: chatId,
             home: snapshotNavigator(),
             measure: (done: (rect: { x: number; y: number; width: number; height: number } | null) => void) => {
               const row = self.current;

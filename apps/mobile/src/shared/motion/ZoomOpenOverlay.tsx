@@ -13,7 +13,10 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { create } from "zustand";
+import { COLOROS_CHAT_HEADER_GEOMETRY } from "@/features/chat/components/chat-header-coloros";
 import { glass } from "@/shared/glass/tokens";
+import { COMPOSER_BAR_INSET, composerBottomGap, restingComposerHeight } from "@/shared/lib/composer-metrics";
+import { zoomSkeletonFor } from "./zoomSkeleton";
 import { zoom } from "./tokens";
 import { armZoomPush, disarmZoomPush, type ZoomSource } from "./zoomPush";
 
@@ -178,38 +181,112 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
         style={[styles.surface, { backgroundColor: String(surface ?? "#000") }, surfaceStyle]}
       >
         <Animated.View style={[{ width, height }, skeletonStyle]}>
-          <ChatZoomSkeleton />
+          <ChatZoomSkeleton skeletonKey={source?.skeletonKey} />
         </Animated.View>
       </Animated.View>
     </View>
   );
 }
 
+/** Before a chat has been opened once this session: a pill for a short name, a typical capsule. */
+const DEFAULT_PILL_WIDTH = 120;
+const DEFAULT_COMPOSER_WIDTH = 240;
+
 /**
- * The chat's shapes at their final places (ColorOS header: back circle, avatar over the name pill,
- * ••• pill; the composer capsule). Plain Views in the solid glass fill: no data, no blur.
+ * The chat's shapes at their final places: the hotfix 11.1 ColorOS header (round Back, the 52 dp
+ * avatar over the compact 32 dp name pill, the ••• pill, all centred on the 80 dp group) and the
+ * composer capsule at rest. Build 11.2: positions come from the header's and composer's own layout
+ * constants (COLOROS_CHAT_HEADER_GEOMETRY, composer-metrics), and the pill and capsule widths and the
+ * avatar colour from what this chat measured the last time it showed (zoomSkeleton), so the skeleton
+ * lands on the real shapes. Plain Views in the solid glass fill: no data, no blur.
  */
-function ChatZoomSkeleton() {
+function ChatZoomSkeleton({ skeletonKey }: { skeletonKey?: string }) {
   const insets = useSafeAreaInsets();
+  const { width, fontScale } = useWindowDimensions();
   const fill = useColorScheme() === "light" ? "rgba(0, 0, 0, 0.06)" : glass.material.button.solidDark;
-  const top = insets.top + 8;
+  const g = COLOROS_CHAT_HEADER_GEOMETRY;
+  const record = zoomSkeletonFor(skeletonKey);
+  const top = insets.top;
+  const inner = width - insets.left - insets.right;
+  const centreX = insets.left + inner / 2;
+  const pillWidth = Math.min(g.pillMaxWidth, Math.max(g.pillMinWidth, record.pillWidth ?? DEFAULT_PILL_WIDTH));
+  const cardWidth = inner - 2 * COMPOSER_BAR_INSET;
+  const composerWidth = Math.min(cardWidth, record.composerWidth ?? DEFAULT_COMPOSER_WIDTH);
+  const composerHeight = record.composerHeight ?? restingComposerHeight(fontScale);
   return (
     <>
-      <View style={[styles.skBack, { top: top + 4, backgroundColor: fill }]} />
-      <View style={[styles.skPill, { top: top + 24, backgroundColor: fill }]} />
-      <View style={[styles.skAvatar, { top, backgroundColor: fill }]} />
-      <View style={[styles.skMore, { top: top + 4, backgroundColor: fill }]} />
-      <View style={[styles.skComposer, { bottom: insets.bottom + 8, backgroundColor: fill }]} />
+      <View
+        style={[
+          styles.abs,
+          {
+            left: insets.left + g.back.left,
+            top: top + g.back.top,
+            width: g.back.size,
+            height: g.back.size,
+            borderRadius: g.back.size / 2,
+            backgroundColor: fill,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.abs,
+          {
+            right: insets.right + g.more.right,
+            top: top + g.more.top,
+            width: g.more.width,
+            height: g.more.height,
+            borderRadius: g.more.height / 2,
+            backgroundColor: fill,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.abs,
+          {
+            left: centreX - pillWidth / 2,
+            top: top + g.rowTop + g.avatar - g.overlap,
+            width: pillWidth,
+            height: g.pillHeight,
+            borderRadius: g.pillHeight / 2,
+            backgroundColor: fill,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.abs,
+          {
+            left: centreX - g.avatar / 2,
+            top: top + g.rowTop,
+            width: g.avatar,
+            height: g.avatar,
+            borderRadius: g.avatar / 2,
+            backgroundColor: record.avatarColor ?? fill,
+            opacity: record.avatarColor ? 0.55 : 1,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.abs,
+          {
+            left: insets.left + COMPOSER_BAR_INSET + (cardWidth - composerWidth) / 2,
+            bottom: composerBottomGap(insets.bottom),
+            width: composerWidth,
+            height: composerHeight,
+            borderRadius: composerHeight / 2,
+            backgroundColor: fill,
+          },
+        ]}
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  skBack: { position: "absolute", left: 12, width: 40, height: 40, borderRadius: 20 },
-  skMore: { position: "absolute", right: 12, width: 52, height: 40, borderRadius: 20 },
-  skPill: { position: "absolute", alignSelf: "center", width: 160, height: 46, borderRadius: 23 },
-  skAvatar: { position: "absolute", alignSelf: "center", width: 34, height: 34, borderRadius: 17 },
-  skComposer: { position: "absolute", left: 12, right: 12, height: 52, borderRadius: 26 },
+  abs: { position: "absolute" },
   dim: { backgroundColor: "#000" },
   surface: { position: "absolute", overflow: "hidden", borderCurve: "continuous" },
 });

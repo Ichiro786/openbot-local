@@ -66,7 +66,9 @@ import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { Button } from "@/shared/components/button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
+import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import {
+  COMPOSER_BAR_INSET,
   COMPOSER_FIELD_VERTICAL_PADDING,
   COMPOSER_TOOLBAR_HEIGHT,
   composerBottomGap,
@@ -107,7 +109,7 @@ const MAX_INPUT_LINES = 5;
 // the gap between the card and the screen edge.
 const ROW_CONTROL_INSET = 48;
 const FIELD_INSET = 16;
-const BAR_INSET = 16;
+const BAR_INSET = COMPOSER_BAR_INSET;
 // The controls are 40 pt with a 4 pt inset, and one text line sits in the same
 // box: a line plus 13 pt above and below. One formula then covers both shapes.
 const TOOLBAR_HEIGHT = COMPOSER_TOOLBAR_HEIGHT;
@@ -180,6 +182,8 @@ interface ChatComposerProps {
   /** Tells the chat when the `@` list opens and closes, so that a drag in it does not move the keyboard. */
   onSuggestionsVisibleChange?: (visible: boolean) => void;
   bottomInset: number;
+  /** Build 11.2: the chat's id; the zoom-open skeleton of this chat then draws this capsule's size. */
+  skeletonKey?: string;
   disabled: boolean;
   draft: string;
   fallbackBackground: ViewStyle["backgroundColor"];
@@ -293,6 +297,7 @@ export const ChatComposer = memo(function ChatComposer({
   skillPickerVersion = 0,
   onSuggestionsVisibleChange,
   bottomInset,
+  skeletonKey,
   disabled,
   draft,
   fallbackBackground,
@@ -508,6 +513,11 @@ export const ChatComposer = memo(function ChatComposer({
   // snapping it. The first measurement is taken at once, as before: the bar must not shrink in
   // from full width when the chat opens.
   const restWidthValue = useSharedValue(restWidth);
+  // Build 11.2: the capsule at rest, for the next zoom-open skeleton of this chat (once measured).
+  useEffect(() => {
+    if (skeletonKey && placeholderWidth > 0)
+      recordZoomSkeleton(skeletonKey, { composerWidth: restWidth, composerHeight: restHeight });
+  }, [skeletonKey, placeholderWidth, restWidth, restHeight]);
   const restWidthMeasured = useRef(false);
   useLayoutEffect(() => {
     if (!restWidthMeasured.current) {

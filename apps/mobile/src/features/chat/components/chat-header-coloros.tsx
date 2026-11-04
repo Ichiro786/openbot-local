@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
+import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { ChatGlassButton, ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
@@ -20,6 +21,7 @@ import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/
 import { useText } from "@/shared/lib/text";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import type { AgentChatTarget } from "../model/chat-target";
 
 /** Hotfix 11.1 (Syed, ChatGPT-style reference): a big avatar right over a compact name pill. */
@@ -37,6 +39,35 @@ const ROW_HEIGHT = AVATAR - OVERLAP + PILL_HEIGHT;
 const SIDE_TOP = (ROW_HEIGHT - 48) / 2;
 /** Where the ColorOS agent header ends under the status bar (the chat's list starts a little below). */
 export const COLOROS_CHAT_HEADER_BOTTOM = ROW_TOP + ROW_HEIGHT;
+/** The side boxes (Back, •••) and the screen-edge padding beside them. */
+const SIDE_BOX = 64;
+const EDGE_PAD = 16;
+const MORE_WIDTH = 60;
+/**
+ * Build 11.2: the header's geometry for the zoom-open skeleton (ZoomOpenOverlay), from the constants
+ * above, so the skeleton draws the shapes exactly where this header puts them. Offsets are from the
+ * top of the safe area (add the status bar inset) and from the screen's left and right edges (add the
+ * side insets).
+ */
+export const COLOROS_CHAT_HEADER_GEOMETRY = {
+  rowTop: ROW_TOP,
+  avatar: AVATAR,
+  overlap: OVERLAP,
+  pillHeight: PILL_HEIGHT,
+  /** The pill's narrowest width (it hugs the name): never narrower than the avatar over it. */
+  pillMinWidth: AVATAR + 16,
+  pillMaxWidth: 220,
+  back: { left: EDGE_PAD + BUTTON_INSET, top: ROW_TOP + SIDE_TOP + BUTTON_INSET, size: BUTTON },
+  more: {
+    right: EDGE_PAD + BUTTON_INSET,
+    top: ROW_TOP + SIDE_TOP + BUTTON_INSET,
+    width: MORE_WIDTH - BUTTON_INSET * 2,
+    height: BUTTON,
+  },
+  /** The middle column (avatar and pill are centred in it) starts after the leading side box. */
+  sideBox: SIDE_BOX,
+  edgePad: EDGE_PAD,
+} as const;
 
 /**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
@@ -84,8 +115,8 @@ export function ColorOSChatHeader({
   const pillHandlers = useGlassPressHandlers(pillPress, PILL_HEIGHT, true, reduceMotion);
   const [pillFrame, setPillFrame] = useState<{ x: number; width: number } | null>(null);
   const [rowWidth, setRowWidth] = useState(0);
-  const padLeft = insets.left + 16;
-  const padRight = insets.right + 16;
+  const padLeft = insets.left + EDGE_PAD;
+  const padRight = insets.right + EDGE_PAD;
   const shapes: GlassBandShape[] = rowWidth
     ? [
         ...(showBack
@@ -194,8 +225,10 @@ export function ColorOSChatHeader({
             onLayout={(event) => {
               const { x, width } = event.nativeEvent.layout;
               // The middle column starts after the leading side box.
-              const left = padLeft + 64 + x;
+              const left = padLeft + SIDE_BOX + x;
               if (left !== pillFrame?.x || width !== pillFrame?.width) setPillFrame({ x: left, width });
+              // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
+              recordZoomSkeleton(target.id, { pillWidth: width, avatarColor: getBloubAvatarColor(target.avatarSeed, target.avatarHue) });
             }}
             {...pillHandlers}
           >
@@ -233,7 +266,7 @@ export function ColorOSChatHeader({
             accessibilityLabel={t("mobile.chat.header.info", { name: target.name })}
             fallbackBackground={fallbackBackground}
             liquidGlassAvailable={false}
-            width={60}
+            width={MORE_WIDTH}
             glassMaterial={material}
             press={morePress}
             onPress={openAgentPage}
@@ -259,7 +292,7 @@ export function ColorOSChatHeader({
 const styles = StyleSheet.create({
   row: { position: "absolute", left: 0, right: 0, zIndex: 20, flexDirection: "row", alignItems: "flex-start" },
   band: { position: "absolute", left: 0, right: 0, zIndex: 19 },
-  side: { width: 64, height: 48, marginTop: SIDE_TOP },
+  side: { width: SIDE_BOX, height: 48, marginTop: SIDE_TOP },
   trailing: { alignItems: "flex-end" },
   middle: { flex: 1, alignItems: "center" },
   // Hugs the name (up to 220 dp, then ellipsis); never narrower than the avatar over it.

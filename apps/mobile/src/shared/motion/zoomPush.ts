@@ -33,6 +33,8 @@ export type ZoomSource = {
   radius: number;
   measure: (done: (rect: ZoomSource["rect"] | null) => void) => void;
   home: Promise<SkImage | null>;
+  /** The chat's id, for the zoom-open skeleton's measured sizes (zoomSkeleton). */
+  skeletonKey?: string;
 };
 let pendingSource: ZoomSource | null = null;
 const sources = new Map<string, ZoomSource>();
