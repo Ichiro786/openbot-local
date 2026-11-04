@@ -784,7 +784,9 @@ echo "[$(date +%T)] boot settle: BOOT_COMPLETED processed after ~$((i*2)) s; loa
 for i in $(seq 1 60); do l=$(adb shell cat /proc/loadavg | cut -d' ' -f1 | cut -d. -f1); [ "${l:-99}" -lt 8 ] && break; sleep 5; done
 echo "[$(date +%T)] load before start $(adb shell cat /proc/loadavg | tr -d '\r')" | tee -a "$OUT/steps.txt"
 adb logcat -c; adb logcat -b crash -c
-adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; exit 1; }
+# API 37.0 (41806961872): "Failure calling service package: Broken pipe" once; retry while the package service settles.
+for t in 1 2 3 4; do adb wait-for-device; adb shell pm path android >/dev/null 2>&1 && adb install -r -g "$APK" > "$OUT/install.txt" 2>&1 && break; echo "[$(date +%T)] install try $t failed: $(tail -1 "$OUT/install.txt" 2>/dev/null)" | tee -a "$OUT/steps.txt"; sleep 20; done
+grep -q Success "$OUT/install.txt" || { cat "$OUT/install.txt"; exit 1; }
 # Emulator launcher ANRs ("Pixel Launcher isn't responding") ate taps in runs 41698820646 and 41693238776:
 # hide error dialogs system-wide (an app ANR is still caught from logcat, below) and stop the launcher.
 adb shell settings put global hide_error_dialogs 1
