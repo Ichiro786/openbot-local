@@ -870,7 +870,21 @@ real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
     log "  lane $m/$L: $(grep -c "^$m $L .* ok" "$OUT/real-lanes.txt") ok, $(grep -c "^$m $L .* IGNORED" "$OUT/real-lanes.txt") ignored, $(grep -c "^$m $L .* STUCK" "$OUT/real-lanes.txt") stuck, $(grep -c "^$m $L .* CRASH" "$OUT/real-lanes.txt") crash"
   done
 }
+header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (real ChatHeader + list), dark
+  log "== header frost shot ($1)"
+  home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
+  wait_for "E2E LIST OPEN" 10 "$1-1" >/dev/null || { log "  header shot: list did not open"; home; return; }
+  sleep 1.5; adb shell input swipe 540 900 540 1250 400; sleep 1.5; shot "header-$1"
+  python3 - "$OUT/header-$1.png" "$OUT/header-$1-top.png" <<'PYH' || true
+import sys
+from PIL import Image
+im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.argv[2])
+PYH
+  adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
+}
 if [ -f .github/e2e/quick113 ]; then
+  adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
+  if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
   if real_setup; then real_lanes ON $REALN "L1 L2 L3 L4 L5 L6 L7 L8 L9"; fi
