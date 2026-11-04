@@ -45,11 +45,13 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  type EntryAnimationsValues,
   FadeIn,
   FadeInDown,
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -181,6 +183,34 @@ const USER_MESSAGE_ENTRANCE = FadeInDown.springify()
 const AGENT_MESSAGE_ENTRANCE = FadeIn.duration(timings.defaultEffects.duration)
   .easing(timings.defaultEffects.easing)
   .reduceMotion(ReduceMotion.System);
+/**
+ * Build 11.2 (ColorOS motion, Android; reduced motion passes none): a sent bubble grows out of the
+ * composer corner: it rises on the spatial spring from 28 dp lower, scales 0.96 -> 1 about its bottom
+ * right (the send button side), and fades in over 160 ms. Transforms and opacity only, on the UI
+ * thread, so the list's layout (and its room for the row) never changes during it. Declared before
+ * any worklet that could reach it (worklets 0.13 + release Hermes: build 8).
+ */
+const COLOROS_USER_SPRING = {
+  mass: springs.defaultSpatial.mass,
+  stiffness: springs.defaultSpatial.stiffness,
+  damping: springs.defaultSpatial.damping,
+};
+function colorOSUserEntrance(_values: EntryAnimationsValues) {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 28 }, { scale: 0.96 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 160 }),
+      transform: [{ translateY: withSpring(0, COLOROS_USER_SPRING) }, { scale: withSpring(1, COLOROS_USER_SPRING) }],
+    },
+  };
+}
+/** Build 11.2 (ColorOS): a reply that arrives whole fades in and slides up 8 dp on the effects timing. */
+const COLOROS_AGENT_ENTRANCE = FadeInDown.duration(timings.defaultEffects.duration)
+  .easing(timings.defaultEffects.easing)
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 8 }] })
+  .reduceMotion(ReduceMotion.System);
+const USER_ORIGIN = { transformOrigin: "bottom right" } as const;
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 // The pill takes over from the activity row, so it fades rather than grows from nothing: its first
 // measurement is already the size of the first revealed word.
@@ -382,6 +412,8 @@ interface MessageRowShared {
   canSelectText: boolean;
   /** Build 10 (ColorOS motion, Android): a touch and hold opens the message's glass menu. */
   longPressMenu: boolean;
+  /** Build 11.2: ColorOS motion on Android without reduced motion: the ColorOS message entrances. */
+  colorOSEntrance: boolean;
   canSelectQuestion: boolean;
   /** The messages that offer a branch. Empty where the chat cannot branch. */
   branchPoints: ReadonlySet<string>;
@@ -680,17 +712,26 @@ const MessageRow = memo(function MessageRow({
         entering={
           arriving && !isFirstUser
             ? message.author === "user"
-              ? USER_MESSAGE_ENTRANCE
+              ? shared.colorOSEntrance
+                ? colorOSUserEntrance
+                : USER_MESSAGE_ENTRANCE
               : // Playback reveals its own words, and a reply that streamed in place is already shown.
                 !enabled && !message.streaming
-                ? AGENT_MESSAGE_ENTRANCE
+                ? shared.colorOSEntrance
+                  ? COLOROS_AGENT_ENTRANCE
+                  : AGENT_MESSAGE_ENTRANCE
                 : undefined
             : undefined
         }
         className={
           message.author === "user" ? "max-w-full items-end self-end gap-2" : "max-w-full items-start self-start gap-2"
         }
-        style={[{ borderCurve: "circular" }, isFirstUser ? firstMessageStyle : undefined]}
+        style={[
+          { borderCurve: "circular" },
+          // Build 11.2: the ColorOS sent bubble scales about the send-button corner.
+          shared.colorOSEntrance && message.author === "user" ? USER_ORIGIN : undefined,
+          isFirstUser ? firstMessageStyle : undefined,
+        ]}
       >
         {memberColor && message.sender ? (
           <Typography.Paragraph type="body-xs" className="shrink px-1" numberOfLines={1} style={{ color: memberColor }}>
@@ -1348,7 +1389,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   // One toggle read for the whole list, so a row does not subscribe to the setting itself. With a screen
   // reader on, the build 9 rows stay: TalkBack cannot reach the long-press menu, and the rows are the
   // only other path to React, Reply and Select text.
-  const longPressMenu = useColorOSMotion().enabled && isAndroid && !screenReaderEnabled;
+  const colorOSOn = useColorOSMotion().enabled && isAndroid;
+  const longPressMenu = colorOSOn && !screenReaderEnabled;
+  const colorOSEntrance = colorOSOn && !reducedMotion;
   const shownBranchPoints = onBranch ? branchPoints : NO_IDS;
   // The rows keep clear of the side insets: the rail of iPhone Duo and the edges in landscape.
   const listWidth = columnWidth - insets.left - insets.right - LIST_PADDING * 2;
@@ -1380,6 +1423,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canReact,
       canSelectText,
       longPressMenu,
+      colorOSEntrance,
       canSelectQuestion,
       branchPoints: shownBranchPoints,
       listWidth,
@@ -1409,6 +1453,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canReact,
       canSelectText,
       longPressMenu,
+      colorOSEntrance,
       canSelectQuestion,
       shownBranchPoints,
       listWidth,
