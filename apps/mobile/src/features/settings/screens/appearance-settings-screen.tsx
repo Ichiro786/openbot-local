@@ -1,6 +1,7 @@
 import { Typography } from "heroui-native";
 import { useState } from "react";
 import { useUniwind } from "uniwind";
+import { AvatarSizeSlider } from "@/features/settings/components/avatar-size-slider";
 import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { SettingsPicker, SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { saveAppearance, useAppearance } from "@/features/settings/model/appearance";
@@ -9,6 +10,7 @@ import { dynamicColorSupported, saveThemeStyle, useThemeStyle } from "@/features
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export function AppearanceSettingsScreen() {
   const { t } = useText();
@@ -21,6 +23,7 @@ export function AppearanceSettingsScreen() {
   const [themeStyleError, setThemeStyleError] = useState<string | null>(null);
   const [dynamicAvailable] = useState(dynamicColorSupported);
   const themeStyleBusy = !themeStyle.ready || themeStyle.saving;
+  const colorOS = useColorOSMotion().enabled;
 
   function saveStyle(change: Parameters<typeof saveThemeStyle>[0]) {
     setThemeStyleError(null);
@@ -91,6 +94,14 @@ export function AppearanceSettingsScreen() {
           </SettingsRow>
         ) : null}
       </SettingsSection>
+      {/* Build 11.3 (ColorOS ON): agent avatar size, app-wide. */}
+      {colorOS ? (
+        <SettingsSection footer={t("mobile.settings.appearance.avatarSizeFooter")}>
+          <SettingsRow>
+            <AvatarSizeSlider seed="openbot-avatar-size" hue={null} />
+          </SettingsRow>
+        </SettingsSection>
+      ) : null}
       <SettingsSection footer={agentColorError ?? t("mobile.settings.appearance.agentColorMessagesFooter")}>
         <SettingsRow>
           <SettingsSwitch

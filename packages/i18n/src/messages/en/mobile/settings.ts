@@ -64,6 +64,10 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.appearance.agentColorMessages": "Agent color on my messages",
   "mobile.settings.appearance.agentColorMessagesFooter":
     "Your messages in an agent chat use that agent’s color. Turn off if the text is hard to read.",
+  "mobile.settings.appearance.avatarSize": "Avatar size",
+  "mobile.settings.appearance.avatarSizeValue": "{percent}%",
+  "mobile.settings.appearance.avatarSizeFooter":
+    "Agent avatars in chats, the agent page, the home list and pinned agents. 100% is the size of a photo avatar.",
   "mobile.settings.animations.title": "Animations",
   "mobile.settings.animations.footer":
     "Turn off Animations to reduce motion in the whole app. When Reduce Motion is on in your phone settings, the app also reduces motion. The animations below then stay off.",

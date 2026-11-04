@@ -28,6 +28,7 @@ import {
   plushPictureName,
   savedPlushPicture,
 } from "@/features/agents/model/plush/plush-picture";
+import { useAvatarScale } from "@/features/settings/model/avatar-size";
 import { useAgentActivity } from "@/features/workspace/components/use-agent-activity";
 import {
   DISCONNECTED_APPEARANCE,
@@ -38,7 +39,26 @@ import { agentActivityMood } from "@/features/workspace/model/agent-activity";
 import { showsOnline } from "@/features/workspace/model/server-status";
 import { useMotionPreference } from "@/shared/lib/motion";
 import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { AgentPhoto, type AgentPhotoProps } from "./agent-photo";
+
+/**
+ * Build 11.3 (Syed, ColorOS ON): the plush's visible body fills its slot like an imported photo does.
+ * At PLUSH_BODY_SCALE (1.15) the fur body measured ~124 px against a ~152 px photo in the same 52 dp
+ * slot on his phone (screenshots 1000053711 / 1000053709), so the phone draws it 1.22x bigger.
+ */
+const COLOROS_PLUSH_SCALE = 1.4;
+
+function usePlushScale() {
+  return useColorOSMotion().enabled ? COLOROS_PLUSH_SCALE : PLUSH_BODY_SCALE;
+}
+
+/** Settings › Appearance › Avatar size (ColorOS ON only), capped by the slot (`max`). */
+function useUserAvatarScale(max: number): number {
+  const enabled = useColorOSMotion().enabled;
+  const scale = useAvatarScale((state) => state.scale);
+  return enabled ? Math.min(scale, max) : 1;
+}
 
 interface BloubAvatarProps extends AgentPhotoProps {
   agentId: string;
@@ -50,6 +70,8 @@ interface BloubAvatarProps extends AgentPhotoProps {
   animateIdle?: boolean;
   /** Turns the orbit rings around an agent photo while the agent works. A plush shows its felt dots. */
   rings?: boolean;
+  /** Build 11.3: the largest Avatar size this slot takes (the chat header caps it so it never covers the pill). */
+  maxScale?: number;
 }
 
 /**
@@ -68,6 +90,7 @@ export function BloubAvatar({
   size = 54,
   animateIdle = true,
   rings = false,
+  maxScale,
 }: BloubAvatarProps) {
   const serverId = useMobileWorkspaceSelector(
     (workspace) => hostId ?? workspace.agents.find((agent) => agent.id === agentId)?.serverId,
@@ -86,6 +109,7 @@ export function BloubAvatar({
       size={size}
       animateIdle={animateIdle}
       rings={rings}
+      maxScale={maxScale}
       disconnected={disconnected}
       mood={disconnected ? "idle" : agentActivityMood(activity)}
     />
@@ -101,8 +125,10 @@ interface AvatarPreviewOptions {
 export const BloubAvatarPreview = memo(function BloubAvatarPreview(
   props: Omit<BloubAvatarProps, "agentId"> & AgentPhotoProps & AvatarPreviewOptions,
 ) {
-  const size = props.size ?? 54;
-  return (
+  const box = props.size ?? 54;
+  const userScale = useUserAvatarScale(props.maxScale ?? Number.POSITIVE_INFINITY);
+  const size = box * userScale;
+  const avatar = (
     <AgentPhoto
       {...props}
       size={size}
@@ -119,6 +145,13 @@ export const BloubAvatarPreview = memo(function BloubAvatarPreview(
         transition={props.transition}
       />
     </AgentPhoto>
+  );
+  if (userScale === 1) return avatar;
+  // The slot keeps its size (rows and the header do not move); the avatar grows or shrinks around its centre.
+  return (
+    <View pointerEvents="box-none" style={{ width: box, height: box, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ width: size, height: size }}>{avatar}</View>
+    </View>
   );
 });
 
@@ -158,7 +191,7 @@ const PlushAvatar = memo(function PlushAvatar({
   const appearanceStyle = useAnimatedStyle(() => ({ opacity: appearance.get().opacity }));
   const saturation = useDerivedValue(() => appearance.get().saturation);
   // The fur and the felt decor reach past the avatar box, as on the desktop.
-  const drawn = size * PLUSH_BODY_SCALE;
+  const drawn = size * usePlushScale();
   const pixels = plushPixels(drawn, PixelRatio.get());
   const picture = (
     <PlushPicture
@@ -376,7 +409,7 @@ export const AvatarThumbnail = memo(function AvatarThumbnail({
   /** Fades to a new colour, for a picker where the colour changes in place. */
   animateColor?: boolean;
 }) {
-  const drawn = size * PLUSH_BODY_SCALE;
+  const drawn = size * usePlushScale();
   return (
     <View
       pointerEvents="none"

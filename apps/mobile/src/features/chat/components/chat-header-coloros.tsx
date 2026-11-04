@@ -232,6 +232,8 @@ export function ColorOSChatHeader({
                 color={target.avatarColor}
                 seed={target.avatarSeed}
                 size={AVATAR}
+                // Build 11.3: Avatar size grows the header avatar at most 10 % (it overlaps the pill by 4 dp).
+                maxScale={1.1}
               />
             </AgentPinAvatar>
           </View>

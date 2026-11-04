@@ -24,6 +24,7 @@ import { installNotificationHandler } from "@/features/push-notifications/use-no
 import { installQuickActions, resetQuickActions } from "@/features/quick-actions/quick-actions-native";
 import { loadAppLanguage } from "@/features/settings/model/app-language";
 import { loadAppearance, useAppearance } from "@/features/settings/model/appearance";
+import { loadAvatarScale } from "@/features/settings/model/avatar-size";
 import { loadDictationLanguage } from "@/features/settings/model/dictation-language";
 import { loadHapticsPreference } from "@/features/settings/model/haptics";
 import { loadLiveActivitiesPreference } from "@/features/settings/model/live-activities";
@@ -245,6 +246,7 @@ export default function RootLayout() {
       void loadAppearance().catch(() => undefined);
       void loadThemeStyle().catch(() => undefined);
       void loadHapticsPreference().catch(() => undefined);
+      void loadAvatarScale().catch(() => undefined);
       void loadAgentColorMessages().catch(() => undefined);
       void loadLiveActivitiesPreference().catch(() => undefined);
       void loadPushNotificationPreference().catch(() => undefined);
