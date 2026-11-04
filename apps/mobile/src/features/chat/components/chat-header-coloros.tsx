@@ -19,7 +19,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
-import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
+import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import type { AgentChatTarget } from "../model/chat-target";
@@ -43,8 +43,8 @@ export const COLOROS_CHAT_HEADER_BOTTOM = ROW_TOP + ROW_HEIGHT;
 const SIDE_BOX = 64;
 const EDGE_PAD = 16;
 const MORE_WIDTH = 60;
-/** Build 11.3: how far the header's frost fades out below the pill. */
-const BAND_FADE = 28;
+/** Build 11.3 (Syed): the header's frost ends this far ABOVE the name pill's top edge. */
+const BAND_GAP = 6;
 /**
  * Build 11.2: the header's geometry for the zoom-open skeleton (ZoomOpenOverlay), from the constants
  * above, so the skeleton draws the shapes exactly where this header puts them. Offsets are from the
@@ -113,17 +113,24 @@ export function ColorOSChatHeader({
   const dark = useUniwind().theme === "dark";
   const iconColor = String(foreground);
   const { reduceMotion } = useColorOSMotion();
-  const menuFrost = useGlassMenuFrostOpen();
-  const bandOn = Boolean(frostTarget) && !menuFrost;
-  const material = bandOn ? "band" : "solid";
+  // Build 11.3 (Syed: the header frost vanished whenever a menu opened): a one-blur menu (thread menu,
+  // + menu, ••• menus) takes the composer's blur instead (ChatComposer pauses), so the band stays.
+  // Only a two-blur menu (message long-press: reaction bar + card) pauses it; its dim stays.
+  const menuDouble = useGlassMenuDoubleFrost();
+  const bandOn = Boolean(frostTarget) && !menuDouble;
+  // Build 11.3: the band ends above the pill, so the pill and the side buttons (which reach below it)
+  // carry their own solid glass fill; text under them never shows through sharp.
+  const material = "solid";
   const backPress = useGlassPress();
   const pillPress = useGlassPress();
   const morePress = useGlassPress();
   const pillHandlers = useGlassPressHandlers(pillPress, PILL_HEIGHT, true, reduceMotion);
   const padLeft = insets.left + EDGE_PAD;
   const padRight = insets.right + EDGE_PAD;
-  // Build 11.3: the frosted band covers the status bar, avatar, pill and side buttons, then fades out.
-  const bandHeight = topInset + ROW_TOP + ROW_HEIGHT + BAND_FADE;
+  // Build 11.3: the frosted band covers the status bar and fades out over the avatar, above the pill.
+  // Syed (15:16-15:18): it ends a little before the pill, with a long eased fade (no visible edge):
+  // full strength over the top part of the status bar, then easing out across the avatar.
+  const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
   // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
   const subtitle = useMobileWorkspaceSelector((current) => {
     const agent = current.agents.find((item) => item.id === target.id && item.serverId === target.serverId);
@@ -163,7 +170,7 @@ export function ColorOSChatHeader({
       <GlassBand
         target={frostTarget}
         shown={bandOn}
-        solid={(bandHeight - BAND_FADE - PILL_HEIGHT / 2) / bandHeight}
+        solid={(topInset * 0.5) / bandHeight}
         style={[styles.band, { top: 0, height: bandHeight }]}
       />
       <View

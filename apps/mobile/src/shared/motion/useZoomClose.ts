@@ -2,6 +2,7 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import {
   type NavigationAction,
   type ParamListBase,
+  StackActions,
   useIsFocused,
   useNavigation,
   usePreventRemove,
@@ -18,6 +19,11 @@ import { markZoomClosing, takeZoomSource, type ZoomSource, zoomSource } from "./
  * late still is dropped). Back must always leave the chat.
  */
 const BEGIN_MS = 700;
+/**
+ * Build 11.3 (Back still stuck on Syed's Android 17 phone with the 11.3 fix): any Back that has not
+ * taken the chat off the top of the stack within this, for any reason, pops it the plain way.
+ */
+export const BACK_WATCHDOG_MS = 300;
 
 /** zoomCloseBegin, bounded: null on timeout or error; a still that comes later is cancelled. */
 function beginWithin(source: ZoomSource, pop: () => void, interactive: boolean): Promise<ZoomCloseHandle | null> {
@@ -119,6 +125,27 @@ export function useZoomClose(routeKey: string) {
     else navigation.goBack();
   }).current;
 
+  // Build 11.3 watchdog: whatever swallowed the Back (a close that never popped, a still that never
+  // came, a removal held by a stale prevention), the chat leaves BACK_WATCHDOG_MS after the Back.
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arm = useRef(() => {
+    if (watchdog.current) clearTimeout(watchdog.current);
+    watchdog.current = setTimeout(() => {
+      watchdog.current = null;
+      const state = navigation.getState();
+      if (state.routes[state.index]?.key !== routeKey) return;
+      reset();
+      disablePrevention.current();
+      navigation.dispatch({ ...StackActions.pop(), source: routeKey, target: state.key });
+    }, BACK_WATCHDOG_MS);
+  }).current;
+  useEffect(
+    () => () => {
+      if (watchdog.current) clearTimeout(watchdog.current);
+    },
+    [],
+  );
+
   // A blur (the agent page, any push over the chat) or a new focus ends any close still under way.
   useEffect(() => {
     const subscriptions = [navigation.addListener("blur", reset), navigation.addListener("focus", reset)];
@@ -131,6 +158,7 @@ export function useZoomClose(routeKey: string) {
   // goes back: the removal is held, the still covers the chat, then the chat pops under it.
   disablePrevention.current = usePreventRemove(zoomed, ({ data }) => {
     const action = data.action;
+    if (action.type === "GO_BACK" || action.type === "POP") arm();
     if (pending.current) {
       // Build 11.3: a Back while a close is under way (or one that never ended) never waits for it:
       // the close is dropped (its still springs away) and the chat pops now.
@@ -184,6 +212,7 @@ export function useZoomClose(routeKey: string) {
       }),
       module.addListener("onBackCancel", reset),
       module.addListener("onBackInvoke", () => {
+        if (navigation.isFocused()) arm();
         const current = gesture.current;
         gesture.current = null;
         if (!current) {
@@ -213,7 +242,7 @@ export function useZoomClose(routeKey: string) {
     return () => {
       for (const subscription of subscriptions) subscription.remove();
     };
-  }, [active, navigation, pop, plain, reset, startPending, routeKey]);
+  }, [active, navigation, pop, plain, reset, startPending, routeKey, arm]);
 
   // The predictive callback is on only while this zoom-opened chat is in front and nothing in it takes
   // Back first; otherwise React Native and react-native-screens handle Back exactly as before.

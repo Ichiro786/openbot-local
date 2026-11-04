@@ -1,6 +1,5 @@
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
-import { useThemeColor } from "heroui-native/hooks";
 import { type RefObject, useId, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
@@ -12,14 +11,23 @@ import { useBlurBudget } from "./blurBudget";
 /** Build 11.3: a strong frost, so text under the bar is unreadable (Syed's reference). */
 const INTENSITY = 40;
 const REDUCTION = 4;
-/** The dim at the top of the band (background colour alpha), fading out with the blur. */
-const DIM = 0.35;
+/**
+ * The dim at the top of the band, fading out with the blur. Build 11.3 (Syed): neutral black, never a
+ * theme or agent colour, so the frost adds no tint of its own.
+ */
+const DIM_DARK = 0.32;
+const DIM_LIGHT = 0.12;
+const STEPS = 24;
 
-/** Opaque from 0 to `solid`, then a smoothstep down to 0 at the bottom edge: no hard line. */
+/**
+ * Opaque from 0 to `solid`, then a long smootherstep down to 0 at the bottom edge (Syed: no visible
+ * edge, it blends into the content). Blur strength and dim follow the same curve, so the blur seems to
+ * thin out progressively instead of stopping at a line.
+ */
 function stops(solid: number) {
-  const ramp = Array.from({ length: 13 }, (_, index) => {
-    const t = index / 12;
-    return { offset: solid + (1 - solid) * t, opacity: 1 - t * t * (3 - 2 * t) };
+  const ramp = Array.from({ length: STEPS + 1 }, (_, index) => {
+    const t = index / STEPS;
+    return { offset: solid + (1 - solid) * t, opacity: 1 - t * t * t * (t * (t * 6 - 15) + 10) };
   });
   return [{ offset: 0, opacity: 1 }, ...ramp];
 }
@@ -47,7 +55,6 @@ export function GlassBand({
   style?: object;
 }) {
   const dark = useUniwind().theme === "dark";
-  const background = String(useThemeColor("background") ?? "#000");
   const id = useId().replaceAll(":", "");
   const [ready, setReady] = useState(false);
   const running = ready && shown && ANDROID_BLUR && Boolean(target?.current);
@@ -94,7 +101,12 @@ export function GlassBand({
         <Defs>
           <LinearGradient id={`band-dim-${id}`} x1="0" x2="0" y1="0" y2="1">
             {ramp.map(({ offset, opacity }) => (
-              <Stop key={offset} offset={offset} stopColor={background} stopOpacity={opacity * DIM} />
+              <Stop
+                key={offset}
+                offset={offset}
+                stopColor="#000000"
+                stopOpacity={opacity * (dark ? DIM_DARK : DIM_LIGHT)}
+              />
             ))}
           </LinearGradient>
         </Defs>

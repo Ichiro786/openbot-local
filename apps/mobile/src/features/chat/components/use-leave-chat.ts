@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
-import { type ParamListBase, useNavigation } from "expo-router/react-navigation";
+import { type ParamListBase, StackActions, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
 
@@ -9,9 +9,12 @@ import { KeyboardController } from "react-native-keyboard-controller";
  * screen by then (a Back that something swallowed, a transition that never reported its end) never
  * holds Back again.
  */
-const HOLD_MS = 900;
-/** Build 11.3: a Back that has left the chat on top this long is sent once more (the chat must leave). */
-const RETRY_MS = 1200;
+const HOLD_MS = 300;
+/**
+ * Build 11.3: a Back that has left the chat on top this long pops it once more, the plain way (Syed:
+ * Back still stuck with a 1.2 s retry; a Back must leave within ~300 ms for any reason).
+ */
+const RETRY_MS = 300;
 
 /**
  * Leaves the chat, once. A swipe back can close the chat while Back is pressed. Two closes put the
@@ -25,6 +28,7 @@ const RETRY_MS = 1200;
  */
 export function useLeaveChat(): () => void {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
+  const route = useRoute();
   const closingAt = useRef(0);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -60,9 +64,10 @@ export function useLeaveChat(): () => void {
       retry.current = null;
       // Still on top: the first Back was swallowed. This one meets no close in progress (useZoomClose
       // pops a repeated Back the plain way), so the chat leaves.
-      if (!navigation.isFocused()) return;
+      const state = navigation.getState();
+      if (state.routes[state.index]?.key !== route.key) return;
       closingAt.current = Date.now();
-      navigation.goBack();
+      navigation.dispatch({ ...StackActions.pop(), source: route.key, target: state.key });
     }, RETRY_MS);
-  }, [navigation]);
+  }, [navigation, route.key]);
 }

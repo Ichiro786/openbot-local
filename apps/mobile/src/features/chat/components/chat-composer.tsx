@@ -66,7 +66,6 @@ import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { Button } from "@/shared/components/button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
-import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import {
   COMPOSER_BAR_INSET,
   COMPOSER_FIELD_VERTICAL_PADDING,
@@ -80,9 +79,10 @@ import { isAndroid } from "@/shared/lib/platform";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";
 import { ComposerFrost } from "@/shared/motion/ComposerFrost";
-import { glassMenuHostBox, openGlassMenu, useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { glassMenuHostBox, openGlassMenu, useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { menu as menuTokens } from "@/shared/motion/tokens";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
 import { applyMarkdownListEdit, markdownListReturn } from "../model/composer-lists";
 import { largePastedText } from "../model/composer-paste";
@@ -370,7 +370,7 @@ export const ChatComposer = memo(function ChatComposer({
   // Build 10: frosted glass (ColorOS motion, Android 12+, a target from the chat).
   const colorOSFrost = useColorOSMotion().enabled;
   const frosted = isAndroid && ANDROID_BLUR && !liquidGlassAvailable && colorOSFrost && frostTarget !== undefined;
-  const doubleFrostMenu = useGlassMenuDoubleFrost();
+  const frostMenu = useGlassMenuFrostOpen();
   // A live conversation turns the card into a call bar of the full width, not the round button.
   const voiceBar = voice?.bar;
   const barMode = Boolean(voiceBar);
@@ -1227,9 +1227,9 @@ export const ChatComposer = memo(function ChatComposer({
             {frosted && frostTarget ? (
               <ComposerFrost
                 target={frostTarget}
-                // At most two blurs on the chat: a message menu brings two, so the composer pauses.
-                // Build 11: the + menu is the second blur (header band + menu), so the composer snaps solid.
-                shown={!voiceOpen && !doubleFrostMenu && !plusMenuOpen}
+                // At most two blurs on the chat. Build 11.3: ANY frosted menu (thread menu, + menu, message
+                // menu) takes this blur, so the header band stays frosted under a one-blur menu.
+                shown={!voiceOpen && !frostMenu && !plusMenuOpen}
                 solid={String(fallbackBackground)}
                 radius={CARD_RADIUS}
               />
