@@ -101,6 +101,7 @@ import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 
 export type { OptionalRouteCodec } from "./admin-wire";
+
 import { WHATSAPP_MOBILE_CODECS } from "./whatsapp-mobile-v1";
 
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([

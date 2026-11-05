@@ -9,8 +9,8 @@ import { GlassButton } from "@/shared/glass/GlassButton";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { END_X } from "@/shared/lib/text-direction";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { PlanLimitRing } from "./plan-limit-ring";
 
 const RING_SIZE = 30;

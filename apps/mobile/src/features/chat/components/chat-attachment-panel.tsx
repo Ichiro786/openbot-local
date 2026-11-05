@@ -23,8 +23,8 @@ import { useColumnWidth } from "@/shared/components/adaptive-split";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
-import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import { END_X } from "@/shared/lib/text-direction";
+import { addChatBackListener } from "@/shared/motion/predictiveBack";
 import { ChatCameraContent } from "./chat-camera-panel";
 import type { ChatAttachmentAnchor, ChatAttachments } from "./use-chat-attachments";
 
