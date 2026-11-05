@@ -1,7 +1,17 @@
-import { makeImageFromView, type SkImage, Skia } from "@shopify/react-native-skia";
-import { createContext, createRef, type PropsWithChildren, type RefObject, useContext } from "react";
+import { Canvas, makeImageFromView, Rect, type SkImage, Skia } from "@shopify/react-native-skia";
+import {
+  createContext,
+  createRef,
+  type PropsWithChildren,
+  type RefObject,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
+import { isAndroid } from "@/shared/lib/platform";
 import { windowCapture } from "./predictiveBack";
+import { useColorOSMotion } from "./useColorOSMotion";
 
 type ColorOSRoot = {
   /**
@@ -84,9 +94,40 @@ export function ColorOSMotionRoot({ children, overlay }: PropsWithChildren<{ ove
           {children}
         </View>
         {overlay}
+        <SkiaWarmUp />
       </View>
     </ColorOSRootContext.Provider>
   );
 }
 
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+/**
+ * Build 11.3 council D13: the first Skia surface of a session paid the GL context and first-surface
+ * cost on the first zoom open/close (one 418 ms frame on the emulator). With ColorOS motion on Android,
+ * one tiny canvas draws once a while after start (the app is idle by then) and unmounts again.
+ */
+const WARM_START_MS = 1500;
+const WARM_HOLD_MS = 1000;
+function SkiaWarmUp() {
+  const { enabled } = useColorOSMotion();
+  const [phase, setPhase] = useState<"wait" | "on" | "done">("wait");
+  const want = isAndroid && enabled && phase !== "done";
+  useEffect(() => {
+    if (!want) return;
+    const timer = setTimeout(
+      () => setPhase(phase === "wait" ? "on" : "done"),
+      phase === "wait" ? WARM_START_MS : WARM_HOLD_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [want, phase]);
+  if (!want || phase !== "on") return null;
+  return (
+    <Canvas pointerEvents="none" style={styles.warm} importantForAccessibility="no-hide-descendants">
+      <Rect x={0} y={0} width={2} height={2} color="#000" />
+    </Canvas>
+  );
+}
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  warm: { position: "absolute", left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
+});
