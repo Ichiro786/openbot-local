@@ -7,6 +7,7 @@ import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { snapshotNavigator } from "@/shared/motion/ColorOSMotionRoot";
+import { predictiveBack } from "@/shared/motion/predictiveBack";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { zoomCovering, zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
 import { measureZoomRow, registerZoomRow } from "@/shared/motion/zoomPush";
@@ -123,7 +124,8 @@ export function ChatLinkPressable({
           const openedChat = chatId;
           const source = {
             skeletonKey: chatId,
-            home: snapshotNavigator(),
+            // Build 11.3 motion B3: only a predictive gesture shows the home still; no capture without one.
+            home: predictiveBack ? snapshotNavigator() : Promise.resolve(null),
             // Build 11.3 zoomfix: this row if it still shows the chat, else the chat's current row (pinned or not).
             measure: (done: (rect: { x: number; y: number; width: number; height: number } | null) => void) => {
               const row = mounted.current && shownChat.current === openedChat ? self.current : null;

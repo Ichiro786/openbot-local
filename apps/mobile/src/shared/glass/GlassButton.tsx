@@ -213,6 +213,7 @@ export function GlassButton({
   accessibilityState,
   accessibilityValue,
   onPress,
+  onPressIn,
   onLongPress,
   disabled = false,
   hitSlop,
@@ -233,6 +234,8 @@ export function GlassButton({
   accessibilityState?: { expanded?: boolean; selected?: boolean };
   accessibilityValue?: AccessibilityValue;
   onPress?: () => void;
+  /** Build 11.3 motion B3: a head start for work the press will need (the zoom-close still). */
+  onPressIn?: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
   hitSlop?: number;
@@ -254,6 +257,7 @@ export function GlassButton({
       // A 48 dp target round a 40 dp button.
       hitSlop={hitSlop ?? Math.max(0, (48 - size) / 2)}
       onPress={onPress}
+      onPressIn={onPressIn}
       onLongPress={onLongPress}
       style={style}
       {...handlers}

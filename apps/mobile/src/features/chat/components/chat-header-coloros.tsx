@@ -26,6 +26,7 @@ import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/
 import { useText } from "@/shared/lib/text";
 import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { prewarmZoomClose } from "@/shared/motion/ZoomCloseOverlay";
 import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import type { ChatTarget } from "../model/chat-target";
 
@@ -224,6 +225,7 @@ export function ColorOSChatHeader({
               liquidGlassAvailable={false}
               glassMaterial={material}
               press={backPress}
+              onPressIn={prewarmZoomClose}
               onPress={onBack}
             >
               <ArrowLeft color={iconColor} size={24} strokeWidth={2} />

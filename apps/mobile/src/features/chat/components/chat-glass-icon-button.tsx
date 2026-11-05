@@ -33,6 +33,8 @@ interface ChatGlassButtonProps extends PropsWithChildren {
   glassMaterial?: "solid" | "band";
   /** Build 11 (ColorOS): shared press values for a `GlassBand` mask. */
   press?: GlassPress;
+  /** Build 11.3 motion B3 (ColorOS glass only): runs on press-in. */
+  onPressIn?: () => void;
 }
 
 /** The floating control above the composer: a glass capsule with an icon, a label, or both. */
@@ -48,6 +50,7 @@ export function ChatGlassButton({
   hidden,
   liquidGlassAvailable,
   onPress,
+  onPressIn,
   width,
   glassMaterial = "solid",
   press,
@@ -82,6 +85,7 @@ export function ChatGlassButton({
           disabled={disabled || hidden}
           hitSlop={inset + 4}
           onPress={onPress}
+          onPressIn={onPressIn}
           contentPadding={width === undefined ? 4 : 0}
         >
           <View className={className}>{children}</View>

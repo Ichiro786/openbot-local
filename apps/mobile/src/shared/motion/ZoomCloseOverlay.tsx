@@ -93,6 +93,40 @@ const shown = makeMutable(0);
 const preview = makeMutable(0);
 const previewSide = makeMutable(1);
 
+/**
+ * Build 11.3 motion B3: the header Back's still, started on press-in, so the close has it when the tap
+ * lands and starts on that frame (a tap is ~50-150 ms). Used once, within WARM_MS, else disposed.
+ */
+const WARM_MS = 400;
+let warm: { at: number; still: Promise<SkImage | null> } | null = null;
+
+function disposeStill(still: Promise<SkImage | null>) {
+  void still.then(
+    (image) => disposeLater(image),
+    () => undefined,
+  );
+}
+
+export function prewarmZoomClose() {
+  if (!hostMounted || warm) return;
+  const entry = { at: Date.now(), still: snapshotNavigator() };
+  warm = entry;
+  setTimeout(() => {
+    if (warm !== entry) return;
+    warm = null;
+    disposeStill(entry.still);
+  }, WARM_MS);
+}
+
+function takeWarm(): Promise<SkImage | null> | null {
+  const entry = warm;
+  warm = null;
+  if (!entry) return null;
+  if (Date.now() - entry.at < WARM_MS) return entry.still;
+  disposeStill(entry.still);
+  return null;
+}
+
 export function zoomClosing(): boolean {
   return useCloseStore.getState().request !== null;
 }
@@ -196,7 +230,7 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
     });
   land(false, false);
 
-  void snapshotNavigator().then(
+  void (takeWarm() ?? snapshotNavigator()).then(
     (chat) => {
       // Late (the chat already popped: the capture would show the home screen) or dropped: unused.
       if (!chat) return;
