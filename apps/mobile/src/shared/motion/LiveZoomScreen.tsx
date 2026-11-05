@@ -344,7 +344,10 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
   return (
     <View style={styles.fill}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
+      {/* While the open runs, the chat is drawn once into a GPU layer and each frame only composites it
+          (scaled, faded); off once settled, before the frosts and deferred content come on. */}
       <Animated.View
+        renderToHardwareTextureAndroid={!settled}
         style={[
           styles.fill,
           styles.frame,
