@@ -44,6 +44,36 @@ const closing = new Set<string>();
 /** For each route the stack has seen: true while it is a zoom push that still has its animation off. */
 const pushes = routeMemo<boolean>();
 
+/**
+ * Build 11.3 motion: the zoom-open's surface (ZoomOpenOverlay), for the chat's Back and the close's
+ * still. `reverse` is set while the surface still covers the pushed chat: a Back then shrinks the
+ * surface back into its row instead of closing a chat the user has not seen.
+ */
+let openSurface: { owner: number; reverse: (() => boolean) | null } | null = null;
+
+export function setZoomOpenSurface(owner: number, reverse: (() => boolean) | null): void {
+  openSurface = { owner, reverse };
+}
+
+export function clearZoomOpenSurface(owner: number): void {
+  if (openSurface?.owner === owner) openSurface = null;
+}
+
+/** A zoom-open surface is on screen (growing, covering or dissolving). */
+export function zoomOpenSurfaceUp(): boolean {
+  return openSurface !== null;
+}
+
+/** The open's surface still covers the pushed chat (a back gesture then has nothing to preview). */
+export function zoomOpenHolding(): boolean {
+  return Boolean(openSurface?.reverse);
+}
+
+/** Back during the open: the surface springs back into its row. False when no open covers a chat. */
+export function zoomOpenReverse(): boolean {
+  return openSurface?.reverse?.() ?? false;
+}
+
 /** Called by the zoom overlay right before it navigates; `shown` runs once the pushed route has appeared. */
 export function armZoomPush(shown: () => void, source: ZoomSource | null = null): void {
   armedUntil = Date.now() + ARM_MS;

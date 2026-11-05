@@ -1,6 +1,7 @@
+import { Canvas, Image } from "@shopify/react-native-skia";
 import { useThemeColor } from "heroui-native/hooks";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StyleSheet, useColorScheme, useWindowDimensions, View } from "react-native";
+import { BackHandler, StyleSheet, useColorScheme, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -12,13 +13,14 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Uniwind } from "uniwind";
 import { create } from "zustand";
 import { COLOROS_CHAT_HEADER_GEOMETRY } from "@/features/chat/components/chat-header-coloros";
 import { glass } from "@/shared/glass/tokens";
 import { COMPOSER_BAR_INSET, composerBottomGap, restingComposerHeight } from "@/shared/lib/composer-metrics";
-import { zoomSkeletonFor } from "./zoomSkeleton";
 import { zoom } from "./tokens";
-import { armZoomPush, disarmZoomPush, type ZoomSource } from "./zoomPush";
+import { armZoomPush, clearZoomOpenSurface, disarmZoomPush, setZoomOpenSurface, type ZoomSource } from "./zoomPush";
+import { disposeStillLater, takeChatStill, zoomSkeletonFor } from "./zoomSkeleton";
 
 export type ZoomRect = { x: number; y: number; width: number; height: number };
 
@@ -46,6 +48,8 @@ const SHOWN_SAFETY_MS = 600;
 /** Build 11: one dissolve of the surface (and its skeleton) off the painted chat. 11.3 polish: 160 → 120 ms. */
 const DISSOLVE_MS = 120;
 const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
+/** Build 11.3 motion: the latest a reversed open (Back during the open) clears, whatever its spring does. */
+const REVERSE_SAFETY_MS = 900;
 
 /**
  * Opens a bot or chat with the ColorOS zoom: a surface grows out of the source rect to the full
@@ -103,6 +107,10 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   // Touches pass through once the route is pushed, so a stuck overlay can never block the app.
   const [passThrough, setPassThrough] = useState(false);
   const { rect, radius, navigate, source } = request;
+  // Build 11.3 motion (open hand-off): the still of this chat from its last zoom-close, grown in place of
+  // the skeleton (owned here: disposed on unmount). Null on a chat's first open: the skeleton.
+  const [still] = useState(() => takeChatStill(source?.skeletonKey, width, height, Uniwind.currentTheme));
+  const hasStill = still !== null;
 
   const uncovered = useRef(false);
   const shownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,10 +120,38 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     if (uncovered.current) return;
     uncovered.current = true;
     if (shownTimer.current) clearTimeout(shownTimer.current);
+    setZoomOpenSurface(request.key, null);
     // Clear whether or not the fade completes (an interrupted animation reports finished=false).
     cover.value = withTiming(0, { duration: DISSOLVE_MS, easing: DISSOLVE_EASING }, () => {
       runOnJS(clear)();
     });
+  };
+
+  const clearMine = () => {
+    if (useZoomStore.getState().request === request) clear();
+  };
+  // Build 11.3 motion: Back before the chat uncovered (a predictive gesture, system Back, the header
+  // Back under the surface): the surface shrinks back into its row from where it is, on the close's
+  // spring, while the chat is popped under it (by its own Back, or the stack's). The chat never flashes.
+  // Before the push it simply never navigates. Clears on the spring's end (or its interruption), and in
+  // any case after REVERSE_SAFETY_MS.
+  const reverse = () => {
+    if (uncovered.current) return false;
+    uncovered.current = true;
+    setZoomOpenSurface(request.key, null);
+    if (shownTimer.current) clearTimeout(shownTimer.current);
+    if (!done.current) {
+      done.current = true;
+      navigated.value = true;
+      // Never armed: the home still is still ours.
+      void source?.home.then((image) => image?.dispose());
+    }
+    disarmZoomPush();
+    shownTimer.current = setTimeout(clearMine, REVERSE_SAFETY_MS);
+    p.value = withSpring(0, zoom.closeSpring, () => {
+      runOnJS(clearMine)();
+    });
+    return true;
   };
 
   const finish = () => {
@@ -126,6 +162,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     // Build 10: the pushed chat takes no native slide under the surface (one open animation).
     // Build 11: `uncover` runs when the chat marks itself painted, or SHOWN_SAFETY_MS after the push.
     armZoomPush(uncover, source);
+    setZoomOpenSurface(request.key, reverse);
     navigate();
   };
 
@@ -135,12 +172,22 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only
   useLayoutEffect(() => {
     p.value = withSpring(1, zoom.openSpring);
+    setZoomOpenSurface(request.key, null);
     const safety = setTimeout(() => {
       if (!done.current) finish();
     }, SAFETY_MS);
+    // Build 11.3 motion: a Back no chat listener takes (the chat is not pushed or not mounted yet) still
+    // reverses the open. Before the push there is nothing to pop: the Back is ours. After it the stack pops.
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      const pushed = done.current;
+      return reverse() && !pushed;
+    });
     return () => {
       clearTimeout(safety);
+      back.remove();
       if (shownTimer.current) clearTimeout(shownTimer.current);
+      clearZoomOpenSurface(request.key);
+      disposeStillLater(still);
     };
   }, []);
 
@@ -162,14 +209,19 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
       width: interpolate(v, [0, 1], [rect.width, width]),
       height: interpolate(v, [0, 1], [rect.height, height]),
       borderRadius: interpolate(v, [0, 1], [radius, zoom.endRadius]),
-      opacity: cover.value * interpolate(v, [0, zoom.fillFade[0], zoom.fillFade[1]], [0, 0.6, 1], "clamp"),
+      // With a still: the close's own fade backwards (the chat is in full from p 0.15, as it leaves the close).
+      opacity:
+        cover.value *
+        (hasStill
+          ? interpolate(v, [0, 0.15], [0, 1], "clamp")
+          : interpolate(v, [0, zoom.fillFade[0], zoom.fillFade[1]], [0, 0.6, 1], "clamp")),
     };
   });
   const dim = useAnimatedStyle(() => ({ opacity: zoom.backgroundDim * Math.min(p.value, 1) * cover.value }));
   // Build 11: the chat's silhouette fades in on the surface, so the hold before the chat is ready
   // already looks like the chat instead of a flat colour (spec §3 target).
   const skeletonStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(p.value, [0.45, 0.9], [0, 1], "clamp"),
+    opacity: hasStill ? 1 : interpolate(p.value, [0.45, 0.9], [0, 1], "clamp"),
     // Held at its screen place while the surface grows around it.
     transform: [
       { translateX: -interpolate(p.value, [0, 1], [rect.x, 0]) },
@@ -185,7 +237,13 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
         style={[styles.surface, { backgroundColor: String(surface ?? "#000") }, surfaceStyle]}
       >
         <Animated.View style={[{ width, height }, skeletonStyle]}>
-          <ChatZoomSkeleton skeletonKey={source?.skeletonKey} />
+          {still ? (
+            <Canvas style={{ width, height }}>
+              <Image image={still} x={0} y={0} width={width} height={height} fit="fill" />
+            </Canvas>
+          ) : (
+            <ChatZoomSkeleton skeletonKey={source?.skeletonKey} />
+          )}
         </Animated.View>
       </Animated.View>
     </View>

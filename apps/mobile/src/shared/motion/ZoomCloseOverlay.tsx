@@ -1,7 +1,7 @@
 import { Canvas, Group, Image, type SkImage, Skia, Rect as SkiaRect, vec } from "@shopify/react-native-skia";
 import { useThemeColor } from "heroui-native/hooks";
 import { useEffect } from "react";
-import { Dimensions, StyleSheet, useWindowDimensions } from "react-native";
+import { Dimensions, Keyboard, StyleSheet, useWindowDimensions } from "react-native";
 import {
   cancelAnimation,
   Easing,
@@ -11,10 +11,12 @@ import {
   useDerivedValue,
   withSpring,
 } from "react-native-reanimated";
+import { Uniwind } from "uniwind";
 import { create } from "zustand";
 import { snapshotNavigator } from "./ColorOSMotionRoot";
 import { zoom } from "./tokens";
-import type { ZoomSource } from "./zoomPush";
+import { type ZoomSource, zoomOpenSurfaceUp } from "./zoomPush";
+import { keepChatStill } from "./zoomSkeleton";
 
 /**
  * Build 11.2: closing a zoom-opened chat reverses its zoom-open. A still of the chat stands in for it
@@ -168,6 +170,12 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
   target.value = usable(source.rect) ? source.rect : { x: 0, y: 0, width: 0, height: 0 };
   centre.value = known ? 0 : 1;
   const key = nextKey++;
+  // Build 11.3 motion (open hand-off): a close that pops keeps its still for this chat's next zoom-open.
+  // Not with the keyboard up (the reopened chat has it down, and the still would show the gap), nor while
+  // the open's surface is still on screen (the window still would show it).
+  const { width: stillWidth, height: stillHeight } = Dimensions.get("window");
+  const keepAs = source.skeletonKey && !Keyboard.isVisible() && !zoomOpenSurfaceUp() ? source.skeletonKey : null;
+  const stillTheme = Uniwind.currentTheme;
   let committed = false;
   let popped = false;
   let finished = false;
@@ -192,7 +200,9 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
     if (request?.key === key) {
       useCloseStore.setState({ request: null });
       // The home still is the route's (forgetZoomRoute disposes it): never disposed here.
-      disposeLater(request.chat);
+      if (popped && keepAs && request.chat)
+        keepChatStill(keepAs, { image: request.chat, width: stillWidth, height: stillHeight, theme: stillTheme });
+      else disposeLater(request.chat);
     }
     shown.value = 0;
   };

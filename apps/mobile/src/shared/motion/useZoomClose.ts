@@ -6,7 +6,7 @@ import { isAndroid } from "@/shared/lib/platform";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
 import { type ZoomCloseHandle, zoomCloseStart } from "./ZoomCloseOverlay";
-import { markZoomClosing, unmarkZoomClosing, zoomSource } from "./zoomPush";
+import { markZoomClosing, unmarkZoomClosing, zoomOpenHolding, zoomOpenReverse, zoomSource } from "./zoomPush";
 
 /**
  * Build 11.3 zoomfix: the longest any Back leaves a zoom-opened chat on top. Whatever happens to the
@@ -94,7 +94,8 @@ export function useZoomClose(routeKey: string) {
         api.popNow();
       }, BACK_HARD_MS);
       leaving.current = { popped: false, timer };
-      const handle = gesture.current ?? zoomCloseStart(source, false);
+      // Build 11.3 motion: still under the open's surface, the surface itself shrinks back into the row.
+      const handle = gesture.current ?? (zoomOpenReverse() ? null : zoomCloseStart(source, false));
       gesture.current = null;
       // The pop takes animation "none": the overlay plays the close. The options function reads the mark.
       markZoomClosing(routeKey);
@@ -154,7 +155,9 @@ export function useZoomClose(routeKey: string) {
     const subscriptions = [
       module.addListener("onBackStart", ({ edge }) => {
         api.dropGesture();
-        if (leaving.current || !navigation.isFocused()) return;
+        // Build 11.3 motion: no preview of a chat still under the open's surface (it flashed the chat for
+        // a frame); the Back reverses the open instead.
+        if (leaving.current || !navigation.isFocused() || zoomOpenHolding()) return;
         const source = zoomSource(routeKey);
         if (source) gesture.current = zoomCloseStart(source, true, edge);
       }),
