@@ -232,7 +232,10 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
     // Build 11.3 zoomfix overlay (zoomCloseStart, visual only): same marks on its own anchors.
     orep("  let committed = false;", "  let committed = false;\n  let __maxP = 0;\n  const __t0 = Date.now();");
     // Build 11.3 motion B1: the gesture drives a decelerated preview instead of p.
-    const __progLine = o.includes("      preview.value = decelerate(Math.min(Math.max(value, 0), 1));")
+    // Build 11.3 council A2: the progress handler records lastProgress first.
+    const __progLine = o.includes("      lastProgress = value;")
+      ? "      lastProgress = value;"
+      : o.includes("      preview.value = decelerate(Math.min(Math.max(value, 0), 1));")
       ? "      preview.value = decelerate(Math.min(Math.max(value, 0), 1));"
       : "      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);";
     orep(__progLine, `      __maxP = Math.max(__maxP, value);\n${__progLine}`);
