@@ -8,10 +8,19 @@ import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { snapshotNavigator } from "@/shared/motion/ColorOSMotionRoot";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
+import { zoomCovering, zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
 import { measureZoomRow, registerZoomRow } from "@/shared/motion/zoomPush";
 
 export const ChatNavigationGateContext = createContext<ReturnType<typeof createChatNavigationGate> | null>(null);
+
+/**
+ * Build 11.3 batch 1 (F05): the tap whose row is being measured for a zoom-open (0: none). Reserved
+ * at the tap, before the async measure, so a second tap while it measures (or while a zoom is up) is
+ * dropped instead of navigating a second time. A measure that never answers frees it after the bound.
+ */
+let measuringTap = 0;
+let tapSeq = 0;
+const MEASURE_BOUND_MS = 400;
 
 // Link injects its handler here. Defer that exact handler rather than recreating navigation with
 // router.push.
@@ -85,7 +94,26 @@ export function ChatLinkPressable({
           go();
           return;
         }
+        if (measuringTap || zoomCovering()) return;
+        const tap = ++tapSeq;
+        measuringTap = tap;
+        const settle = () => {
+          if (measuringTap !== tap) return false;
+          measuringTap = 0;
+          clearTimeout(bound);
+          return true;
+        };
+        const bound = setTimeout(() => {
+          if (settle() && navigation.isFocused()) go();
+        }, MEASURE_BOUND_MS);
         node.measureInWindow((x, y, width, height) => {
+          // A zoom another row started meanwhile owns this open (its tap navigates once).
+          if (!settle() || zoomCovering()) return;
+          // The screen lost focus while measuring: no zoom; the home gate still waits for its focus.
+          if (!navigation.isFocused()) {
+            if (gate && route.name === "connected") go();
+            return;
+          }
           if (!width || !height) {
             go();
             return;
