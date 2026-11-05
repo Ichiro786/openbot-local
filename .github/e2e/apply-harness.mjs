@@ -301,7 +301,7 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts") && existsSync(".
     const view = __realRow.current;
     if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
     view.measureInWindow((x, y, width, height) => {
-      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0, { home: __snap(), measure: (done) => { const v = __realRow.current; if (!v) { done(null); return; } v.measureInWindow((a, b, c, d) => done(c && d ? { x: a, y: b, width: c, height: d } : null)); } })) go();
+      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0, { skeletonKey: "e2e-agent", home: __snap(), measure: (done) => { const v = __realRow.current; if (!v) { done(null); return; } v.measureInWindow((a, b, c, d) => done(c && d ? { x: a, y: b, width: c, height: d } : null)); } })) go();
     });
   };`).replace(row, `${row}
         <Pressable ref={__realRow} accessibilityRole="button" accessibilityLabel="E2E Real chat" onPress={__openReal} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#1f6f8b", justifyContent: "center", paddingHorizontal: 16 }}>
