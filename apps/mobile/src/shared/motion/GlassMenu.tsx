@@ -6,7 +6,6 @@ import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Plus from "lucide-react-native/icons/plus";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  BackHandler,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   Pressable,
@@ -37,6 +36,7 @@ import { GlintRim } from "@/shared/glass/GlintRim";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { currentFrostTarget } from "./frostTarget";
+import { addChatBackListener } from "./predictiveBack";
 import { menu } from "./tokens";
 import { useColorOSMotion } from "./useColorOSMotion";
 
@@ -462,17 +462,24 @@ function GlassMenuOverlay({
     dismiss(entry.id);
   };
 
+  // Back leaves the emoji grid, then a sub-menu, then closes the menu.
+  const back = useRef(() => {});
+  back.current = () => {
+    if (pickerOpen) {
+      setPickerOpen(false);
+    } else if (path.length > 0) goLevel(null);
+    else dismiss(null);
+  };
+  // Build 11.3 batch 1 (F04): a chat Back hold (once per menu, released on unmount), so the chat's
+  // predictive callback is off while the menu shows and both hardware and predictive Back reach this
+  // listener first. A listener only: it never holds the chat's removal.
   useEffect(() => {
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      // Back leaves the emoji grid, then a sub-menu, then closes the menu.
-      if (pickerOpen) {
-        setPickerOpen(false);
-      } else if (path.length > 0) goLevel(null);
-      else dismiss(null);
+    const subscription = addChatBackListener(() => {
+      back.current();
       return true;
     });
     return () => subscription.remove();
-  });
+  }, []);
 
   const h = frame.height;
   const rowAt = (y: number) => {
