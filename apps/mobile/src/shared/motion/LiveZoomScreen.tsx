@@ -4,6 +4,9 @@ import { useThemeColor } from "heroui-native/hooks";
 import { type ComponentType, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BackHandler, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
+  type AnimationCallback,
+  type AnimationObject,
+  defineAnimation,
   Easing,
   type SharedValue,
   useAnimatedStyle,
@@ -18,21 +21,32 @@ import { type LiveZoom, LiveZoomSettledContext, liveZoomOf, releaseLiveZoomHome 
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
 
-/** ColorOS-like open: emphasized decelerate. The close is the same curve played backwards. */
-const OPEN_MS = 300;
-const CLOSE_MS = 260;
-const OPEN_EASING = Easing.bezier(0.05, 0.7, 0.1, 1);
-const CLOSE_EASING = Easing.bezier(0.3, 0, 0.8, 0.15);
-/** The open settles by OPEN_MS + this at the latest (its deferred work then starts anyway). */
-const SETTLE_SLACK_MS = 250;
-/** The chat's scale when closed, and how far the predictive gesture shrinks it more. */
-const CLOSED_SCALE = 0.92;
+/**
+ * The open and close run one LINEAR clock (`visible`, 0 closed .. 1 open); the frame's style eases it.
+ * The open's ease starts gently (no 60%-in-one-frame jump, the #97 "just appears"), never overshoots,
+ * and the close is the same clock run backwards: the exact reverse, accelerating back into the row.
+ */
+const OPEN_MS = 360;
+const CLOSE_MS = 300;
+const EASE = Easing.bezierFn(0.2, 0, 0, 1);
+/** The chat fades in over this share of the open's time (and out over the close's last share). */
+const FADE_SHARE = 0.55;
+/**
+ * The open clock advances at most this much per drawn frame: a slow frame (the chat's mount, a busy
+ * render thread) never skips the open, so its first drawn frame is the start and every frame moves.
+ */
+const MAX_STEP_MS = 25;
+/** The open settles by this at the latest (its deferred work then starts anyway). */
+const SETTLE_BOUND_MS = 1200;
+/** The chat's scale when closed (around the tapped row), and how far the predictive gesture shrinks it more. */
+const CLOSED_SCALE = 0.88;
 const GESTURE_SCALE = 0.1;
 /** How far the gesture shifts the chat toward the finger, as a share of the width. */
 const GESTURE_SHIFT = 0.06;
-const RADIUS = 28;
+/** When closed, the chat's centre sits this share of the way from the screen's centre to the row. */
+const ROW_PULL = 0.2;
 /** Home dims at most this much under the open chat. */
-const DIM = 0.25;
+const DIM = 0.2;
 const SPRING_BACK = { damping: 22, stiffness: 260 };
 /**
  * The longest any Back leaves a zoomed chat on top: its pop goes out when the close animation ends,
@@ -41,6 +55,34 @@ const SPRING_BACK = { damping: 22, stiffness: 260 };
 export const BACK_HARD_MS = CLOSE_MS + 120;
 /** A pop that left the chat on top this long after the hard bound: the chat shows again, Back works again. */
 const RECOVER_MS = 300;
+/**
+ * The open clock: from where it is to 1 in OPEN_MS of drawn frames, each frame advancing by its real
+ * time but at most MAX_STEP_MS (first frame: 0). Declared before every worklet that uses it.
+ */
+function openClock(callback: AnimationCallback): number {
+  "worklet";
+  const animation = defineAnimation<AnimationObject>(1, () => {
+    "worklet";
+    return {
+      onFrame: (animation: { current: number; last: number }, now: number) => {
+        const step = animation.last < 0 ? 0 : Math.min(MAX_STEP_MS, Math.max(0, now - animation.last));
+        animation.last = now;
+        animation.current = Math.min(1, animation.current + step / OPEN_MS);
+        return animation.current >= 1;
+      },
+      onStart: (animation: { current: number; last: number }, value: number) => {
+        animation.current = Math.max(0, Math.min(1, value));
+        animation.last = -1;
+      },
+      callback,
+      current: 0,
+      toValue: 1,
+      last: -1,
+    };
+  });
+  // biome-ignore lint/nursery/noUnsafeTypeAssertion: a Reanimated animation object stands in for the value it animates (as withTiming's does).
+  return animation as unknown as number;
+}
 /** Diagnostic (council D18): a header Back soon after a cancelled gesture is logged. */
 const CANCEL_LOG_MS = 1500;
 let gestureCancelledAt = 0;
@@ -120,7 +162,8 @@ function useLiveZoomMotion(
       gesture.set(withSpring(0, SPRING_BACK));
       const done = api.opened;
       visible.set(
-        withTiming(1, { duration: OPEN_MS, easing: OPEN_EASING }, (finished) => {
+        openClock((finished) => {
+          "worklet";
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -163,7 +206,7 @@ function useLiveZoomMotion(
       // callback captures the bare function only, never the api object.
       const done = api.closed;
       visible.set(
-        withTiming(0, { duration: CLOSE_MS, easing: CLOSE_EASING }, (finished) => {
+        withTiming(0, { duration: CLOSE_MS * visible.get(), easing: Easing.linear }, (finished) => {
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -171,25 +214,20 @@ function useLiveZoomMotion(
     },
   }).current;
 
-  // The open, two frames after mount: the mount's layout and first draw are done before the first
-  // moving frame (the first commit has the rows, B8).
+  // The open, from the mount's commit: the clock was 0 in the first commit (the chat's first drawn frame
+  // is the start state) and its frame-clamped steps never skip a slow first frame (the first commit has
+  // the rows, B8).
   useEffect(() => {
     const done = api.opened;
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        visible.set(
-          withTiming(1, { duration: OPEN_MS, easing: OPEN_EASING }, (finished) => {
-            if (finished) scheduleOnRN(done);
-          }),
-        );
-      });
-    });
+    visible.set(
+      openClock((finished) => {
+        "worklet";
+        if (finished) scheduleOnRN(done);
+      }),
+    );
     // A slow device or an interrupted open still settles (the frost must come on).
-    const bound = setTimeout(done, OPEN_MS + SETTLE_SLACK_MS);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(bound);
-    };
+    const bound = setTimeout(done, SETTLE_BOUND_MS);
+    return () => clearTimeout(bound);
   }, [api, visible]);
 
   // Header Back reaches the close through runChatBack.
@@ -279,7 +317,8 @@ function useLiveZoomMotion(
 
 function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey: string; children: ReactNode }) {
   const background = String(useThemeColor("background") ?? "#000");
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const pull = (Math.max(0, zoom.originY) - height / 2) * ROW_PULL;
   const visible = useSharedValue(0);
   const gesture = useSharedValue(0);
   const edge = useSharedValue(1);
@@ -287,18 +326,20 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
   const [settled, setSettled] = useState(false);
   useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge);
   const frameStyle = useAnimatedStyle(() => {
-    const open = visible.get();
+    const clock = visible.get();
+    const open = EASE(clock);
     const drag = gesture.get();
+    // Transform and opacity only (no animated corner radius: no clip re-render while it moves).
     return {
-      opacity: Math.min(1, open * 1.6),
-      borderRadius: RADIUS * Math.min(1, Math.max(1 - open, drag) * 2),
+      opacity: Math.min(1, clock / FADE_SHARE),
       transform: [
         { translateX: edge.get() * drag * width * GESTURE_SHIFT },
+        { translateY: (1 - open) * pull },
         { scale: (CLOSED_SCALE + (1 - CLOSED_SCALE) * open) * (1 - GESTURE_SCALE * drag) },
       ],
     };
   });
-  const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * visible.get() }));
+  const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * EASE(visible.get()) }));
   return (
     <View style={styles.fill}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
