@@ -138,6 +138,11 @@ export const zoom = {
    * the close is the open played backwards.
    */
   closeSpring: spring(380, 37),
+  /**
+   * Build 11.3 council A2: a cancelled predictive gesture returns on M3's fast spatial spring
+   * (1400/67, ζ≈0.9, 90 % in ~90 ms), the "swift" return of the predictive back spec.
+   */
+  cancelSpring: spring(1400, 67),
   /** Background blur 10–12 dp (expo-blur intensity ≈ 70). Alt scale: 0.94. */
   backgroundBlurIntensity: 70,
   backgroundScale: 0.945,

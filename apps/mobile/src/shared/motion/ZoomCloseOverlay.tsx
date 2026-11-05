@@ -46,6 +46,8 @@ type CloseRequest = {
   /** Shown behind the still while a predictive gesture is undecided. */
   home: SkImage | null;
   source: ZoomSource;
+  /** A predictive gesture: until its home still comes, a plain backdrop stands behind the preview. */
+  interactive: boolean;
 };
 
 export type ZoomCloseHandle = {
@@ -207,7 +209,13 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
     shown.value = 0;
   };
   finishCurrent = done;
-  useCloseStore.setState({ request: { key, chat: null, home: null, source } });
+  useCloseStore.setState({ request: { key, chat: null, home: null, source, interactive } });
+  /** Build 11.3 council A2: the gesture's latest progress, applied as soon as the chat still is there. */
+  let lastProgress = 0;
+  const showPreview = () => {
+    shown.value = 1;
+    preview.value = decelerate(Math.min(Math.max(lastProgress, 0), 1));
+  };
   // Nothing lingers: whatever is cut off, the overlay clears.
   safety = setTimeout(done, SAFETY_MS * 4);
 
@@ -231,8 +239,9 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
         Math.abs(rect.width - t.width) > 2 ||
         Math.abs(rect.height - t.height) > 2;
       if (!moved) return;
-      // The open-time home still shows the row where it was; the live screen is right.
-      homeShown.value = 0;
+      // The open-time home still shows the row where it was; the live screen is right (once the chat
+      // popped: before that the still, or the backdrop, is all that stands behind a gesture's preview).
+      if (popped) homeShown.value = 0;
       // Build 11.3 motion (open/close polish): the retarget springs on the close's own curve (keeps its
       // velocity) instead of a 140 ms timing that kinked the running close.
       target.value = animate ? withSpring(rect, zoom.closeSpring) : rect;
@@ -249,6 +258,8 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
         return;
       }
       useCloseStore.setState((s) => (s.request?.key === key ? { request: { ...s.request, chat } } : s));
+      // A finger that already moved (and may now hold still) gets its preview at once.
+      if (interactive && !committed && lastProgress > 0) showPreview();
     },
     () => undefined,
   );
@@ -266,11 +277,13 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
   return {
     progress: (value) => {
       if (committed || finished) return;
+      lastProgress = value;
       const request = useCloseStore.getState().request;
-      // Both stills are needed to show the gesture; until then the live chat stays as it is.
-      if (request?.key !== key || !request.chat || !request.home) return;
-      shown.value = 1;
-      preview.value = decelerate(Math.min(Math.max(value, 0), 1));
+      // Build 11.3 council A2: the preview starts with the chat still alone (it no longer waits for the
+      // home still, which kept the swipe dead until release); without the home still a plain backdrop
+      // stands behind it. Until the chat still comes (a frame or two) the live chat stays as it is.
+      if (request?.key !== key || !request.chat) return;
+      showPreview();
     },
     commit: (pop) => {
       if (committed || finished) return;
@@ -318,8 +331,8 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
         done();
         return;
       }
-      p.value = withSpring(1, zoom.closeSpring);
-      preview.value = withSpring(0, zoom.closeSpring, () => {
+      p.value = withSpring(1, zoom.cancelSpring);
+      preview.value = withSpring(0, zoom.cancelSpring, () => {
         runOnJS(done)();
       });
       // Build 11.3: the still never outlives a cancel, even if the spring is cut off.
@@ -351,7 +364,7 @@ export function ZoomCloseHost() {
 function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
   const { width, height } = useWindowDimensions();
   const surface = String(useThemeColor("background") ?? "#000");
-  const { chat, home, source } = request;
+  const { chat, home, source, interactive } = request;
   const radius = source.radius;
 
   // The surface rect for p (1 = full screen, 0 = on the row; toward the centre 60 % when c = 1).
@@ -416,6 +429,10 @@ function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
           <Group opacity={homeShown}>
             <Image image={home} x={0} y={0} width={width} height={height} fit="fill" />
           </Group>
+        ) : interactive ? (
+          // Build 11.3 council A2: no home still yet: a plain backdrop behind the preview (never the live
+          // chat round its own shrinking still); it leaves with the home still, 200 ms after the pop.
+          <SkiaRect x={0} y={0} width={width} height={height} color={surface} opacity={homeShown} />
         ) : null}
         <SkiaRect x={0} y={0} width={width} height={height} color="#000" opacity={dimOpacity} />
         <Group origin={origin} transform={previewTransform}>
