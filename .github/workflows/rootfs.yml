@@ -23,6 +23,10 @@ on:
         description: "Start the engine once in a chroot and in proot before publishing"
         type: boolean
         default: true
+      update_latest:
+        description: "Point engine-latest at this payload (off: publish engine-<version> only)"
+        type: boolean
+        default: true
   schedule:
     - cron: "23 4 * * 1" # weekly, Monday 04:23 UTC
 
@@ -144,6 +148,7 @@ jobs:
           EXISTS: ${{ steps.ver.outputs.exists }}
           SMOKE_CHROOT: ${{ steps.smoke_chroot.outcome }}
           SMOKE_PROOT: ${{ steps.smoke_proot.outcome }}
+          UPDATE_LATEST: ${{ github.event_name == 'schedule' || inputs.update_latest }}
         run: |
           set -euo pipefail
           size_mb=$(( $(stat -c %s out/rootfs-arm64.tar.xz) / 1048576 ))
@@ -164,6 +169,10 @@ jobs:
           else
             gh release create "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json \
               --title "Engine ${TAG#engine-}" --notes-file notes.md --latest=false
+          fi
+          if [ "$UPDATE_LATEST" != true ]; then
+            echo "::notice::engine-latest left as it is (update_latest off)."
+            exit 0
           fi
           # Pointer for the app: engine-latest/engine.json names the newest versioned payload.
           url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/rootfs-arm64.tar.xz"

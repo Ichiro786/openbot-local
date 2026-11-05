@@ -1,0 +1,494 @@
+OpenBot Local 0003: Antigravity (Gemini) starts replying sooner on the phone.
+
+- Antigravity sessions and its provider CLI stay open 60 min idle (other providers keep 10 min);
+  the pool still closes idle sessions beyond 2 (oldest first) and on low memory.
+- A session's own process starts with AGY_ACP_DEFAULT_MODEL=<model>-<effort>, so Antigravity does
+  not rebuild the agent (harness + MCP servers) on the first prompt of a cold session.
+- Marking an Antigravity chat read (opening it, or returning to the app on it) opens its provider
+  session in the background (thread/read), at most every 2 min, only when no turn runs or starts.
+- Timings in providers.log: agent-timing "Turn started." / "Antigravity chat prewarmed.",
+  acp-client "ACP session process ready." / "ACP session opened." / "ACP turn prompt sent." /
+  "ACP turn first update.".
+
+diff --git a/src/backend/acp-client.ts b/src/backend/acp-client.ts
+index 0524fce65..9b539847e 100644
+--- a/src/backend/acp-client.ts
++++ b/src/backend/acp-client.ts
+@@ -188,6 +188,9 @@ interface ClientEvents {
+ interface AcpTurn {
+   id: string;
+   startedAt: number;
++  /** When OpenBot began the turn, in ms, and whether its first update was logged. */
++  begunAt: number;
++  firstUpdateLogged: boolean;
+   itemId: string;
+   thoughtItemId: string;
+   text: string;
+@@ -292,7 +295,13 @@ interface AcpThread {
+ type ReleasedAcpThread = Pick<
+   AcpThread,
+   "cwd" | "developerInstructions" | "dynamicTools" | "workspaceRoots" | "computerUse" | "agentId"
+->;
++> & { model: string | null; effort: string | null };
++
++/** The effort that a session runs on, as its `thought_level` option says. */
++function threadEffort(thread: Pick<AcpThread, "configOptions">): string | null {
++  const option = thread.configOptions.find((entry) => entry.category === "thought_level" && entry.type === "select");
++  return option?.type === "select" && typeof option.currentValue === "string" ? option.currentValue : null;
++}
+ 
+ /** Persistence hooks for provider history. The database owns the data; ACP only streams it. */
+ export interface AcpHistoryPersistence {
+@@ -507,7 +516,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+   readonly #bridge = new LocalMcpBridge();
+   readonly #threads = new IdleThreadPool<AcpThread, ReleasedAcpThread>({
+     scope: () => this.#scope,
+-    releaseAfterMs: ACP_SESSION_IDLE_RELEASE_MS,
++    releaseAfterMs: () => this.#flavor.idleReleaseMs ?? ACP_SESSION_IDLE_RELEASE_MS,
+     idleLimit: ACP_IDLE_SESSION_LIMIT,
+     // An agent that cannot close a session and load it again would keep its MCP servers or lose it.
+     // A session with a process of its own closes when that process ends.
+@@ -516,13 +525,15 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+       this.#loadsSessions &&
+       (thread.transport !== null || Boolean(this.#initialization?.agentCapabilities?.sessionCapabilities?.close)) &&
+       thread.backgroundUntil === 0,
+-    snapshot: ({ cwd, developerInstructions, dynamicTools, workspaceRoots, computerUse, agentId }) => ({
+-      cwd,
+-      developerInstructions,
+-      dynamicTools,
+-      workspaceRoots,
+-      computerUse,
+-      agentId,
++    snapshot: (thread) => ({
++      cwd: thread.cwd,
++      developerInstructions: thread.developerInstructions,
++      dynamicTools: thread.dynamicTools,
++      workspaceRoots: thread.workspaceRoots,
++      computerUse: thread.computerUse,
++      agentId: thread.agentId,
++      model: thread.currentModelId,
++      effort: threadEffort(thread),
+     }),
+     dispose: (thread) => this.#closeSession(thread),
+     reopen: (threadId, released) =>
+@@ -535,6 +546,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+           runtimeWorkspaceRoots: released.workspaceRoots,
+           computerUse: released.computerUse,
+           openbotAgentId: released.agentId ?? undefined,
++          ...(released.model ? { model: released.model } : {}),
++          ...(released.effort ? { effort: released.effort } : {}),
+         },
+         true,
+       ),
+@@ -608,13 +621,14 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+   }
+ 
+   /** A process of this agent. `exit` hears an end that `stop` did not start. */
+-  #newTransport(exit: (error: Error) => void): AcpConnection {
++  #newTransport(exit: (error: Error) => void, sessionEnv?: Record<string, string>): AcpConnection {
++    const extraEnv = this.options.extraEnv;
+     return new AcpConnection({
+       provider: this.options.provider,
+       cli: this.#cli,
+       argv: this.options.argv,
+       env: this.options.env,
+-      extraEnv: this.options.extraEnv,
++      extraEnv: sessionEnv ? () => ({ ...extraEnv?.(), ...sessionEnv }) : extraEnv,
+       confine: this.options.confine,
+       privateTemp: this.options.privateTemp,
+       label: () => this.#label,
+@@ -1380,11 +1394,15 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+   readonly #startSessionProcess = Effect.fn("AcpAgentClient.startSessionProcess")(function* (
+     this: AcpAgentClient,
+     owner: () => AcpThread | null,
++    model: string | null,
++    effort: string | null,
+   ): Effect.fn.Return<AcpConnection, ProviderClientOperationError> {
++    const sessionEnv = this.#flavor.sessionProcessEnv?.(model, effort);
+     const transport: AcpConnection = this.#newTransport(() => {
+       const thread = owner();
+       if (thread?.transport === transport) thread.needsResume = true;
+-    });
++    }, sessionEnv);
++    const spawnedAt = Date.now();
+     this.#openingSessionProcesses.add(transport);
+     const startTimeout = this.#startTimeout(this.#startTimeoutMs ?? this.#requestTimeoutMs);
+     yield* Effect.gen({ self: this }, function* () {
+@@ -1395,7 +1413,14 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+       });
+       const connection = yield* providerSync(() => transport.requireConnection());
+       const initialization = yield* this.#initializeConnection(connection).pipe(startTimeout);
++      const initializedAt = Date.now();
+       yield* (this.options.authenticate?.(connection, initialization) ?? Effect.void).pipe(startTimeout);
++      logger.info("ACP session process ready.", {
++        provider: this.provider,
++        initializeMs: initializedAt - spawnedAt,
++        readyMs: Date.now() - spawnedAt,
++        defaultModel: sessionEnv?.AGY_ACP_DEFAULT_MODEL ?? null,
++      });
+     }).pipe(
+       // Read before the stop: a stopped process no longer says how it ended.
+       Effect.catch((failure) => this.#explainSessionEnd(transport, failure.cause).pipe(Effect.flatMap(Effect.fail))),
+@@ -1428,6 +1453,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+         computerUse: thread.computerUse,
+         openbotAgentId: thread.agentId ?? undefined,
+         model: thread.currentModelId,
++        ...(threadEffort(thread) ? { effort: threadEffort(thread) } : {}),
+       },
+       true,
+     );
+@@ -1585,8 +1611,14 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+       (mcp) =>
+         Effect.gen({ self: this }, function* () {
+           try {
++            const openedAt = Date.now();
+             if (this.#flavor.sessionProcesses)
+-              transport = providerResult(yield* Effect.result(this.#startSessionProcess(() => threadRef)));
++              transport = providerResult(
++                yield* Effect.result(
++                  this.#startSessionProcess(() => threadRef, getString(params, "model"), getString(params, "effort")),
++                ),
++              );
++            const processAt = Date.now();
+             const sessionTransport = transport;
+             const connection = () =>
+               sessionTransport ? sessionTransport.requireConnection() : this.#requireConnection();
+@@ -1698,6 +1730,13 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+             if (sessionTransport && !this.running) throw new Error("ACP client is not running.");
+             this.#threads.add(thread);
+             retained = true;
++            logger.info("ACP session opened.", {
++              provider: this.provider,
++              method: resume && requestedThreadId ? (this.#supportsSessionResume ? "resume" : "load") : "new",
++              processMs: processAt - openedAt,
++              sessionMs: Date.now() - processAt,
++              totalMs: Date.now() - openedAt,
++            });
+             return { thread: { id } };
+           } catch (error) {
+             // The server asked for a browser sign-in while the session opened, and the stop ended it.
+@@ -2066,6 +2105,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+     threadId: string,
+     params: unknown,
+   ): Effect.fn.Return<{ turn: { id: string; status: string }; turnId?: string }, ProviderClientOperationError> {
++    const preparedFrom = Date.now();
++    const released = this.#threads.isReleased(threadId);
+     yield* this.#threads.wake(threadId).pipe(toProviderClientOperationError);
+     let thread = yield* providerSync(() => this.#requireThread(threadId));
+     // A background replay that runs can start a turn of the agent. The prompt waits for it before it
+@@ -2101,6 +2142,11 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+       unprompted: false,
+       answerOptional: isRecord(params) && params.answerOptional === true,
+     });
++    logger.info("ACP turn prompt sent.", {
++      provider: this.provider,
++      prepareMs: Date.now() - preparedFrom,
++      reopened: released,
++    });
+     turn.task = yield* Effect.forkIn(this.#consumePrompt(thread, turn, blocks, params), this.#scope, {
+       startImmediately: true,
+     });
+@@ -2154,6 +2200,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+     this.#lastTurnStartedAt = startedAt;
+     const turn: AcpTurn = {
+       id: turnId,
++      begunAt: Date.now(),
++      firstUpdateLogged: false,
+       // History timestamps use provider seconds, not JavaScript milliseconds.
+       startedAt,
+       itemId: `${turnId}:assistant`,
+@@ -2481,7 +2529,17 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+ 
+   /** Applies one output update of the agent to a turn: a live one, or one that a background replay found. */
+   #applyTurnUpdate(thread: AcpThread, turn: AcpTurn, update: SessionUpdate): void {
+-    if (!SESSION_STATE_UPDATES.has(update.sessionUpdate)) turn.answered = true;
++    if (!SESSION_STATE_UPDATES.has(update.sessionUpdate)) {
++      turn.answered = true;
++      if (!turn.firstUpdateLogged && !turn.unprompted) {
++        turn.firstUpdateLogged = true;
++        logger.info("ACP turn first update.", {
++          provider: this.provider,
++          update: update.sessionUpdate,
++          afterMs: Date.now() - turn.begunAt,
++        });
++      }
++    }
+     if (this.#flavor.unsentBackgroundTurns) {
+       const id = shownEntryId(update);
+       if (id) thread.shownIds.add(id);
+diff --git a/src/backend/acp-flavor-antigravity.ts b/src/backend/acp-flavor-antigravity.ts
+index 98072c6a5..14b050bd8 100644
+--- a/src/backend/acp-flavor-antigravity.ts
++++ b/src/backend/acp-flavor-antigravity.ts
+@@ -83,6 +83,19 @@ function geminiRequestFailure(error: unknown, detail: string): string {
+ const SESSION_PROCESSES: Pick<AcpFlavor, "sessionProcesses"> =
+   process.platform === "win32" ? {} : { sessionProcesses: true };
+ 
++/**
++ * OpenBot Local: Antigravity 1.4.5 builds a cold session's agent on `AGY_ACP_DEFAULT_MODEL`
++ * (`gemini-3.8-flash-high` when unset), and a model or effort set after that rebuilds the agent, its
++ * `localharness_external` and its MCP servers at the start of the first prompt
++ * (`_maybe_apply_model_switch`). The id is `<model>-<level>`; an id the account does not offer
++ * falls back to the account's default, as an unset one does.
++ */
++function antigravityModelId(model: string | null, effort: string | null): string | null {
++  if (!model || !/^[A-Za-z0-9._-]+$/u.test(model)) return null;
++  if (/-(?:minimal|low|medium|high)$/u.test(model)) return model;
++  return effort && /^(?:minimal|low|medium|high)$/u.test(effort) ? `${model}-${effort}` : null;
++}
++
+ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
+   // Antigravity 1.4.3 offers its Claude and GPT models only to a client named `zed`, `xcode`,
+   // `jetbrains.*` or `android studio*` (`supports_third_party_models`). Any other client gets the
+@@ -133,5 +146,13 @@ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
+   // Antigravity 1.4.4 starts a `localharness_external` of about 100 MB for each session and keeps it
+   // after `session/close`, which it does not advertise, until its process ends (#3925).
+   closeKeepsSession: true,
++  // OpenBot Local: each new or reopened session starts CPython and the harness again, which takes
++  // many seconds on a phone, so an idle session stays open for an hour, not ten minutes.
++  // `ACP_IDLE_SESSION_LIMIT` still closes the longest idle ones beyond two.
++  idleReleaseMs: 60 * 60_000,
++  sessionProcessEnv: (model, effort): Record<string, string> => {
++    const id = antigravityModelId(model, effort);
++    return id ? { AGY_ACP_DEFAULT_MODEL: id } : {};
++  },
+   ...SESSION_PROCESSES,
+ };
+diff --git a/src/backend/acp-flavor.ts b/src/backend/acp-flavor.ts
+index 84540031c..ff2ad4f09 100644
+--- a/src/backend/acp-flavor.ts
++++ b/src/backend/acp-flavor.ts
+@@ -66,6 +66,13 @@ export interface AcpFlavor {
+    * For an agent with `closeKeepsSession`.
+    */
+   sessionProcesses?: true;
++  /** How long an idle session stays open. Absent: `ACP_SESSION_IDLE_RELEASE_MS`. */
++  idleReleaseMs?: number;
++  /**
++   * Environment for a session's own process (`sessionProcesses`), from the model and effort that
++   * the session opens with. The agent then starts the session on that model.
++   */
++  sessionProcessEnv?(model: string | null, effort: string | null): Record<string, string>;
+   /** An agent that sends a failed prompt as answer text and ends the turn as a success. */
+   sdkHarness?: {
+     /** The session whose prompt failed, from a stderr line. */
+diff --git a/src/backend/agent-service.ts b/src/backend/agent-service.ts
+index 25300b1bf..1d25250df 100644
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -280,6 +280,10 @@ import {
+ const logger = createOpenBotLogger("agent-service");
+ /** Its lines also go to `main.log`, so a support report can show why channel routing failed (#3041). */
+ const routingLogger = createOpenBotLogger("channel-routing");
++/** OpenBot Local: start and prewarm timings, also kept in `logs/providers/providers.log`. */
++const timingLogger = createOpenBotLogger("agent-timing");
++/** OpenBot Local: an open Antigravity chat is prewarmed at most this often (each read mark asks). */
++const PREWARM_INTERVAL_MS = 2 * 60_000;
+ 
+ /**
+  * Only the application knows which managed CLIs it downloaded, so a caller that says nothing gets
+@@ -4406,6 +4410,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+     throughMessageId: string | null,
+     options?: ConversationMarkerExclusions,
+   ): Effect.Effect<ConversationReadState, AgentLifecycleFailed> {
++    // A chat that is opened, or shown again, marks itself read.
++    this.#prewarm(agentId);
+     return this.#reader
+       .markRead(agentId, memberId, throughMessageId, options)
+       .pipe(
+@@ -4415,6 +4421,55 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+       );
+   }
+ 
++  readonly #prewarmedAt = new Map<string, number>();
++
++  /**
++   * OpenBot Local: opening an Antigravity chat opens its provider session in the background, as a
++   * session read does, so the first message does not wait for the agent's process and harness to
++   * start (many seconds on a phone). Only a chat that has a session, never a new one, and only while
++   * no turn of the agent runs or starts. A message sent meanwhile joins the same open.
++   */
++  #prewarm(agentId: string): void {
++    try {
++      const agent = this.#store.list().find((candidate) => candidate.id === agentId);
++      if (!agent || agent.provider !== "antigravity" || !agent.threadId) return;
++      const startedAt = Date.now();
++      if (startedAt - (this.#prewarmedAt.get(agentId) ?? 0) < PREWARM_INTERVAL_MS) return;
++      const publicThreadId = agent.threadId;
++      if (!this.#store.database.activeProviderSession(publicThreadId, agent.provider)) return;
++      if (
++        this.#runsTurn(agentId) ||
++        this.#drain.taskFor(agentId) ||
++        this.#threads.providerContextBusy(agent) ||
++        this.#threads.runtimeRefreshPending(agentId)
++      )
++        return;
++      this.#prewarmedAt.set(agentId, startedAt);
++      Effect.runFork(
++        Effect.gen({ self: this }, function* () {
++          const client = yield* this.#providers.ensureAgentClient(agent);
++          const clientMs = Date.now() - startedAt;
++          const session = this.#store.database.activeProviderSession(publicThreadId, agent.provider);
++          if (!session || this.#runsTurn(agentId)) return;
++          const params = yield* this.#threads.threadParams(agent, client, session.externalSessionId);
++          yield* client.request("thread/read", params, decodeRecordResponse);
++          timingLogger.info("Antigravity chat prewarmed.", { clientMs, totalMs: Date.now() - startedAt });
++        }).pipe(
++          Effect.catchCause((cause) =>
++            Effect.sync(() => {
++              this.#prewarmedAt.delete(agentId);
++              timingLogger.warn("Antigravity chat prewarm failed.", {
++                reason: this.#mcp.redact(String(Cause.squash(cause))).slice(0, 300),
++              });
++            }),
++          ),
++        ),
++      );
++    } catch {
++      // A prewarm is only an optimisation; the read mark must not fail for it.
++    }
++  }
++
+   markConversationUnread(
+     agentId: string,
+     memberId: string,
+diff --git a/src/backend/agent/drain-scheduler.ts b/src/backend/agent/drain-scheduler.ts
+index fba854bd1..ad6b79e4d 100644
+--- a/src/backend/agent/drain-scheduler.ts
++++ b/src/backend/agent/drain-scheduler.ts
+@@ -42,6 +42,8 @@ import { checkAgentFolders, codexSandboxPolicy, workspaceWritableRoots } from ".
+ export const REMOVED_ENDPOINT_MESSAGE = sourceText("error.agent.endpointRemoved");
+ 
+ const logger = createOpenBotLogger("drain-scheduler");
++/** OpenBot Local: how long a message waited for its turn to start, also in `providers.log`. */
++const timingLogger = createOpenBotLogger("agent-timing");
+ const CHANNEL_START_FAILED = "The provider could not start this assignment. Resume to try again.";
+ /** How long messages wait for their turn after the provider did not confirm `turn/start` in time. */
+ const TURN_START_GRACE_MS = 5 * 60_000;
+@@ -680,6 +682,9 @@ export class DrainScheduler {
+     // The model this start asks for. The agent can move to another one while `turn/start` waits, and
+     // a plan limit belongs to the model the provider refused.
+     let requestedModel: string | null = null;
++    const startingAt = Date.now();
++    let clientReadyAt = startingAt;
++    let threadReadyAt = startingAt;
+     yield* Effect.gen({ self: this }, function* () {
+       for (const item of batch) yield* this.#mailbox.markStarting(item.delivery.id).pipe(toDeliveryStartFailed);
+       this.#mailboxSync.emitQueue(delivery.recipientAgentId);
+@@ -716,6 +721,7 @@ export class DrainScheduler {
+       yield* this.#threads.applyPendingRuntimeRefresh(agent, new Set(batch.map((item) => item.delivery.id)));
+       releaseRuntimeRefresh = this.#threads.holdRuntimeRefresh(agent.id, taskId !== null);
+       const client = yield* this.#providers.ensureAgentClient(agent).pipe(toDeliveryStartFailed);
++      clientReadyAt = Date.now();
+       const messaging = this.#messaging;
+       const channels = this.#channels;
+       const taskThreadId = taskId === null ? null : this.#tasks.threadId(taskId);
+@@ -769,6 +775,7 @@ export class DrainScheduler {
+       let threadId =
+         routineThreadId ??
+         (yield* this.#threads.ensureThread(agent, client, execution?.threadId).pipe(toDeliveryStartFailed));
++      threadReadyAt = Date.now();
+       const snapshot = this.#conversation.ensureSnapshot(agent.id, threadId);
+       // A turn started on this thread while the provider and the thread were prepared. The user
+       // cannot see that race, so the delivery goes back to the head of the queue rather than
+@@ -926,6 +933,13 @@ export class DrainScheduler {
+       // event would end it, and it would hold every message of this agent.
+       if (!this.#hooks.turnEnded(response.turn.id)) snapshot.activeTurnId = response.turn.id;
+       confirmedTurnId = response.turn.id;
++      timingLogger.info("Turn started.", {
++        provider: client.provider,
++        clientMs: clientReadyAt - startingAt,
++        threadMs: threadReadyAt - clientReadyAt,
++        turnStartMs: Date.now() - threadReadyAt,
++        totalMs: Date.now() - startingAt,
++      });
+       this.#turnModels.set(laneKey({ agentId: agent.id, taskId }), { turnId: response.turn.id, model: agent.model });
+       for (const item of batch)
+         yield* this.#mailbox.markRunning(item.delivery.id, response.turn.id).pipe(toDeliveryStartFailed);
+diff --git a/src/backend/agent/provider-runtime.ts b/src/backend/agent/provider-runtime.ts
+index 328b841e2..463378e47 100644
+--- a/src/backend/agent/provider-runtime.ts
++++ b/src/backend/agent/provider-runtime.ts
+@@ -139,6 +139,12 @@ const USAGE_RESET_PROVIDERS: ReadonlySet<AgentProvider> = new Set(["codex"]);
+ const LONG_START_TIMEOUT_MS = 180_000;
+ /** How long a provider CLI stays running with nothing to do before its process is stopped. */
+ const PROVIDER_IDLE_RELEASE_MS = 10 * 60_000;
++/**
++ * OpenBot Local: the same for Antigravity, whose idle sessions stay open for an hour
++ * (`ANTIGRAVITY_ACP_FLAVOR.idleReleaseMs`). Its start on a phone takes many seconds, and a stop
++ * here also ends those sessions.
++ */
++const ANTIGRAVITY_IDLE_RELEASE_MS = 60 * 60_000;
+ /**
+  * The same for a provider no agent is set to. Every signed-in provider starts at launch to read its
+  * models, and an unused OpenCode process alone held about 300 MB for the full idle time.
+@@ -868,7 +874,9 @@ export class ProviderRuntime implements ProviderPort {
+         continue;
+       }
+       const limit = this.#hooks.isProviderAssigned(provider)
+-        ? PROVIDER_IDLE_RELEASE_MS
++        ? provider === "antigravity"
++          ? ANTIGRAVITY_IDLE_RELEASE_MS
++          : PROVIDER_IDLE_RELEASE_MS
+         : PROVIDER_UNASSIGNED_RELEASE_MS;
+       if (now - lastUsed < limit) continue;
+       // Out of the map before it stops, so #handleExit reads the exit as expected, not as a crash.
+diff --git a/src/backend/idle-thread-pool.ts b/src/backend/idle-thread-pool.ts
+index 5f6b05910..d3379d366 100644
+--- a/src/backend/idle-thread-pool.ts
++++ b/src/backend/idle-thread-pool.ts
+@@ -14,8 +14,8 @@ export interface IdleThread {
+ }
+ 
+ export interface IdleThreadPoolOptions<Thread extends IdleThread, Released> {
+-  /** How long a thread with no turn stays open. */
+-  releaseAfterMs: number;
++  /** How long a thread with no turn stays open. A function is read each time a timer starts. */
++  releaseAfterMs: number | (() => number);
+   scope(): Scope.Scope;
+   /** How many idle threads stay open before the timeout. */
+   idleLimit: number;
+@@ -184,11 +184,15 @@ export class IdleThreadPool<Thread extends IdleThread, Released> {
+   #arm(thread: Thread): void {
+     this.#disarm(thread);
+     if (!this.#options.canRelease(thread)) return;
+-    thread.idleRelease = setTimeout(() => {
+-      thread.idleRelease = null;
+-      if (!this.#isIdle(thread)) return;
+-      Effect.runFork(this.#release(thread));
+-    }, this.#options.releaseAfterMs);
++    const { releaseAfterMs } = this.#options;
++    thread.idleRelease = setTimeout(
++      () => {
++        thread.idleRelease = null;
++        if (!this.#isIdle(thread)) return;
++        Effect.runFork(this.#release(thread));
++      },
++      typeof releaseAfterMs === "function" ? releaseAfterMs() : releaseAfterMs,
++    );
+     thread.idleRelease.unref?.();
+   }
+ 
+diff --git a/src/main/provider-log.ts b/src/main/provider-log.ts
+index 3454b8124..02bc2b385 100644
+--- a/src/main/provider-log.ts
++++ b/src/main/provider-log.ts
+@@ -7,9 +7,16 @@ import { appendRemoteDiagnosticLog } from "./remote-diagnostics";
+  * The loggers whose lines also go to the provider log: provider starts, CLI checks, model lists,
+  * state changes and errors (`provider-runtime`), runtime downloads (`provider-runtimes`), and model
+  * list members that the window refuses (`provider-models`), and ACP agents that lost their sign-in or
+- * sent nothing for a prompt (`acp-client`).
++ * sent nothing for a prompt (`acp-client`). OpenBot Local: also the turn start and prewarm timings
++ * (`agent-timing`) and ACP session and first-update timings (`acp-client`).
+  */
+-const PROVIDER_LOG_PREFIXES = ["provider-runtime", "provider-runtimes", "provider-models", "acp-client"] as const;
++const PROVIDER_LOG_PREFIXES = [
++  "provider-runtime",
++  "provider-runtimes",
++  "provider-models",
++  "acp-client",
++  "agent-timing",
++] as const;
+ 
+ /**
+  * Keeps the provider lines in `<logs>/providers/providers.log`, 1 MB with one rotated copy. An app
