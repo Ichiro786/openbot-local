@@ -72,21 +72,12 @@ interface ChatHeaderProps {
  */
 export function colorOSChatHeaderShown(o: {
   colorOS: boolean;
-  kind: string;
   actionsMenu?: unknown;
   title?: unknown;
   kicker?: string;
   splitShown: boolean;
 }): boolean {
-  return (
-    o.colorOS &&
-    isAndroid &&
-    o.kind === "agent" &&
-    o.actionsMenu === undefined &&
-    o.title === undefined &&
-    !o.kicker &&
-    !o.splitShown
-  );
+  return o.colorOS && isAndroid && o.actionsMenu === undefined && o.title === undefined && !o.kicker && !o.splitShown;
 }
 
 export function ChatHeader({
@@ -382,15 +373,14 @@ export function ChatHeader({
   }
 
   // Build 10 (ColorOS motion, Android only, where the agent page with the browser is full-screen):
-  // the agent chat's X-style glass header with ••• to the agent page (which holds the browser). Tasks,
-  // channels, the split pane and iOS keep the header below.
-  if (
-    target.kind === "agent" &&
-    colorOSChatHeaderShown({ colorOS, kind: target.kind, actionsMenu, title, kicker, splitShown })
-  ) {
+  // the agent chat's X-style glass header with ••• to the agent page (which holds the browser). Build 11.3
+  // batch 1: channels too (member grid in the avatar slot, ••• to the channel info). Tasks, the split
+  // pane and iOS keep the header below.
+  if (colorOSChatHeaderShown({ colorOS, actionsMenu, title, kicker, splitShown })) {
     return (
       <ColorOSChatHeader
         target={target}
+        needsAction={needsAction}
         fallbackBackground={fallbackBackground}
         foreground={foreground}
         topInset={topInset}

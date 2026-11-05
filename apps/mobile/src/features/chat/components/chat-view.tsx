@@ -579,7 +579,7 @@ export function ChatView({
   const colorOSHeaderOn = useColorOSMotion().enabled;
   // Build 11.2: the same check ChatHeader makes (the split pane keeps the classic header).
   const splitShown = useSplitLayout() !== null;
-  const colorOSAgentHeader = colorOSChatHeaderShown({ colorOS: colorOSHeaderOn, kind: target.kind, splitShown });
+  const colorOSAgentHeader = colorOSChatHeaderShown({ colorOS: colorOSHeaderOn, splitShown });
   const motion = useChatMotion(
     colorOSAgentHeader ? insets.top + COLOROS_CHAT_HEADER_BOTTOM + 6 : insets.top + 84,
     keyboardOffset,

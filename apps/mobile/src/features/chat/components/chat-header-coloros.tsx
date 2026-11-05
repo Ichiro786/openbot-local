@@ -1,19 +1,24 @@
 import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
+import { useThemeColor } from "heroui-native/hooks";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
-import type { RefObject } from "react";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
+import { type RefObject, useMemo } from "react";
 import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
+import { ChannelAvatar } from "@/features/channels/components/channel-avatar";
 import { ChatGlassButton, ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
+import { useAvatarScale } from "@/features/settings/model/avatar-size";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { showsOnline } from "@/features/workspace/model/server-status";
 import { MenuView } from "@/shared/components/menu-view";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { GlassBand } from "@/shared/glass/GlassBand";
@@ -22,13 +27,15 @@ import { useText } from "@/shared/lib/text";
 import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
-import type { AgentChatTarget } from "../model/chat-target";
+import type { ChatTarget } from "../model/chat-target";
 
 /** Hotfix 11.1 (Syed, ChatGPT-style reference): a big avatar right over a compact name pill. */
 const AVATAR = 52;
 /** How far the avatar sits over the pill's top edge. */
 const OVERLAP = 4;
 const PILL_HEIGHT = 32;
+/** Build 11.3: Avatar size grows the header avatar at most 10 % (it overlaps the pill by 4 dp). */
+const HEADER_AVATAR_MAX_SCALE = 1.1;
 /** The back and ••• glass: 40 dp in the 48 dp side boxes. */
 const BUTTON = 40;
 const BUTTON_INSET = 4;
@@ -89,6 +96,7 @@ export const COLOROS_CHAT_HEADER_GEOMETRY = {
  */
 export function ColorOSChatHeader({
   target,
+  needsAction = false,
   fallbackBackground,
   foreground,
   topInset,
@@ -98,7 +106,10 @@ export function ColorOSChatHeader({
   frostTarget,
   accessibilityHidden,
 }: {
-  target: AgentChatTarget;
+  /** Build 11.3 batch 1 (Syed): a channel gets the same header; only the avatar slot differs. */
+  target: ChatTarget;
+  /** A channel task needs the user: ••• turns into the warning that opens the channel actions. */
+  needsAction?: boolean;
   fallbackBackground: ViewStyle["backgroundColor"];
   foreground: ViewStyle["backgroundColor"];
   topInset: number;
@@ -133,13 +144,27 @@ export function ColorOSChatHeader({
   const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
   // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
   const subtitle = useMobileWorkspaceSelector((current) => {
+    if (target.kind === "channel") return "";
     const agent = current.agents.find((item) => item.id === target.id && item.serverId === target.serverId);
     return agent?.title.trim() || agent?.description.trim() || "";
   });
+  const warning = useThemeColor("warning");
   // The glass press gives the one tick (review R2-2).
   const openAgentPage = () => {
-    router.push({ pathname: "/agent-info/[agentId]", params: { agentId: target.id, serverId: target.serverId } });
+    if (target.kind === "channel")
+      router.push({
+        pathname: "/channel-info/[channelId]",
+        params: { channelId: target.id, serverId: target.serverId },
+      });
+    else router.push({ pathname: "/agent-info/[agentId]", params: { agentId: target.id, serverId: target.serverId } });
   };
+  const openChannelActions = () => {
+    router.push({
+      pathname: "/channel-actions/[channelId]",
+      params: { channelId: target.id, serverId: target.serverId },
+    });
+  };
+  const channelWarning = target.kind === "channel" && needsAction;
   const nameLabel = threadMenu
     ? threadMenu.attention > 0
       ? t("mobile.chat.threads.menuAttention", { name: target.name, count: threadMenu.attention })
@@ -201,7 +226,10 @@ export function ColorOSChatHeader({
               // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
               recordZoomSkeleton(target.id, {
                 pillWidth: width,
-                avatarColor: avatarHeadColor(target.avatarSeed, target.avatarHue, target.avatarColor),
+                avatarColor:
+                  target.kind === "agent"
+                    ? avatarHeadColor(target.avatarSeed, target.avatarHue, target.avatarColor)
+                    : undefined,
               });
             }}
             {...pillHandlers}
@@ -225,30 +253,41 @@ export function ColorOSChatHeader({
           {/* Over the pill's top edge; it takes no touches, so a tap on it reaches the pill below. */}
           <View pointerEvents="none" style={styles.avatar}>
             <AgentPinAvatar agentId={target.id} location="chat" size={AVATAR}>
-              <BloubAvatar
-                agentId={target.id}
-                serverId={target.serverId}
-                hue={target.avatarHue}
-                color={target.avatarColor}
-                seed={target.avatarSeed}
-                size={AVATAR}
-                // Build 11.3: Avatar size grows the header avatar at most 10 % (it overlaps the pill by 4 dp).
-                maxScale={1.1}
-              />
+              {target.kind === "channel" ? (
+                <ChannelHeaderAvatar members={target.members} serverId={target.serverId} />
+              ) : (
+                <BloubAvatar
+                  agentId={target.id}
+                  serverId={target.serverId}
+                  hue={target.avatarHue}
+                  color={target.avatarColor}
+                  seed={target.avatarSeed}
+                  size={AVATAR}
+                  maxScale={HEADER_AVATAR_MAX_SCALE}
+                />
+              )}
             </AgentPinAvatar>
           </View>
         </View>
         <View style={[styles.side, styles.trailing]}>
           <ChatGlassButton
-            accessibilityLabel={t("mobile.chat.header.info", { name: target.name })}
+            accessibilityLabel={
+              channelWarning
+                ? t("mobile.chat.header.actionsNeeded")
+                : t("mobile.chat.header.info", { name: target.name })
+            }
             fallbackBackground={fallbackBackground}
             liquidGlassAvailable={false}
             width={MORE_WIDTH}
             glassMaterial={material}
             press={morePress}
-            onPress={openAgentPage}
+            onPress={channelWarning ? openChannelActions : openAgentPage}
           >
-            <Ellipsis color={iconColor} size={24} strokeWidth={2} />
+            {channelWarning ? (
+              <TriangleAlert color={String(warning)} size={24} strokeWidth={2.5} />
+            ) : (
+              <Ellipsis color={iconColor} size={24} strokeWidth={2} />
+            )}
           </ChatGlassButton>
         </View>
       </View>
@@ -263,6 +302,51 @@ export function ColorOSChatHeader({
         }}
       />
     </>
+  );
+}
+
+/**
+ * Build 11.3 batch 1: the channel's members in the agent header's avatar slot. One member is drawn as
+ * that agent's own header avatar; more use the chat list's member grid (first four) at the slot's full
+ * size, grown by Avatar size with the same 10 % cap.
+ */
+function ChannelHeaderAvatar({
+  members,
+  serverId,
+}: {
+  members: Extract<ChatTarget, { kind: "channel" }>["members"];
+  serverId: string;
+}) {
+  const scale = Math.min(
+    useAvatarScale((state) => state.scale),
+    HEADER_AVATAR_MAX_SCALE,
+  );
+  const disconnected = useMobileWorkspaceSelector(
+    (current) => !current.servers.some((server) => server.id === serverId && showsOnline(server)),
+  );
+  const agents = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
+  const [only] = members;
+  if (members.length === 1 && only)
+    return (
+      <BloubAvatar
+        agentId={only.id}
+        serverId={only.serverId}
+        hue={only.avatarHue}
+        color={only.avatarColor}
+        seed={only.avatarSeed}
+        size={AVATAR}
+        maxScale={HEADER_AVATAR_MAX_SCALE}
+      />
+    );
+  return (
+    <View style={styles.channelAvatar}>
+      <ChannelAvatar
+        channel={{ members: members.map((member) => ({ agentId: member.id })) }}
+        agents={agents}
+        size={AVATAR * scale}
+        disconnected={disconnected}
+      />
+    </View>
   );
 }
 
@@ -288,4 +372,5 @@ const styles = StyleSheet.create({
   chevron: { opacity: 0.9 },
   badge: { width: 8, height: 8, borderRadius: 4, marginLeft: 2 },
   avatar: { position: "absolute", top: 0 },
+  channelAvatar: { width: AVATAR, height: AVATAR, alignItems: "center", justifyContent: "center" },
 });
