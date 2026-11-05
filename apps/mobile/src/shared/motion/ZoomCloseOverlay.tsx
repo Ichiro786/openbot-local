@@ -1,14 +1,14 @@
-import { Canvas, Image, type SkImage } from "@shopify/react-native-skia";
+import { Canvas, Group, Image, type SkImage, Skia, Rect as SkiaRect, vec } from "@shopify/react-native-skia";
 import { useThemeColor } from "heroui-native/hooks";
 import { useEffect } from "react";
 import { Dimensions, StyleSheet, useWindowDimensions } from "react-native";
-import Animated, {
+import {
   cancelAnimation,
   Easing,
   interpolate,
   makeMutable,
   runOnJS,
-  useAnimatedStyle,
+  useDerivedValue,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -331,93 +331,94 @@ export function ZoomCloseHost() {
   return request ? <ZoomCloseOverlay key={request.key} request={request} /> : null;
 }
 
+/**
+ * Build 11.3 motion B4 (audit F08/N04/N15): the whole close is one Skia canvas. The surface is an
+ * animated rounded-rect clip and the still is drawn inside it, so a frame is a redraw of the canvas on
+ * the UI thread: no left/top/width/height on a view, so no ShadowTree commit and no Yoga layout per
+ * frame next to React's own commits. The still now stays to the end of the close (it fades only over
+ * the last 15 %, N15), so the chat itself collapses into its row instead of a plain card.
+ */
 function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
   const { width, height } = useWindowDimensions();
-  const surface = useThemeColor("background");
+  const surface = String(useThemeColor("background") ?? "#000");
   const { chat, home, source } = request;
   const radius = source.radius;
 
-  const rootStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
-  const homeStyle = useAnimatedStyle(() => ({ opacity: homeShown.value }));
-  const dim = useAnimatedStyle(() => ({ opacity: zoom.backgroundDim * Math.min(Math.max(p.value, 0), 1) }));
-  const surfaceStyle = useAnimatedStyle(() => {
+  // The surface rect for p (1 = full screen, 0 = on the row; toward the centre 60 % when c = 1).
+  const box = useDerivedValue(() => {
     const v = p.value;
     const c = centre.value;
     const t = target.value;
-    // Fallback target: the centre 60% of the screen.
     const cw = width * 0.6;
     const ch = height * 0.6;
     const tx = interpolate(c, [0, 1], [t.x, (width - cw) / 2]);
     const ty = interpolate(c, [0, 1], [t.y, (height - ch) / 2]);
     const tw = interpolate(c, [0, 1], [t.width, cw]);
     const th = interpolate(c, [0, 1], [t.height, ch]);
-    const g = preview.value;
     return {
-      transform: [{ translateX: g * previewSide.value * (width / 20 - 8) }, { scale: 1 - PREVIEW_SCALE * g }],
-      left: interpolate(v, [0, 1], [tx, 0]),
-      top: interpolate(v, [0, 1], [ty, 0]),
-      width: interpolate(v, [0, 1], [tw, width]),
-      height: interpolate(v, [0, 1], [th, height]),
-      borderRadius: interpolate(v, [0, 1], [interpolate(c, [0, 1], [radius, 28]), zoom.endRadius]),
-      // The open's fill curve backwards: solid down to p 0.55, gone at the row.
-      opacity: interpolate(v, [0, zoom.fillFade[0], zoom.fillFade[1]], [0, 0.6, 1], "clamp"),
+      x: interpolate(v, [0, 1], [tx, 0]),
+      y: interpolate(v, [0, 1], [ty, 0]),
+      w: interpolate(v, [0, 1], [tw, width]),
+      h: interpolate(v, [0, 1], [th, height]),
+      r: interpolate(v, [0, 1], [interpolate(c, [0, 1], [radius, 28]), zoom.endRadius]),
     };
   });
-  // The chat still: held at its screen place while the surface closes round it (the open's skeleton
-  // backwards); toward the centre it scales with the surface instead. It hands over to the plain
-  // surface fill on the way in, like the open's skeleton.
-  const chatStyle = useAnimatedStyle(() => {
-    const v = p.value;
+  const clip = useDerivedValue(() => {
+    const b = box.value;
+    return Skia.RRectXY(Skia.XYWHRect(b.x, b.y, b.w, b.h), b.r, b.r);
+  });
+  // The predictive preview (B1): about the surface's centre.
+  const origin = useDerivedValue(() => vec(box.value.x + box.value.w / 2, box.value.y + box.value.h / 2));
+  const previewTransform = useDerivedValue(() => [
+    { translateX: preview.value * previewSide.value * (width / 20 - 8) },
+    { scale: 1 - PREVIEW_SCALE * preview.value },
+  ]);
+  const dimOpacity = useDerivedValue(() => zoom.backgroundDim * Math.min(Math.max(p.value, 0), 1));
+  // The open's fill curve backwards: solid down to p 0.55, gone at the row.
+  const fillOpacity = useDerivedValue(() =>
+    interpolate(p.value, [0, zoom.fillFade[0], zoom.fillFade[1]], [0, 0.6, 1], "clamp"),
+  );
+  const chatOpacity = useDerivedValue(() => interpolate(p.value, [0, 0.15], [0, 1], "clamp"));
+  // The still: held at its screen place while the surface closes round it; toward the centre it
+  // scales with the surface instead (60 % → 100 %), centred on it.
+  const still = useDerivedValue(() => {
     const c = centre.value;
-    const t = target.value;
-    const s = interpolate(v, [0, 1], [0.6, 1]);
-    const heldX = -interpolate(v, [0, 1], [t.x, 0]);
-    const heldY = -interpolate(v, [0, 1], [t.y, 0]);
-    const scaledX = -(width * (1 - s)) / 2;
-    const scaledY = -(height * (1 - s)) / 2;
+    const b = box.value;
+    const s = interpolate(p.value, [0, 1], [0.6, 1]);
     return {
-      opacity: interpolate(v, [0.45, 0.9], [0, 1], "clamp"),
-      transform: [
-        { translateX: interpolate(c, [0, 1], [heldX, scaledX]) },
-        { translateY: interpolate(c, [0, 1], [heldY, scaledY]) },
-        { scale: interpolate(c, [0, 1], [1, s]) },
-      ],
+      x: interpolate(c, [0, 1], [0, b.x + b.w / 2 - (width * s) / 2]),
+      y: interpolate(c, [0, 1], [0, b.y + b.h / 2 - (height * s) / 2]),
+      w: interpolate(c, [0, 1], [width, width * s]),
+      h: interpolate(c, [0, 1], [height, height * s]),
     };
   });
+  const stillX = useDerivedValue(() => still.value.x);
+  const stillY = useDerivedValue(() => still.value.y);
+  const stillW = useDerivedValue(() => still.value.w);
+  const stillH = useDerivedValue(() => still.value.h);
 
   return (
     // Build 11.3: the still never takes a touch. A close that lingers (a slow spring, a lost gesture end)
     // must not freeze the screen: taps reach the live chat (or home) under it.
-    <Animated.View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, rootStyle]}
-      importantForAccessibility="no-hide-descendants"
-    >
-      {home ? (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, homeStyle]}>
-          <Canvas style={StyleSheet.absoluteFill}>
+    <Canvas pointerEvents="none" style={StyleSheet.absoluteFill} importantForAccessibility="no-hide-descendants">
+      <Group opacity={shown}>
+        {home ? (
+          <Group opacity={homeShown}>
             <Image image={home} x={0} y={0} width={width} height={height} fit="fill" />
-          </Canvas>
-        </Animated.View>
-      ) : null}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dim]} />
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.surface, { backgroundColor: String(surface ?? "#000") }, surfaceStyle]}
-      >
-        {chat ? (
-          <Animated.View style={[{ width, height }, chatStyle]}>
-            <Canvas style={{ width, height }}>
-              <Image image={chat} x={0} y={0} width={width} height={height} fit="fill" />
-            </Canvas>
-          </Animated.View>
+          </Group>
         ) : null}
-      </Animated.View>
-    </Animated.View>
+        <SkiaRect x={0} y={0} width={width} height={height} color="#000" opacity={dimOpacity} />
+        <Group origin={origin} transform={previewTransform}>
+          <Group clip={clip}>
+            <SkiaRect x={0} y={0} width={width} height={height} color={surface} opacity={fillOpacity} />
+            {chat ? (
+              <Group opacity={chatOpacity}>
+                <Image image={chat} x={stillX} y={stillY} width={stillW} height={stillH} fit="fill" />
+              </Group>
+            ) : null}
+          </Group>
+        </Group>
+      </Group>
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  dim: { backgroundColor: "#000" },
-  surface: { position: "absolute", overflow: "hidden", borderCurve: "continuous" },
-});
