@@ -95,6 +95,7 @@ import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { lineDirectionStyle, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { chatDayLabels } from "../model/chat-day-markers";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
@@ -912,11 +913,12 @@ const MessageRow = memo(function MessageRow({
     >
       {message.replyToMessageId ? (
         <View className={`flex-row items-center gap-1 ${message.author === "user" ? "self-end" : "self-start"}`}>
-          <CornerUpRight size={14} color={themeMuted} />
+          <CornerUpRight size={14} color={themeMuted} style={MIRROR_IN_RTL} />
           <Typography.Paragraph
             type="body-xs"
             numberOfLines={1}
             className="shrink text-muted"
+            style={lineDirectionStyle(replyPreview)}
             accessibilityLabel={t("mobile.chat.reply.to", { text: replyPreview })}
           >
             {replyPreview}

@@ -9,6 +9,7 @@ import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-
 import { Button } from "@/shared/components/button";
 import { ThinkingDots } from "@/shared/components/thinking-dots";
 import { useText } from "@/shared/lib/text";
+import { lineDirectionStyle } from "@/shared/lib/text-direction";
 import type { AwaitingReply, AwaitingReplyState } from "../model/awaiting-replies";
 import { ThinkingTextGradient } from "./thinking-text-gradient";
 
@@ -130,7 +131,12 @@ export function AwaitingRepliesSection({
                   {wait.detail}
                 </Typography.Paragraph>
               ) : row.preview ? (
-                <Typography.Paragraph type="body-sm" numberOfLines={2} className="text-grouped-secondary">
+                <Typography.Paragraph
+                  type="body-sm"
+                  numberOfLines={2}
+                  className="text-grouped-secondary"
+                  style={lineDirectionStyle(row.preview)}
+                >
                   {row.preview}
                 </Typography.Paragraph>
               ) : null}

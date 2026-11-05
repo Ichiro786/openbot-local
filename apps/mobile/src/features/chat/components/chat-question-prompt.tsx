@@ -16,6 +16,7 @@ import { Button } from "@/shared/components/button";
 import { vaultRequestOf } from "@/features/chat/model/vault-request";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 
 type ConfirmPlan = Omit<UiConfirmBlock, "fields"> & { fields: UiConfirmValueField[] };
 
@@ -296,7 +297,7 @@ export function ChatQuestionPrompt({
             isDisabled={disabled || index === 0}
             onPress={() => setIndex(index - 1)}
           >
-            <ChevronLeft color={String(muted)} size={18} />
+            <ChevronLeft color={String(muted)} size={18} style={MIRROR_IN_RTL} />
           </Button>
           <Button
             variant="ghost"
@@ -306,7 +307,7 @@ export function ChatQuestionPrompt({
             isDisabled={disabled || index === prompt.questions.length - 1}
             onPress={() => setIndex(index + 1)}
           >
-            <ChevronRight color={String(muted)} size={18} />
+            <ChevronRight color={String(muted)} size={18} style={MIRROR_IN_RTL} />
           </Button>
         </View>
       ) : null}

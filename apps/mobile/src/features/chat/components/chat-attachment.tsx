@@ -17,6 +17,7 @@ import Animated from "react-native-reanimated";
 import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { attachmentFrame, FILL, FRAME_RADIUS, MAX_FRAME_WIDTH } from "../model/attachment-frame";
 import { storeCodePreview } from "../model/code-preview-store";
 import { type ImageDimensions, sameShape } from "../model/image-dimensions";
@@ -329,7 +330,7 @@ function ChatFileAttachment({ attachment, serverId, alignment = "left", upload }
         {shownUpload !== undefined ? (
           <UploadProgressCircle progress={shownUpload} />
         ) : previewable ? (
-          <ChevronRight size={18} color={muted} />
+          <ChevronRight size={18} color={muted} style={MIRROR_IN_RTL} />
         ) : (
           <ExternalLink size={18} color={muted} />
         )}
