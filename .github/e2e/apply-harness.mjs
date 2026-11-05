@@ -333,6 +333,18 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts") && existsSync(".
   );
   console.log("build 11.3 real chat route applied");
 }
+// Council judge 1 (council-frames only): the real home row x40 in the home FlatList props, for scroll frames.
+if (existsSync(".github/e2e/harness-council/app/e2e-homelist.tsx") && existsSync("apps/mobile/src/features/agents/components/agent-list-row.tsx")) {
+  const index = "apps/mobile/src/app/index.tsx";
+  cpSync(".github/e2e/harness-council/app/e2e-homelist.tsx", "apps/mobile/src/app/e2e-homelist.tsx");
+  let f = readFileSync(index, "utf8");
+  const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
+  if (!f.includes(toggle)) throw new Error("homelist anchor missing");
+  f = f.replace(toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E Home list" onPress={() => router.push("/e2e-homelist")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#5b3b7a", borderRadius: 12 }}><Text style={{ color: "#fff" }}>Home list</Text></Pressable>`);
+  writeFileSync(index, f);
+  src = src.replace(anchor, `${anchor}\n                    <Stack.Screen name="e2e-homelist" options={{ headerShown: false, animation: "slide_from_right" }} />`);
+  console.log("council homelist route applied");
+}
 writeFileSync(path, src);
 console.log("harness applied");
 // Build 11.3 open timing: ChatView's open stages after the tap (E2EMARK <stage> sinceTap=<ms>), once per tap.

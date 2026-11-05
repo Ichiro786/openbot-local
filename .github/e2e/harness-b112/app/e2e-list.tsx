@@ -48,7 +48,9 @@ const OLD: ChatMessage[] = Array.from({ length: 8 }, (_, i) => ({
   streaming: false,
   status: "completed",
 }));
-const REPLY = ["Sure, ", "here is ", "a streamed ", "reply that ", "arrives in ", "six chunks."];
+// council-frames: a long markdown reply streamed in ~70 chunks every 60 ms (~4.2 s), like a real model stream.
+const REPLY_TEXT = "## Build result\n\nThe build **failed** at the Gradle configure step. Here is what I found:\n\n- the NDK download was corrupt\n- the rootfs was staged correctly\n- nothing in the app code changed\n\n```kotlin\nfun main() {\n    println(\"retry the job\")\n}\n```\n\nRe-running the job should fix it. I can do that for you if you want, or wait for the next push. Either way the release stays on track for tonight.";
+const REPLY = REPLY_TEXT.match(/\S+\s*/g) ?? [REPLY_TEXT];
 const target = {
   kind: "agent" as const,
   id: E2E_AGENT.id,
@@ -131,7 +133,7 @@ function E2EList() {
           { id: `a${n}`, kind: "message", author: "agent", body: REPLY.slice(0, i).join(""), streaming: !done, status: done ? "completed" : "streaming" } as ChatMessage,
         ]);
         if (done) setStats((s) => ({ ...s, replied: n }));
-        else setTimeout(step, 140);
+        else setTimeout(step, 60);
       };
       step();
     }, 900);

@@ -930,6 +930,106 @@ im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.a
 PYH
   adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
 }
+# ---------------- council judge 1 (council-frames only): frame timing per interaction ----------------
+up() { adb shell cat /proc/uptime | cut -d' ' -f1 | tr -d '\r'; }
+# W name settle cmd... : gfx reset, boottime window, the action, settle, gfx dump (raw kept as fr-<name>-gfx.txt)
+W() { local n=$1 s=$2 t0 t1; shift 2; sleep 0.7; gfx_reset; t0=$(up); "$@"; sleep "$s"; t1=$(up); gfx "fr-$CM-$n"; echo "$CM $n $t0 $t1" >> "$OUT/windows.txt"; check "fr-$CM-$n" >/dev/null || ensure_running "fr-$n"; }
+REC() { adb shell "screenrecord --time-limit ${2:-3} --bit-rate 24000000 /sdcard/$1.mp4" & RECPID=$!; sleep 0.6; }
+RECEND() { wait $RECPID 2>/dev/null; adb pull /sdcard/$1.mp4 "$OUT/$1.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$1.mp4; }
+PFCFG='buffers { size_kb: 131072 fill_policy: RING_BUFFER }
+buffers { size_kb: 8192 fill_policy: RING_BUFFER }
+data_sources { config { name: "android.surfaceflinger.frametimeline" target_buffer: 0 } }
+data_sources { config { name: "linux.process_stats" target_buffer: 1 process_stats_config { scan_all_processes_on_start: true } } }
+data_sources { config { name: "linux.ftrace" target_buffer: 0 ftrace_config {
+  ftrace_events: "sched/sched_switch" ftrace_events: "sched/sched_waking" ftrace_events: "task/task_newtask" ftrace_events: "task/task_rename"
+  ftrace_events: "ftrace/print"
+  atrace_categories: "gfx" atrace_categories: "view" atrace_categories: "input" atrace_categories: "am" atrace_categories: "wm" atrace_categories: "dalvik"
+  atrace_apps: "run.openbot.local" buffer_size_kb: 16384 } } }
+duration_ms: 400000'
+pf_start() { PFNAME=$1; PFPID=$(echo "$PFCFG" | adb shell "perfetto --txt -c - -o /data/misc/perfetto-traces/$1.pftrace --background" 2>"$OUT/pf-$1.err" | tr -d '\r' | tail -1); log "  perfetto $1 pid=$PFPID $(head -c 200 "$OUT/pf-$1.err")"; sleep 1.5; }
+pf_stop() { [ -n "${PFPID:-}" ] && adb shell kill "$PFPID"; sleep 4; adb pull /data/misc/perfetto-traces/$PFNAME.pftrace "$OUT/$PFNAME.pftrace" >/dev/null 2>&1; adb shell rm -f /data/misc/perfetto-traces/$PFNAME.pftrace; log "  perfetto $PFNAME: $(ls -la "$OUT/$PFNAME.pftrace" 2>/dev/null | awk '{print $5}') bytes"; PFPID=""; }
+fling_up() { adb shell input swipe 540 1900 540 500 110; }
+fling_down() { adb shell input swipe 540 500 540 1900 110; }
+drag_slow() { adb shell input swipe 540 1700 540 900 1200; }
+key_back() { adb shell input keyevent 4; }
+tap_xy() { adb shell input tap $1 $2; }
+edge_commit() { adb shell input swipe 2 1300 700 1300 450; }   # one smooth predictive back swipe, released far out
+edge_cancel() { edge_quick 420 10; }                            # out and back to the edge (motion events)
+hold_xy() { adb shell input swipe $1 $2 $1 $2 800; }
+homelist_scn() { # the real home row x40: push, flings, slow drag, pop
+  local xy; home; xy=$(wait_for "E2E Home list" 10 "fr-hl0") || { log "  homelist: no row"; return; }
+  W hl-push 1.6 tap_xy $xy
+  dump "fr-hl1"; if ! grep -q "E2E HOMELIST OPEN" "$OUT/fr-hl1.xml"; then log "  homelist: not rendered: $(grep -oE 'E2E HOMELIST ERROR[^"]*' "$OUT/fr-hl1.xml" | head -1)"; adb logcat -d -s ReactNativeJS | grep E2EHOME | tail -3 | tee -a "$OUT/steps.txt"; home; return; fi
+  shot "fr-$CM-homelist"
+  W hl-fling-up1 1.4 fling_up; W hl-fling-up2 1.4 fling_up
+  if [ "$CM" = ON ]; then REC "fr-$CM-hl-scroll" 4; W hl-fling-up3 1.4 fling_up; RECEND "fr-$CM-hl-scroll"; else W hl-fling-up3 1.4 fling_up; fi
+  W hl-fling-down1 1.4 fling_down; W hl-drag-slow 0.8 drag_slow
+  W hl-pop 1.4 key_back
+}
+agentpage_scn() { local xy; home; xy=$(wait_for "E2E Open agent page" 10 "fr-ap0") || { log "  agent page: no button"; return; }
+  W ap-push 1.6 tap_xy $xy; wait_for "E2E AGENT PAGE OPEN" 5 "fr-ap1" >/dev/null || log "  agent page did not open"
+  W ap-pop 1.6 key_back
+  xy=$(wait_for "E2E Open agent page" 10 "fr-ap2") && { W ap-push2 1.6 tap_xy $xy; W ap-pop-edge 1.6 edge_commit; }
+  home
+}
+homemenu_scn() { local xy; home; xy=$(wait_for "Chat options" 10 "fr-hm0") || { log "  home menu: no anchor"; return; }
+  W hm-open 1.2 tap_xy $xy; W hm-close 1.0 key_back; home
+  xy=$(wait_for "E2E Bot row" 10 "fr-hr0") && { W row-hold 1.4 hold_xy $xy; W row-close 1.0 key_back; }
+  home
+}
+real_scn() { # the real chat: zoom open (cold, warm x2), header Back / system Back / predictive commit / cancel, menus, keyboard, chat scroll
+  local xy
+  home; xy=$(real_row) || { log "  real: no row"; return; }
+  W zo-cold 2.2 tap_xy $xy; on_real "fr-$CM-c1" || dump "fr-$CM-c1"
+  W zc-header 1.8 tap_xy $BACKXY
+  xy=$(real_row); REC "fr-$CM-zo-warm" 3; W zo-warm1 2.0 tap_xy $xy; RECEND "fr-$CM-zo-warm"
+  REC "fr-$CM-zc-key" 3; W zc-key 1.8 key_back; RECEND "fr-$CM-zc-key"
+  xy=$(real_row); W zo-warm2 2.0 tap_xy $xy
+  REC "fr-$CM-zc-edge" 3; W zc-edge 1.8 edge_commit; RECEND "fr-$CM-zc-edge"
+  xy=$(real_row); W zo-warm3 2.0 tap_xy $xy
+  W pb-cancel 1.6 edge_cancel
+  dump "fr-$CM-in"; on_real "fr-$CM-in" || { log "  real: left the chat after cancel"; xy=$(real_row) && { tap_xy $xy; sleep 2.5; }; }
+  W chat-fling-down 1.4 fling_down; W chat-fling-up 1.4 fling_up
+  [ -n "$PILLXY" ] && { W thread-open 1.3 tap_xy $PILLXY; W thread-close 1.0 key_back; }
+  dump "fr-$CM-in2"; xy=$(find_node "$OUT/fr-$CM-in2.xml" "Add attachment"); [ -n "$xy" ] && { W plus-open 1.3 tap_xy $xy; W plus-close 1.0 key_back; }
+  xy=$(find_node "$OUT/fr-$CM-in2.xml" "Re-running the job"); [ -n "$xy" ] && { W msg-hold 1.6 hold_xy $xy; W msg-close 1.0 key_back; }
+  [ -n "$EDITXY" ] && { REC "fr-$CM-kb" 4; W kb-open 1.6 tap_xy $EDITXY; W kb-close 1.4 key_back; RECEND "fr-$CM-kb"; }
+  dump "fr-$CM-in3"; on_real "fr-$CM-in3" && W zc-header2 1.8 tap_xy $BACKXY
+  home
+}
+stream_scn() { local xy; home; tapl "E2E List" 10 "fr-ls0" || return; wait_for "E2E LIST OPEN" 10 "fr-ls1" >/dev/null || { home; return; }
+  sleep 1; dump "fr-ls2"; set -- $(edit_xy "$OUT/fr-ls2.xml"); [ -n "${1:-}" ] || { home; return; }
+  W ls-kb-open 1.6 tap_xy $1 $2
+  adb shell input text "hello%sfrom%sthe%scouncil"; sleep 0.6
+  dump "fr-ls3"; xy=$(find_node "$OUT/fr-ls3.xml" "Send message"); [ -n "$xy" ] || { log "  stream: no Send"; home; return; }
+  if [ "$CM" = ON ]; then REC "fr-$CM-stream" 7; fi
+  W stream 6.0 tap_xy $xy
+  [ "$CM" = ON ] && RECEND "fr-$CM-stream"
+  dump "fr-ls4"; log "  stream: $(grep -oE 'E2ELIST sent=[0-9]+ replied=[0-9]+' "$OUT/fr-ls4.xml" | head -1)"
+  W ls-after-fling 1.4 fling_down
+  home
+}
+glass_scn() { local xy; home; xy=$(wait_for "E2E Zoom chat" 10 "fr-g0") || return; tap_xy $xy; sleep 2.5
+  dump "fr-g1"; xy=$(find_node "$OUT/fr-g1.xml" "Back"); [ -n "$xy" ] || { home; return; }
+  set -- $xy; W glass-press-drag 1.2 adb shell "input motionevent DOWN $1 $2; input motionevent MOVE $(( $1 + 20 )) $(( $2 + 40 )); input motionevent MOVE $(( $1 + 30 )) $(( $2 + 60 )); input motionevent MOVE $(( $1 + 300 )) $(( $2 + 400 )); input motionevent UP $(( $1 + 300 )) $(( $2 + 400 ))"
+  home
+}
+frames_round() { CM=$1; log "== council frames round colorOS=$CM"
+  retry_infra homelist_scn; retry_infra agentpage_scn; homemenu_scn; real_scn; stream_scn; glass_scn
+}
+if [ -f .github/e2e/frames ]; then
+  log "== COUNCIL FRAMES (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'), refresh $(adb shell dumpsys display | grep -oE 'refreshRate=[0-9.]+' | head -1))"
+  adb shell dumpsys display | grep -E "mActiveSfDisplayMode|renderFrameRate|supportedModes" | head -3 >> "$OUT/steps.txt"
+  touch "$OUT/real-lanes.txt"; ensure_running fr
+  real_setup || log "  real setup failed"
+  pf_start on; frames_round ON; pf_stop
+  toggle_to fr-off OFF
+  pf_start off; frames_round OFF; pf_stop
+  toggle_to fr-on ON
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
+  log "RESULT FAIL=$FAIL (frames)"; exit $FAIL
+fi
 if [ -f .github/e2e/quick113 ]; then
   adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi

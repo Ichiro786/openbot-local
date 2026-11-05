@@ -1,4 +1,4 @@
-name: E2E emulator smoke (build 11.2/11.3)
+name: E2E council-frames (judge 1, frame timing)
 
 # Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build11-review-ci (build 11 reviewer; from build10-review-ci).
 # Build 11.2 builder copy: branch build11-2-ci (from build11-review-ci ed3de711), target build11-2; adds the zoom-close / predictive back and colour picker checks.
@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 11.2/11.3)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build11-2-ci]
+    branches: [council-frames]
 
 permissions:
   contents: read
