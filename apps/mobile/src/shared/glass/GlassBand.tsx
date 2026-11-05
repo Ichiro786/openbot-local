@@ -47,12 +47,21 @@ export function GlassBand({
   shown,
   solid,
   style,
+  fadeHeight,
+  shapes,
 }: {
   target: RefObject<ViewInstance | null> | undefined;
   shown: boolean;
   /** Where the fade starts, 0..1 of the band's height. */
   solid: number;
   style?: object;
+  /** Build 11.3 batch 1: the fading part's height when `shapes` reach below it (default: all of it). */
+  fadeHeight?: number;
+  /**
+   * Build 11.3 batch 1 (Syed: the name pill read see-through): pills (radius = height / 2) below the fade
+   * that get the band's full frost and dim from the same one blur, as the buttons over the band have.
+   */
+  shapes?: readonly { x: number; y: number; width: number; height: number }[];
 }) {
   const dark = useUniwind().theme === "dark";
   const id = useId().replaceAll(":", "");
@@ -82,7 +91,10 @@ export function GlassBand({
                 ))}
               </LinearGradient>
             </Defs>
-            <Rect width="100%" height="100%" fill={`url(#band-mask-${id})`} />
+            <Rect width="100%" height={fadeHeight ?? "100%"} fill={`url(#band-mask-${id})`} />
+            {shapes?.map((shape) => (
+              <Rect key={`${shape.x}:${shape.y}`} {...shape} rx={shape.height / 2} fill="#000000" />
+            ))}
           </Svg>
         }
       >
@@ -110,7 +122,16 @@ export function GlassBand({
             ))}
           </LinearGradient>
         </Defs>
-        <Rect width="100%" height="100%" fill={`url(#band-dim-${id})`} />
+        <Rect width="100%" height={fadeHeight ?? "100%"} fill={`url(#band-dim-${id})`} />
+        {shapes?.map((shape) => (
+          <Rect
+            key={`${shape.x}:${shape.y}`}
+            {...shape}
+            rx={shape.height / 2}
+            fill="#000000"
+            fillOpacity={dark ? DIM_DARK : DIM_LIGHT}
+          />
+        ))}
       </Svg>
     </View>
   );

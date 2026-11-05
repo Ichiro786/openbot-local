@@ -6,8 +6,8 @@ import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import { type RefObject, useMemo } from "react";
-import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
+import { type RefObject, useMemo, useState } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View, type ViewInstance, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
@@ -142,6 +142,16 @@ export function ColorOSChatHeader({
   // Syed (15:16-15:18): it ends a little before the pill, with a long eased fade (no visible edge):
   // full strength over the top part of the status bar, then easing out across the avatar.
   const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
+  // Build 11.3 batch 1 (Syed: the name pill read see-through over scrolled text): the pill gets the same
+  // backing the Back and ••• glass have over the band (its frost and dim, then the same solid fill), cut
+  // from the band's one blur. Centred in the middle column, as the row lays it out.
+  const [pillWidth, setPillWidth] = useState(0);
+  const screenWidth = useWindowDimensions().width;
+  const pillTop = topInset + ROW_TOP + AVATAR - OVERLAP;
+  const pillShape =
+    pillWidth > 0
+      ? [{ x: (screenWidth + padLeft - padRight - pillWidth) / 2, y: pillTop, width: pillWidth, height: PILL_HEIGHT }]
+      : undefined;
   // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
   const subtitle = useMobileWorkspaceSelector((current) => {
     if (target.kind === "channel") return "";
@@ -196,7 +206,9 @@ export function ColorOSChatHeader({
         target={frostTarget}
         shown={bandOn}
         solid={(topInset * 0.5) / bandHeight}
-        style={[styles.band, { top: 0, height: bandHeight }]}
+        fadeHeight={bandHeight}
+        shapes={pillShape}
+        style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT }]}
       />
       <View
         pointerEvents="box-none"
@@ -223,6 +235,7 @@ export function ColorOSChatHeader({
             style={{ marginTop: AVATAR - OVERLAP }}
             onLayout={(event) => {
               const { width } = event.nativeEvent.layout;
+              setPillWidth(width);
               // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
               recordZoomSkeleton(target.id, {
                 pillWidth: width,
