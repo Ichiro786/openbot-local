@@ -32,12 +32,39 @@ export const REAL_AGENT = {
   avatarUrl: null,
   pinned: false,
 };
+const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
+  const user = i % 2 === 0;
+  const text = user
+    ? `Question ${i / 2 + 1}: can you check the build log and tell me what failed?`
+    : [
+        `## Result ${i}`,
+        "The build **failed** at the Gradle configure step. Here is what I found:",
+        "- the NDK download was corrupt",
+        "- the rootfs was staged correctly",
+        "- nothing in the app code changed",
+        "```kotlin",
+        "fun main() {",
+        '    println("retry the job")',
+        "}",
+        "```",
+        "Re-running the job should fix it. I can do that for you if you want, or wait for the next push.",
+      ].join("\n");
+  return {
+    id: `e2e-msg-${i}`,
+    turnId: `e2e-turn-${Math.floor(i / 2)}`,
+    author: user ? "user" : "assistant",
+    text,
+    createdAt: new Date(Date.UTC(2026, 10, 5, 10, i)).toISOString(),
+    status: "completed",
+  };
+});
 const conversation = {
   agentId: REAL_AGENT.id,
   threadId: null,
   activeTurnId: null,
   revision: 1,
-  messages: [],
+  // Build 11.3 open timing: a history like a real chat (markdown, lists, code), so the open measures ChatView's real cost.
+  messages: REAL_MESSAGES,
   references: {},
   pageInfo: { hasOlder: false, olderCursor: null },
   olderLoading: false,

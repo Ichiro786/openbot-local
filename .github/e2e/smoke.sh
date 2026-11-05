@@ -901,6 +901,20 @@ real_lanes() { # $1 mode label (ON|OFF) $2 iterations $3 lanes
     log "  lane $m/$L: $(grep -c "^$m $L .* ok" "$OUT/real-lanes.txt") ok, $(grep -c "^$m $L .* IGNORED" "$OUT/real-lanes.txt") ignored, $(grep -c "^$m $L .* STUCK" "$OUT/real-lanes.txt") stuck, $(grep -c "^$m $L .* CRASH" "$OUT/real-lanes.txt") crash"
   done
 }
+real_timing() { # build 11.3 open timing: 6 zoom opens of the real chat (with history), stages per open; open 3 recorded
+  local i xy; log "== real open timing x6"
+  for i in 1 2 3 4 5 6; do
+    xy=$(real_row) || return
+    if [ $i = 3 ]; then
+      adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/rt-open.mp4" & local rec=$!
+      sleep 0.7; adb shell input tap $xy; sleep 2.6; wait $rec 2>/dev/null
+      adb pull /sdcard/rt-open.mp4 "$OUT/rt-open.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/rt-open.mp4
+    else adb shell input tap $xy; sleep 2.6; fi
+    { echo "--- open $i"; adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE '(E2EMARK|E2EZOOM|E2EREADY)[^"]*' | tail -12; } >> "$OUT/real-timing.txt"
+    real_tap $BACKXY; sleep 2.2; on_home "rt-$i" || { log "  timing open $i: not home after Back"; home; }
+  done
+  log "  real open timing: $(grep -oE 'ZOOMT.*' "$OUT/real-timing.txt" | tr '\n' ' | ')"
+}
 header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (real ChatHeader + list), dark
   log "== header frost shot ($1)"
   home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
@@ -918,7 +932,7 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
-  if real_setup; then real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
+  if real_setup; then real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
   log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"

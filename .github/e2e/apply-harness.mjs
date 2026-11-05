@@ -334,3 +334,44 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts") && existsSync(".
 }
 writeFileSync(path, src);
 console.log("harness applied");
+// Build 11.3 open timing: ChatView's open stages after the tap (E2EMARK <stage> sinceTap=<ms>), once per tap.
+// Optional: a missing anchor skips the mark (never fails the harness).
+{
+  const cv = "apps/mobile/src/features/chat/components/chat-view.tsx";
+  const cm = "apps/mobile/src/features/chat/components/use-chat-motion.ts";
+  if (existsSync(cv) && existsSync(cm)) {
+    let f = readFileSync(cv, "utf8");
+    const helper = `const __e2eMk = (name: string, cond: unknown = true) => {
+  if (!cond) return;
+  const g = globalThis as any;
+  const tap = g.__e2eTap ?? 0;
+  if (g.__e2eMkTap !== tap) { g.__e2eMkTap = tap; g.__e2eMkSeen = {}; }
+  if (g.__e2eMkSeen[name]) return;
+  g.__e2eMkSeen[name] = 1;
+  console.log(\`E2EMARK \${name} sinceTap=\${Date.now() - tap}\`);
+};
+(globalThis as any).__e2eMk = __e2eMk;
+`;
+    const marks = [
+      ["  const rowsShown = useRowsAfterOpenTransition(zoomed);", '\n  __e2eMk("render"); __e2eMk("rows", rowsShown); __e2eMk("ready", ready);'],
+      ["  const atLatest = motion.atLatest;", '\n  __e2eMk("visible", motion.historyVisible);'],
+    ];
+    let n = 0;
+    for (const [a, b] of marks) if (f.includes(a)) { f = f.replace(a, a + b); n++; }
+    // The first import line stays first; the helper goes after the imports' end (before the first const).
+    const firstConst = f.indexOf("\nconst ");
+    if (n && firstConst > 0) { f = f.slice(0, firstConst + 1) + helper + f.slice(firstConst + 1); writeFileSync(cv, f); }
+    let m = readFileSync(cm, "utf8");
+    const mm = [
+      ["    revealed.set(true);", '\n    (globalThis as any).__e2eMk?.("reveal");'],
+      ["  const onListReady = useCallback((withRows: boolean) => setPlacedWithRows(withRows), []);", ""],
+      ["        void list.scrollToEnd({ animated: false }).then(() => setPlacedWithRows(true));", '\n        (globalThis as any).__e2eMk?.("placeStart");'],
+    ];
+    let k = 0;
+    for (const [a, b] of mm) if (b && m.includes(a)) { m = m.replace(a, a + b); k++; }
+    const lr = "const onListReady = useCallback((withRows: boolean) => setPlacedWithRows(withRows), []);";
+    if (m.includes(lr)) { m = m.replace(lr, 'const onListReady = useCallback((withRows: boolean) => { (globalThis as any).__e2eMk?.("listReady"); setPlacedWithRows(withRows); }, []);'); k++; }
+    writeFileSync(cm, m);
+    console.log(`open timing marks applied (${n} chat-view, ${k} motion)`);
+  }
+}
