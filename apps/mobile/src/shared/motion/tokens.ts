@@ -130,14 +130,17 @@ export const composerFrost = {
 
 /** 5. Zoom open (spec §4). */
 export const zoom = {
-  /** ζ≈0.95, 90% at ~200 ms. Alt: { duration: 320, dampingRatio: 0.95 }. */
-  openSpring: spring(380, 37),
+  /**
+   * Build 11.3 council C11: 600/46.5 (ζ≈0.95, 90 % at ~150 ms, settled ~240 ms), ~40 ms crisper than
+   * 380/37 and nearer ColorOS's 0.56 W at 100 ms.
+   */
+  openSpring: spring(600, 46.5),
   /**
    * Back/close toward the re-measured rect, the re-measure retarget and a cancelled gesture's return.
    * Build 11.3 motion (open/close polish): the open's own spring (was 420/40 close, 420/34 cancel), so
    * the close is the open played backwards.
    */
-  closeSpring: spring(380, 37),
+  closeSpring: spring(600, 46.5),
   /**
    * Build 11.3 council A2: a cancelled predictive gesture returns on M3's fast spatial spring
    * (1400/67, ζ≈0.9, 90 % in ~90 ms), the "swift" return of the predictive back spec.
@@ -146,7 +149,8 @@ export const zoom = {
   /** Background blur 10–12 dp (expo-blur intensity ≈ 70). Alt scale: 0.94. */
   backgroundBlurIntensity: 70,
   backgroundScale: 0.945,
-  backgroundDim: 0.5,
+  /** Build 11.3 council C11: 0.35 (was 0.5). */
+  backgroundDim: 0.35,
   endRadius: 0,
   /** Fill crossfade over p ∈ [0.15, 0.55]. */
   fillFade: [0.15, 0.55] as const,

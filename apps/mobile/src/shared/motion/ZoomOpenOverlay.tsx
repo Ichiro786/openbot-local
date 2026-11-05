@@ -275,10 +275,12 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   // already looks like the chat instead of a flat colour (spec §3 target).
   const skeletonStyle = useAnimatedStyle(() => ({
     opacity: hasStill ? 1 : interpolate(p.value, [0.45, 0.9], [0, 1], "clamp"),
-    // Held at its screen place while the surface grows around it.
+    // Build 11.3 council C11: scaled with the surface about its centre (0.62 → 1), a zoom rather than a
+    // crop (was: held at its screen place while the surface grew around it).
     transform: [
-      { translateX: -interpolate(p.value, [0, 1], [rect.x, 0]) },
-      { translateY: -interpolate(p.value, [0, 1], [rect.y, 0]) },
+      { translateX: (interpolate(p.value, [0, 1], [rect.width, width]) - width) / 2 },
+      { translateY: (interpolate(p.value, [0, 1], [rect.height, height]) - height) / 2 },
+      { scale: interpolate(p.value, [0, 1], [zoom.destFromScale, 1], "clamp") },
     ],
   }));
 
