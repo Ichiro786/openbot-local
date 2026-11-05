@@ -154,7 +154,13 @@ function onScreen(rect: Rect): boolean {
  * Starts a close of the chat that `source` opened: answers at once. Null only when no host is
  * mounted (the caller still pops the chat). A close already running is finished first, never waited for.
  */
-export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 0): ZoomCloseHandle | null {
+export function zoomCloseStart(
+  source: ZoomSource,
+  interactive: boolean,
+  edge = 0,
+  /** Build 11.3 council A4: the chat's list shows its end (only then is its still kept for the next open). */
+  atEnd = false,
+): ZoomCloseHandle | null {
   if (!hostMounted) return null;
   finishCurrent?.();
   cancelAnimation(p);
@@ -176,7 +182,9 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
   // Not with the keyboard up (the reopened chat has it down, and the still would show the gap), nor while
   // the open's surface is still on screen (the window still would show it).
   const { width: stillWidth, height: stillHeight } = Dimensions.get("window");
-  const keepAs = source.skeletonKey && !Keyboard.isVisible() && !zoomOpenSurfaceUp() ? source.skeletonKey : null;
+  // Nor when the list was scrolled up: the reopened chat lands at its end and would jump from the still.
+  const keepAs =
+    source.skeletonKey && atEnd && !Keyboard.isVisible() && !zoomOpenSurfaceUp() ? source.skeletonKey : null;
   const stillTheme = Uniwind.currentTheme;
   let committed = false;
   let popped = false;

@@ -49,8 +49,13 @@ export function zoomSkeletonFor(key: string | undefined): ZoomSkeletonRecord {
  * a still from another window size or theme is dropped. A few chats only (a half-size still each).
  */
 type ChatStill = { image: SkImage; width: number; height: number; theme: string };
-const stills = new Map<string, ChatStill>();
+const stills = new Map<string, ChatStill & { at: number }>();
 const MAX_STILLS = 3;
+/**
+ * Build 11.3 council A4: an older still is dropped (the chat has likely moved on: the reopened live chat
+ * would jump from it). The close keeps a still only when the chat's list was at its end.
+ */
+const STILL_MAX_AGE_MS = 60_000;
 
 /** Skia may still draw an image for the frame after its view unmounts: dispose a little later. */
 export function disposeStillLater(image: SkImage | null | undefined): void {
@@ -60,7 +65,7 @@ export function disposeStillLater(image: SkImage | null | undefined): void {
 export function keepChatStill(key: string, still: ChatStill): void {
   disposeStillLater(stills.get(key)?.image);
   stills.delete(key);
-  stills.set(key, still);
+  stills.set(key, { ...still, at: Date.now() });
   for (const [oldest, entry] of stills) {
     if (stills.size <= MAX_STILLS) break;
     stills.delete(oldest);
@@ -72,7 +77,13 @@ export function takeChatStill(key: string | undefined, width: number, height: nu
   const still = key ? stills.get(key) : undefined;
   if (!key || !still) return null;
   stills.delete(key);
-  if (still.width === width && still.height === height && still.theme === theme) return still.image;
+  if (
+    still.width === width &&
+    still.height === height &&
+    still.theme === theme &&
+    Date.now() - still.at < STILL_MAX_AGE_MS
+  )
+    return still.image;
   disposeStillLater(still.image);
   return null;
 }

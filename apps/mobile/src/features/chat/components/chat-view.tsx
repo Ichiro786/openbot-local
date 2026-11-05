@@ -612,7 +612,9 @@ export function ChatView({
   const routeKey = useRoute().key;
   const [zoomed] = useState(() => isZoomPush(routeKey));
   // Build 11.2: Back zooms a zoom-opened chat back into its home row (predictive on Android 14+).
-  useZoomClose(routeKey);
+  // Build 11.3 council A4: whether the list shows its end, read when a Back starts.
+  const atEndForClose = useRef(false);
+  useZoomClose(routeKey, atEndForClose);
   const rowsShown = useRowsAfterOpenTransition(zoomed);
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;
@@ -633,6 +635,7 @@ export function ChatView({
     zoomed,
   );
   const atLatest = motion.atLatest;
+  atEndForClose.current = atLatest;
   // Build 11: tell the zoom overlay the chat has painted (list revealed, or an empty/starter chat with
   // its history read), one frame after the commit, so its single dissolve uncovers a finished chat.
   // Not gated on `zoomed`: a no-op for any route but the armed zoom push, even one mounted late.

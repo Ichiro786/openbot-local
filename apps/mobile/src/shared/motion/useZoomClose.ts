@@ -37,7 +37,11 @@ export function runChatBack(routeKey: string): boolean {
  * Back. A second Back pops at once. The pop is this route's own (`source`), so it can never pop the
  * screen under the chat.
  */
-export function useZoomClose(routeKey: string) {
+export function useZoomClose(
+  routeKey: string,
+  /** Build 11.3 council A4: the chat's list shows its end now (its close still is kept only then). */
+  atEnd?: { readonly current: boolean },
+) {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   const focused = useIsFocused();
   const { enabled, reduceMotion } = useColorOSMotion();
@@ -95,7 +99,7 @@ export function useZoomClose(routeKey: string) {
       }, BACK_HARD_MS);
       leaving.current = { popped: false, timer };
       // Build 11.3 motion: still under the open's surface, the surface itself shrinks back into the row.
-      const handle = gesture.current ?? (zoomOpenReverse() ? null : zoomCloseStart(source, false));
+      const handle = gesture.current ?? (zoomOpenReverse() ? null : zoomCloseStart(source, false, 0, atEnd?.current));
       gesture.current = null;
       // The pop takes animation "none": the overlay plays the close. The options function reads the mark.
       markZoomClosing(routeKey);
@@ -159,7 +163,7 @@ export function useZoomClose(routeKey: string) {
         // a frame); the Back reverses the open instead.
         if (leaving.current || !navigation.isFocused() || zoomOpenHolding()) return;
         const source = zoomSource(routeKey);
-        if (source) gesture.current = zoomCloseStart(source, true, edge);
+        if (source) gesture.current = zoomCloseStart(source, true, edge, atEnd?.current);
       }),
       module.addListener("onBackProgress", ({ progress }) => gesture.current?.progress(progress)),
       module.addListener("onBackCancel", () => api.dropGesture()),
@@ -177,5 +181,5 @@ export function useZoomClose(routeKey: string) {
       release();
       api.dropGesture();
     };
-  }, [api, navigation, predictive, routeKey]);
+  }, [api, atEnd, navigation, predictive, routeKey]);
 }
