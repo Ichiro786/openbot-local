@@ -402,14 +402,13 @@ function GlassMenuOverlay({
       cancelled.delete(key);
       return;
     }
-    const wait = Math.max(0, menu.actionDelayMs - menu.closeMs);
-    setTimeout(
-      () =>
-        requestAnimationFrame(() => {
-          if (cancelled.delete(key)) return;
-          onSelect(id);
-        }),
-      wait,
+    // Council D17: act two frames after the unmount (one for its commit to reach the screen), not
+    // after a further 110 ms wait: the menu is already gone, so the wait only read as hesitation.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (cancelled.delete(key)) return;
+        onSelect(id);
+      }),
     );
   };
 

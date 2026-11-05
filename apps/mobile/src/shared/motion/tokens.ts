@@ -77,8 +77,6 @@ export const menu = {
   /** Close in 60–100 ms. */
   closeMs: 90,
   closeScale: 0.5,
-  /** The action fires ~200 ms after release (menu closes first). */
-  actionDelayMs: 200,
 } as const;
 
 /** 4. Progressive edge blur (spec §1e; research §3.2). */
