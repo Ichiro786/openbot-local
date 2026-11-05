@@ -421,7 +421,10 @@ const __e2eSince = () => Date.now() - ((globalThis as any).__e2eTap ?? 0);`);
       console.log(\`E2ECLOSE done live=1 mode=\${__e2e.close?.mode ?? "?"} still land=none row=none centre=0 p=\${visible.get().toFixed(3)} maxP=\${__e2e.maxP.toFixed(2)} ms=\${Date.now() - (__e2e.close?.t0 ?? Date.now())}\`);
       api.popNow();`);
   z = must(z, "      st.leaving = { popped: false, timer };", "      __e2e.close = { t0: Date.now(), mode: st.gestureOn ? \"gesture\" : \"button\" };\n      st.leaving = { popped: false, timer };");
-  z = must(z, "    const done = api.opened;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {", "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = undefined;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {\n        __e2e.start = __e2eSince();");
+  // The open starts two frames after mount (#97) or at the mount's commit with the frame-clamped clock (a0c586365+).
+  const rafOpen = "    const done = api.opened;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {";
+  if (z.includes(rafOpen)) z = must(z, rafOpen, "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = undefined;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {\n        __e2e.start = __e2eSince();");
+  else z = must(z, "    const done = api.opened;\n    visible.set(\n      openClock(", "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = __e2eSince();\n    visible.set(\n      openClock(");
   z = must(z, "        st.gestureOn = true;", "        st.gestureOn = true;\n        __e2e.maxP = 0;");
   z = must(z, "        if (st.gestureOn) gesture.set(progress);", "        if (st.gestureOn) gesture.set(progress);\n        __e2e.maxP = Math.max(__e2e.maxP, progress);");
   z = must(z, "        gestureCancelledAt = Date.now();", "        gestureCancelledAt = Date.now();\n        console.log(\"E2ECLOSE cancel\");");
