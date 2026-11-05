@@ -9,6 +9,7 @@ import Animated from "react-native-reanimated";
 import { AgentListRow } from "@/features/agents/components/agent-list-row";
 import { AgentPinTransitionProvider } from "@/features/agents/components/agent-pin-transition";
 import { ChatDragProvider } from "@/features/agents/components/chat-drag";
+import { AppDrawerShell } from "@/features/servers/components/app-drawer-shell";
 import { WorkspaceContexts } from "@/features/workspace/context/workspace-store";
 
 const anything: any = new Proxy(function () {}, {
@@ -74,6 +75,7 @@ export default function E2EHomeList() {
   return (
     <WorkspaceContexts value={value} actions={actions}>
       <Boundary>
+        <AppDrawerShell>
         <AgentPinTransitionProvider>
           <BlurTargetView ref={target as any} style={{ flex: 1, backgroundColor: "#000" }}>
             <ChatDragProvider screen={dragScreen}>
@@ -94,6 +96,7 @@ export default function E2EHomeList() {
             E2E HOMELIST OPEN
           </Text>
         </AgentPinTransitionProvider>
+        </AppDrawerShell>
       </Boundary>
     </WorkspaceContexts>
   );

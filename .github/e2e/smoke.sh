@@ -964,9 +964,10 @@ homelist_scn() { # the real home row x40: push, flings, slow drag, pop
   W hl-fling-up1 1.4 fling_up; W hl-fling-up2 1.4 fling_up
   if [ "$CM" = ON ]; then REC "fr-$CM-hl-scroll" 4; W hl-fling-up3 1.4 fling_up; RECEND "fr-$CM-hl-scroll"; else W hl-fling-up3 1.4 fling_up; fi
   W hl-fling-down1 1.4 fling_down; W hl-drag-slow 0.8 drag_slow
+  W hl-idle 3.0 true
   W hl-pop 1.4 key_back
 }
-agentpage_scn() { local xy; home; xy=$(wait_for "E2E Open agent page" 10 "fr-ap0") || { log "  agent page: no button"; return; }
+agentpage_scn() { local xy; home; xy=$(wait_for "E2E Zoom chat" 10 "fr-ap-z") && { tap_xy $xy; sleep 2.5; }; xy=$(wait_for "E2E Open agent page" 10 "fr-ap0") || { log "  agent page: no button"; home; return; }
   W ap-push 1.6 tap_xy $xy; wait_for "E2E AGENT PAGE OPEN" 5 "fr-ap1" >/dev/null || log "  agent page did not open"
   W ap-pop 1.6 key_back
   xy=$(wait_for "E2E Open agent page" 10 "fr-ap2") && { W ap-push2 1.6 tap_xy $xy; W ap-pop-edge 1.6 edge_commit; }
@@ -989,6 +990,7 @@ real_scn() { # the real chat: zoom open (cold, warm x2), header Back / system Ba
   xy=$(real_row); W zo-warm3 2.0 tap_xy $xy
   W pb-cancel 1.6 edge_cancel
   dump "fr-$CM-in"; on_real "fr-$CM-in" || { log "  real: left the chat after cancel"; xy=$(real_row) && { tap_xy $xy; sleep 2.5; }; }
+  W chat-idle 4.0 true
   W chat-fling-down 1.4 fling_down; W chat-fling-up 1.4 fling_up
   [ -n "$PILLXY" ] && { W thread-open 1.3 tap_xy $PILLXY; W thread-close 1.0 key_back; }
   dump "fr-$CM-in2"; xy=$(find_node "$OUT/fr-$CM-in2.xml" "Add attachment"); [ -n "$xy" ] && { W plus-open 1.3 tap_xy $xy; W plus-close 1.0 key_back; }
