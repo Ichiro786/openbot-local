@@ -152,11 +152,11 @@ export function useZoomClose(routeKey: string) {
     if (!predictive || !predictiveBack) return;
     const module = predictiveBack;
     const subscriptions = [
-      module.addListener("onBackStart", () => {
+      module.addListener("onBackStart", ({ edge }) => {
         api.dropGesture();
         if (leaving.current || !navigation.isFocused()) return;
         const source = zoomSource(routeKey);
-        if (source) gesture.current = zoomCloseStart(source, true);
+        if (source) gesture.current = zoomCloseStart(source, true, edge);
       }),
       module.addListener("onBackProgress", ({ progress }) => gesture.current?.progress(progress)),
       module.addListener("onBackCancel", () => api.dropGesture()),

@@ -35,6 +35,8 @@ import { isAndroid, longPressDelay } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { END_X, lineDirectionStyle } from "@/shared/lib/text-direction";
 import { typeScale } from "@/shared/lib/type-scale";
+import { RowPressHighlight, rowPressStyle } from "@/shared/motion/RowPress";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -130,6 +132,7 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
   const isUnread = useAgentUnread(agent.id);
   const waitReason = useAgentWaitReason(agent.id);
   const isUnpinTarget = transition?.chatId === agent.id && transition.target === "row";
+  const { enabled: colorOS, reduceMotion } = useColorOSMotion();
   const bloub = (
     <BloubAvatar
       agentId={agent.id}
@@ -174,15 +177,14 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
       onPressOut={holdMenu.onPressOut}
     >
       {({ pressed }) => (
-        <View
+        <Animated.View
           className="min-h-20 w-full flex-row items-center gap-3 py-1"
-          style={{
-            backgroundColor: background,
-            opacity: pressed ? 0.58 : 1,
-            paddingLeft: leftInset,
-            paddingRight: rightInset,
-          }}
+          style={[
+            { backgroundColor: background, paddingLeft: leftInset, paddingRight: rightInset },
+            colorOS ? rowPressStyle(pressed, reduceMotion) : { opacity: pressed ? 0.58 : 1 },
+          ]}
         >
+          {colorOS ? <RowPressHighlight pressed={pressed} /> : null}
           {avatar}
           <AgentRowTextReveal active={isUnpinTarget}>
             <View className="min-w-0 flex-1 gap-0.5">
@@ -218,7 +220,7 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
             </View>
           </AgentRowTextReveal>
           {agentChatPreview.measurer}
-        </View>
+        </Animated.View>
       )}
     </ChatLinkPressable>
   );

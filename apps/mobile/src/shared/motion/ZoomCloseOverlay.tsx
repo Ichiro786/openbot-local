@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Dimensions, StyleSheet, useWindowDimensions } from "react-native";
 import Animated, {
   cancelAnimation,
+  Easing,
   interpolate,
   makeMutable,
   runOnJS,
@@ -58,8 +59,14 @@ export type ZoomCloseHandle = {
   cancel: () => void;
 };
 
-/** How far the gesture alone shrinks the chat (p 1 → 1 − PEEK) before it is released. */
-const PEEK = 0.45;
+/**
+ * Build 11.3 motion B1 (audit N08, Android predictive back spec): the undecided gesture previews the
+ * chat at most at 90 % scale, shifted (W/20 − 8) dp toward the swipe, and its progress goes through
+ * STANDARD_DECELERATE (0, 0, 0, 1) so the start of the swipe is the most visible part. (Was: linear,
+ * the surface shrank toward the row down to 55 %.) The commit then closes from that preview.
+ */
+const PREVIEW_SCALE = 0.1;
+const decelerate = Easing.bezierFn(0, 0, 0, 1);
 /** The longest a commit waits for the still before the chat pops anyway (the surface closes alone). */
 export const STILL_WAIT_MS = 120;
 /** After the pop, when the row is re-measured, and the one retry when it is not there yet. */
@@ -82,6 +89,9 @@ const centre = makeMutable(0);
 const homeShown = makeMutable(1);
 /** 0 until the overlay should cover the chat (a gesture with both stills, or a commit). */
 const shown = makeMutable(0);
+/** The predictive gesture's preview, 0..1 (already decelerated), and its direction (+1 left edge, −1 right). */
+const preview = makeMutable(0);
+const previewSide = makeMutable(1);
 
 export function zoomClosing(): boolean {
   return useCloseStore.getState().request !== null;
@@ -108,10 +118,14 @@ function onScreen(rect: Rect): boolean {
  * Starts a close of the chat that `source` opened: answers at once. Null only when no host is
  * mounted (the caller still pops the chat). A close already running is finished first, never waited for.
  */
-export function zoomCloseStart(source: ZoomSource, interactive: boolean): ZoomCloseHandle | null {
+export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 0): ZoomCloseHandle | null {
   if (!hostMounted) return null;
   finishCurrent?.();
   cancelAnimation(p);
+  cancelAnimation(preview);
+  preview.value = 0;
+  // BackEventCompat.EDGE_LEFT = 0: a swipe from the left edge moves the preview right.
+  previewSide.value = edge === 1 ? -1 : 1;
   cancelAnimation(target);
   cancelAnimation(centre);
   cancelAnimation(shown);
@@ -212,7 +226,7 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean): ZoomCl
       // Both stills are needed to show the gesture; until then the live chat stays as it is.
       if (request?.key !== key || !request.chat || !request.home) return;
       shown.value = 1;
-      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);
+      preview.value = decelerate(Math.min(Math.max(value, 0), 1));
     },
     commit: (pop) => {
       if (committed || finished) return;
@@ -227,6 +241,8 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean): ZoomCl
         p.value = withSpring(0, zoom.closeSpring, (ok) => {
           if (ok) runOnJS(done)();
         });
+        // A released gesture closes from its preview: the preview springs out with the same curve.
+        if (preview.value > 0) preview.value = withSpring(0, zoom.closeSpring);
         later(() => land(true, true), MEASURE_MS);
         // The home still is the closing route's: drop it once the live home screen is under the shrink.
         later(() => {
@@ -258,7 +274,8 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean): ZoomCl
         done();
         return;
       }
-      p.value = withSpring(1, CANCEL_SPRING, () => {
+      p.value = withSpring(1, CANCEL_SPRING);
+      preview.value = withSpring(0, CANCEL_SPRING, () => {
         runOnJS(done)();
       });
       // Build 11.3: the still never outlives a cancel, even if the spring is cut off.
@@ -300,7 +317,9 @@ function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
     const ty = interpolate(c, [0, 1], [t.y, (height - ch) / 2]);
     const tw = interpolate(c, [0, 1], [t.width, cw]);
     const th = interpolate(c, [0, 1], [t.height, ch]);
+    const g = preview.value;
     return {
+      transform: [{ translateX: g * previewSide.value * (width / 20 - 8) }, { scale: 1 - PREVIEW_SCALE * g }],
       left: interpolate(v, [0, 1], [tx, 0]),
       top: interpolate(v, [0, 1], [ty, 0]),
       width: interpolate(v, [0, 1], [tw, width]),

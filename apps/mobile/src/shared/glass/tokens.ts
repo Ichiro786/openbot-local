@@ -57,8 +57,11 @@ export const glass = {
     falloff: 40,
     squashAcross: 0.14,
     stretchAlong: 0.03,
-    /** ζ ≈ 0.36, a visible bounce (fitted from two drags). */
-    release: spring(205, 10),
+    /**
+     * Build 11.3 motion B1 (audit N10): ζ ≈ 0.61, ~9 % overshoot, settled in ~260 ms: a very fast
+     * rebound with a little bounce (was 205/10: ζ 0.35, 31 % overshoot, ~800 ms of wobble).
+     */
+    release: spring(600, 30),
     /** Past this many diameters the press visuals spring home (Pressable cancels the tap itself). */
     cancelFactor: 1.5,
     reducedMs: 100,
