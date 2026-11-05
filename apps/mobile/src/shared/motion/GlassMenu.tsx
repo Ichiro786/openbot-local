@@ -4,17 +4,9 @@ import Check from "lucide-react-native/icons/check";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Plus from "lucide-react-native/icons/plus";
-import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
-import {
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type ViewInstance,
-} from "react-native";
+import { type ReactNode, type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View, type ViewInstance } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
@@ -28,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { scheduleOnRN } from "react-native-worklets";
 import { useUniwind } from "uniwind";
 import { create } from "zustand";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
@@ -366,14 +359,21 @@ function GlassMenuOverlay({
   const levelIn = useSharedValue(1);
   const levelFrom = useSharedValue(0);
   const picker = useSharedValue(0);
-  const active = useRef(-1);
+  const activeRow = useSharedValue(-1);
   const closing = useRef(false);
+  /** `closing` for the UI thread. */
+  const closingNow = useSharedValue(false);
+  const touchId = useSharedValue(-1);
+  const dragOn = useSharedValue(false);
+  const dragY0 = useSharedValue(0);
+  const dragScroll0 = useSharedValue(0);
+  const dragScrolling = useSharedValue(false);
   const done = useRef(false);
   const safety = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollNow = useRef(0);
-  const drag = useRef<{ y0: number; scroll0: number; scrolling: boolean } | null>(null);
 
-  useEffect(() => {
+  // Build 11.3 motion B7 (audit N18): the open starts in the commit that mounts the menu, not an
+  // effect after its first paint.
+  useLayoutEffect(() => {
     if (!reduceMotion) open.set(withSpring(1, menu.openSpring));
     fade.set(withTiming(1, { duration: menu.contentFadeInMs }));
     return () => {
@@ -383,7 +383,6 @@ function GlassMenuOverlay({
 
   // A new level starts at the top of its rows.
   const resetScroll = () => {
-    scrollNow.current = 0;
     scroll.set(0);
   };
 
@@ -417,6 +416,7 @@ function GlassMenuOverlay({
   const dismiss = (id: string | null) => {
     if (closing.current) return;
     closing.current = true;
+    closingNow.set(true);
     safety.current = setTimeout(() => finish(id), CLOSE_SAFETY_MS);
     fade.set(
       withTiming(0, { duration: menu.closeMs, easing: Easing.in(Easing.quad) }, () => {
@@ -434,7 +434,7 @@ function GlassMenuOverlay({
 
   const clearHighlight = () => {
     highlightAlpha.set(withTiming(0, { duration: 120 }));
-    active.current = -1;
+    activeRow.set(-1);
   };
 
   // Into a sub-menu (index of its row), or back out of one (null).
@@ -488,28 +488,51 @@ function GlassMenuOverlay({
   }, []);
 
   const h = frame.height;
+  // Build 11.3 motion B7 (audit F15): finger tracking runs on the UI thread (a manual RNGH gesture), so
+  // the highlight, lean and stretch stay glued to the finger while JS is busy (streaming). JS hears only
+  // a row change (the selection tick) and the release (the choice). Rows are mirrored into a shared
+  // value. Every worklet helper below is declared before the gesture that calls it (repo rule).
+  const touchRows = useSharedValue<{ top: number; index: number; disabled: boolean }[]>([]);
+  useEffect(() => {
+    touchRows.set(rows.map((row) => ({ top: row.top, index: row.index, disabled: !!entries[row.index]?.disabled })));
+  }, [rows, entries, touchRows]);
+  const scrollable = frame.scrollable;
+  const maxScroll = naturalHeight - h;
+
   const rowAt = (y: number) => {
-    let index = -1;
-    for (const row of rows) {
-      if (y >= row.top && y < row.top + menu.rowPitch) index = row.index;
+    "worklet";
+    let found: { top: number; index: number; disabled: boolean } | null = null;
+    for (const row of touchRows.get()) {
+      if (y >= row.top && y < row.top + menu.rowPitch) found = row;
     }
-    return index >= 0 && entries[index]?.disabled ? -1 : index;
+    return found && !found.disabled ? found.index : -1;
   };
 
+  const topOf = (index: number) => {
+    "worklet";
+    for (const row of touchRows.get()) {
+      if (row.index === index) return row.top;
+    }
+    return 0;
+  };
+
+  const tick = () => void haptics.selection();
+
   const track = (y: number, first: boolean) => {
-    if (closing.current) return;
-    const index = rowAt(y + scrollNow.current);
-    if (index !== active.current) {
-      if (index >= 0 && !first) void haptics.selection();
-      active.current = index;
+    "worklet";
+    if (closingNow.get()) return;
+    const index = rowAt(y + scroll.get());
+    if (index !== activeRow.get()) {
+      if (index >= 0 && !first) scheduleOnRN(tick);
+      activeRow.set(index);
     }
     if (index >= 0) {
-      const top = rows[index]?.top ?? 0;
+      const top = topOf(index);
       highlightY.set(first || highlightY.get() < 0 ? top : withSpring(top, menu.highlight.spring));
     }
     highlightAlpha.set(withTiming(index >= 0 ? 1 : 0, { duration: first ? 40 : 60 }));
     // A level that scrolls keeps still under the finger.
-    if (reduceMotion || frame.scrollable) return;
+    if (reduceMotion || scrollable) return;
     lean.set(
       withSpring(Math.max(menu.lean.min, Math.min(menu.lean.max, (y - h / 2) * menu.lean.factor)), menu.lean.spring),
     );
@@ -517,46 +540,96 @@ function GlassMenuOverlay({
   };
 
   const settle = () => {
+    "worklet";
     lean.set(withSpring(0, menu.lean.spring));
     stretchY.set(withSpring(1, menu.lean.spring));
   };
 
-  const grant = (event: GestureResponderEvent) => {
-    const y = event.nativeEvent.locationY;
-    drag.current = { y0: y, scroll0: scrollNow.current, scrolling: false };
+  const clearHighlightNow = () => {
+    "worklet";
+    highlightAlpha.set(withTiming(0, { duration: 120 }));
+    activeRow.set(-1);
+  };
+
+  const released = (index: number) => {
+    choose(entries[index], index);
+    if (!closing.current) clearHighlight();
+  };
+
+  const grant = (y: number) => {
+    "worklet";
+    dragOn.set(true);
+    dragY0.set(y);
+    dragScroll0.set(scroll.get());
+    dragScrolling.set(false);
     track(y, true);
   };
 
-  const move = (event: GestureResponderEvent) => {
-    const y = event.nativeEvent.locationY;
-    const current = drag.current;
-    if (current && frame.scrollable && (current.scrolling || Math.abs(y - current.y0) > 8)) {
-      if (!current.scrolling) {
-        current.scrolling = true;
-        clearHighlight();
+  const move = (y: number) => {
+    "worklet";
+    if (!dragOn.get()) return;
+    if (scrollable && (dragScrolling.get() || Math.abs(y - dragY0.get()) > 8)) {
+      if (!dragScrolling.get()) {
+        dragScrolling.set(true);
+        clearHighlightNow();
       }
-      const max = naturalHeight - h;
-      scrollNow.current = Math.max(0, Math.min(max, current.scroll0 - (y - current.y0)));
-      scroll.set(scrollNow.current);
+      scroll.set(Math.max(0, Math.min(maxScroll, dragScroll0.get() - (y - dragY0.get()))));
       return;
     }
     track(y, false);
   };
 
-  const release = (event: GestureResponderEvent) => {
+  const release = (x: number, y: number) => {
+    "worklet";
+    if (!dragOn.get()) return;
     settle();
-    const scrolled = drag.current?.scrolling ?? false;
-    drag.current = null;
-    const { locationX: x, locationY: y } = event.nativeEvent;
-    const index = active.current;
+    const scrolled = dragScrolling.get();
+    dragOn.set(false);
+    const index = activeRow.get();
     const inside = x >= 0 && x <= WIDTH && y >= 0 && y <= h;
     if (!scrolled && inside && index >= 0) {
-      choose(entries[index], index);
-      if (!closing.current) clearHighlight();
+      scheduleOnRN(released, index);
       return;
     }
-    clearHighlight();
+    clearHighlightNow();
   };
+
+  const terminate = () => {
+    "worklet";
+    settle();
+    dragOn.set(false);
+    clearHighlightNow();
+  };
+
+  // One finger, the first down; the layer takes it at once, as the responder layer did.
+  const touches = Gesture.Manual()
+    .onTouchesDown((event, manager) => {
+      "worklet";
+      const touch = event.changedTouches[0];
+      if (!touch || touchId.get() >= 0) return;
+      manager.activate();
+      touchId.set(touch.id);
+      grant(touch.y);
+    })
+    .onTouchesMove((event) => {
+      "worklet";
+      const touch = event.allTouches.find((held) => held.id === touchId.get());
+      if (touch) move(touch.y);
+    })
+    .onTouchesUp((event, manager) => {
+      "worklet";
+      const touch = event.changedTouches.find((lifted) => lifted.id === touchId.get());
+      if (!touch) return;
+      touchId.set(-1);
+      manager.end();
+      release(touch.x, touch.y);
+    })
+    .onTouchesCancelled((_event, manager) => {
+      "worklet";
+      touchId.set(-1);
+      manager.end();
+      terminate();
+    });
 
   const card = useAnimatedStyle(() => ({
     opacity: fade.get() * (1 - picker.get()),
@@ -673,20 +746,9 @@ function GlassMenuOverlay({
             })}
           </Animated.View>
           {/* One touch layer over the card: its locations are in the card's own (untransformed) space. */}
-          <View
-            style={StyleSheet.absoluteFill}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderTerminationRequest={() => false}
-            onResponderGrant={grant}
-            onResponderMove={move}
-            onResponderRelease={release}
-            onResponderTerminate={() => {
-              settle();
-              drag.current = null;
-              clearHighlight();
-            }}
-          />
+          <GestureDetector gesture={touches}>
+            <View collapsable={false} style={StyleSheet.absoluteFill} />
+          </GestureDetector>
         </Animated.View>
       ) : null}
       {reactions ? (
