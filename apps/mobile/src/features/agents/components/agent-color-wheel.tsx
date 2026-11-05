@@ -37,6 +37,8 @@ import { useText } from "@/shared/lib/text";
 const WHEEL = 248;
 const R = WHEEL / 2;
 const THUMB = 30;
+/** Build 11.3 batch 1 (F31): the thumb's track radius (full saturation), for input and drawing alike. */
+const THUMB_TRACK = R - THUMB / 4;
 const SLIDER_H = 32;
 const PREVIEW_MS = 80;
 /** A preset tick fires when the hue comes within this many degrees of a preset, once per preset. */
@@ -84,6 +86,10 @@ export const AgentColorWheel = memo(function AgentColorWheel({
   const lastPreview = useSharedValue(0);
   const lastTick = useSharedValue(presetIndexNear(start.h));
   const pressed = useSharedValue(0);
+  // Build 11.3 batch 1 (F31): a drag that starts on the thumb or knob keeps its grab offset (no jump).
+  const grabX = useSharedValue(0);
+  const grabY = useSharedValue(0);
+  const grabV = useSharedValue(0);
   // A swatch tap (or A) moves the wheel to that colour.
   useEffect(() => {
     if (pressed.value > 0) return;
@@ -126,7 +132,7 @@ export const AgentColorWheel = memo(function AgentColorWheel({
     const dy = y - R;
     const hue = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
     h.value = hue;
-    s.value = Math.min(1, Math.sqrt(dx * dx + dy * dy) / R);
+    s.value = Math.min(1, Math.sqrt(dx * dx + dy * dy) / THUMB_TRACK);
     const near = s.value >= MIN_TICK_SAT ? presetIndexNear(hue) : -1;
     if (near !== lastTick.value) {
       lastTick.value = near;
@@ -146,26 +152,40 @@ export const AgentColorWheel = memo(function AgentColorWheel({
     .minDistance(0)
     .onBegin((event) => {
       pressed.value = withTiming(1, { duration: reduced ? 0 : 120 });
-      setFromWheel(event.x, event.y);
+      const angle = (h.value * Math.PI) / 180;
+      const tx = R + Math.cos(angle) * s.value * THUMB_TRACK;
+      const ty = R + Math.sin(angle) * s.value * THUMB_TRACK;
+      const dx = tx - event.x;
+      const dy = ty - event.y;
+      const onThumb = Math.sqrt(dx * dx + dy * dy) <= THUMB / 2;
+      grabX.value = onThumb ? dx : 0;
+      grabY.value = onThumb ? dy : 0;
+      if (!onThumb) setFromWheel(event.x, event.y);
     })
-    .onUpdate((event) => setFromWheel(event.x, event.y))
+    .onUpdate((event) => setFromWheel(event.x + grabX.value, event.y + grabY.value))
     .onFinalize(release);
 
+  // The knob's centre runs from SLIDER_H / 2 to width - SLIDER_H / 2 (knobStyle), so input maps the same span.
   const setFromSlider = (x: number, width: number) => {
     "worklet";
-    v.value = 1 - Math.min(1, Math.max(0, x / width));
+    v.value = 1 - Math.min(1, Math.max(0, (x - SLIDER_H / 2) / Math.max(1, width - SLIDER_H)));
   };
   const sliderWidth = useSharedValue(1);
   const sliderGesture = Gesture.Pan()
     .enabled(!disabled)
     .minDistance(0)
-    .onBegin((event) => setFromSlider(event.x, sliderWidth.value))
-    .onUpdate((event) => setFromSlider(event.x, sliderWidth.value))
+    .onBegin((event) => {
+      const knob = SLIDER_H / 2 + (1 - v.value) * (sliderWidth.value - SLIDER_H);
+      const onKnob = Math.abs(knob - event.x) <= SLIDER_H / 2;
+      grabV.value = onKnob ? knob - event.x : 0;
+      if (!onKnob) setFromSlider(event.x, sliderWidth.value);
+    })
+    .onUpdate((event) => setFromSlider(event.x + grabV.value, sliderWidth.value))
     .onFinalize(release);
 
   const thumbStyle = useAnimatedStyle(() => {
     const angle = (h.value * Math.PI) / 180;
-    const radius = s.value * (R - THUMB / 4);
+    const radius = s.value * THUMB_TRACK;
     return {
       backgroundColor: hex.value,
       transform: [
