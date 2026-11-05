@@ -1,9 +1,98 @@
-diff --git a/android/src/main/java/eightbitlab/com/blurview/RegionBlurController.java b/android/src/main/java/eightbitlab/com/blurview/RegionBlurController.java
+diff --git a/android/src/main/java/expo/modules/blur/BlurModule.kt b/android/src/main/java/expo/modules/blur/BlurModule.kt
+index 9a6fc1c..c3ee9ab 100644
+--- a/android/src/main/java/expo/modules/blur/BlurModule.kt
++++ b/android/src/main/java/expo/modules/blur/BlurModule.kt
+@@ -28,6 +28,10 @@ class BlurModule : Module() {
+         view.applyBlurReduction(blurReductionFactor)
+       }
+ 
++      Prop("blurRegion") { view: ExpoBlurView, blurRegion: Boolean ->
++        view.setBlurRegion(blurRegion)
++      }
++
+       Prop("borderRadii") { view: ExpoBlurView, borderRadii: FloatArray? ->
+         view.setBorderRadii(borderRadii ?: FloatArray(8))
+       }
+diff --git a/android/src/main/java/expo/modules/blur/ExpoBlurView.kt b/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
+index 213c076..7c2b1da 100644
+--- a/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
++++ b/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
+@@ -38,6 +38,7 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
+   private val clippingRect = RectF()
+   private var borderRadii = FloatArray(8)
+   private var needsClippingPathUpdate = true
++  private var blurRegion = false
+ 
+   private val blurView = BlurView(context).also {
+     it.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+@@ -73,6 +74,17 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
+     configureBlurView()
+   }
+ 
++  fun setBlurRegion(region: Boolean) {
++    if (region == blurRegion) {
++      return
++    }
++    blurRegion = region
++    if (blurConfiguration == BlurViewConfiguration.DIMEZIS) {
++      configureBlurView()
++      applyCurrentBlurSettings()
++    }
++  }
++
+   fun setBlurRadius(radius: Float) {
+     blurRadius = radius
+ 
+@@ -204,7 +216,12 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
+     val dimezisBlurTarget = blurTarget?.blurTargetView
+       ?: throw BlurViewConfigurationException("The BlurView targeting blur target with id: $blurTargetId couldn't find the target")
+ 
+-    blurView.setupWith(dimezisBlurTarget)
++    val facade = if (blurRegion && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++      RegionBlur.setup(blurView, dimezisBlurTarget)
++    } else {
++      blurView.setupWith(dimezisBlurTarget)
++    }
++    facade
+       .setFrameClearDrawable(decorView.background)
+       .setBlurRadius(blurRadius / blurReduction)
+ 
+diff --git a/android/src/main/java/expo/modules/blur/RegionBlur.java b/android/src/main/java/expo/modules/blur/RegionBlur.java
 new file mode 100644
-index 0000000..2a108e1
+index 0000000..2658147
 --- /dev/null
-+++ b/android/src/main/java/eightbitlab/com/blurview/RegionBlurController.java
-@@ -0,0 +1,286 @@
++++ b/android/src/main/java/expo/modules/blur/RegionBlur.java
+@@ -0,0 +1,22 @@
++package expo.modules.blur;
++
++import androidx.annotation.NonNull;
++
++import eightbitlab.com.blurview.BlurTarget;
++import eightbitlab.com.blurview.BlurView;
++import eightbitlab.com.blurview.BlurViewFacade;
++import eightbitlab.com.blurview.RegionBlurController;
++
++/**
++ * OpenBot patch: the Kotlin side's way to RegionBlurController. That class sits in a folder that does
++ * not match its package, which javac accepts and Kotlin's source lookup does not, so Kotlin calls this.
++ */
++final class RegionBlur {
++    private RegionBlur() {
++    }
++
++    @NonNull
++    static BlurViewFacade setup(@NonNull BlurView view, @NonNull BlurTarget target) {
++        return RegionBlurController.setup(view, target);
++    }
++}
+diff --git a/android/src/main/java/expo/modules/blur/RegionBlurController.java b/android/src/main/java/expo/modules/blur/RegionBlurController.java
+new file mode 100644
+index 0000000..95a96a3
+--- /dev/null
++++ b/android/src/main/java/expo/modules/blur/RegionBlurController.java
+@@ -0,0 +1,288 @@
++// In expo/modules/blur/ on disk only because bun 1.4.2 cannot create a folder when it applies a patch;
++// it is in BlurView's package for its package-private members (BlurView.blurController, BlurTarget.renderNode).
 +package eightbitlab.com.blurview;
 +
 +import android.graphics.Bitmap;
@@ -290,73 +379,6 @@ index 0000000..2a108e1
 +        blurView.getLocationOnScreen(blurViewLocation);
 +    }
 +}
-diff --git a/android/src/main/java/expo/modules/blur/BlurModule.kt b/android/src/main/java/expo/modules/blur/BlurModule.kt
-index 9a6fc1c..c3ee9ab 100644
---- a/android/src/main/java/expo/modules/blur/BlurModule.kt
-+++ b/android/src/main/java/expo/modules/blur/BlurModule.kt
-@@ -28,6 +28,10 @@ class BlurModule : Module() {
-         view.applyBlurReduction(blurReductionFactor)
-       }
- 
-+      Prop("blurRegion") { view: ExpoBlurView, blurRegion: Boolean ->
-+        view.setBlurRegion(blurRegion)
-+      }
-+
-       Prop("borderRadii") { view: ExpoBlurView, borderRadii: FloatArray? ->
-         view.setBorderRadii(borderRadii ?: FloatArray(8))
-       }
-diff --git a/android/src/main/java/expo/modules/blur/ExpoBlurView.kt b/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
-index 213c076..f307c20 100644
---- a/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
-+++ b/android/src/main/java/expo/modules/blur/ExpoBlurView.kt
-@@ -9,6 +9,7 @@ import android.graphics.RectF
- import android.os.Build
- import android.util.TypedValue
- import eightbitlab.com.blurview.BlurView
-+import eightbitlab.com.blurview.RegionBlurController
- import expo.modules.blur.enums.BlurMethod
- import expo.modules.blur.enums.TintStyle
- import expo.modules.kotlin.AppContext
-@@ -38,6 +39,7 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
-   private val clippingRect = RectF()
-   private var borderRadii = FloatArray(8)
-   private var needsClippingPathUpdate = true
-+  private var blurRegion = false
- 
-   private val blurView = BlurView(context).also {
-     it.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-@@ -73,6 +75,17 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
-     configureBlurView()
-   }
- 
-+  fun setBlurRegion(region: Boolean) {
-+    if (region == blurRegion) {
-+      return
-+    }
-+    blurRegion = region
-+    if (blurConfiguration == BlurViewConfiguration.DIMEZIS) {
-+      configureBlurView()
-+      applyCurrentBlurSettings()
-+    }
-+  }
-+
-   fun setBlurRadius(radius: Float) {
-     blurRadius = radius
- 
-@@ -204,7 +217,12 @@ class ExpoBlurView(context: Context, appContext: AppContext) : ExpoView(context,
-     val dimezisBlurTarget = blurTarget?.blurTargetView
-       ?: throw BlurViewConfigurationException("The BlurView targeting blur target with id: $blurTargetId couldn't find the target")
- 
--    blurView.setupWith(dimezisBlurTarget)
-+    val facade = if (blurRegion && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-+      RegionBlurController.setup(blurView, dimezisBlurTarget)
-+    } else {
-+      blurView.setupWith(dimezisBlurTarget)
-+    }
-+    facade
-       .setFrameClearDrawable(decorView.background)
-       .setBlurRadius(blurRadius / blurReduction)
- 
 diff --git a/build/BlurView.js b/build/BlurView.js
 index 14dd855..a03aefc 100644
 --- a/build/BlurView.js
