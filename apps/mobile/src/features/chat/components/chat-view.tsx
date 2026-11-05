@@ -633,6 +633,7 @@ export function ChatView({
     holdOpening,
     catchingUp,
     zoomed,
+    () => markZoomContentReady(routeKey),
   );
   const atLatest = motion.atLatest;
   atEndForClose.current = atLatest;

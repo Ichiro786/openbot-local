@@ -1,5 +1,5 @@
 import type { AnchoredEndSpaceConfig, LegendListRef } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, type LayoutChangeEvent, type NativeScrollEvent } from "react-native";
 import { useKeyboardHandler } from "react-native-keyboard-controller";
 import {
@@ -74,6 +74,8 @@ export function useChatMotion(
   catchingUp = false,
   /** Build 11: opened by the ColorOS zoom. The zoom surface's dissolve is the fade, so no inner fade. */
   zoomed = false,
+  /** Build 11.3 council A5: runs one frame after the list is revealed (the zoom's ready signal). */
+  onRevealed?: () => void,
 ) {
   const listRef = useRef<LegendListRef>(null);
   const reducedMotion = useReducedMotion();
@@ -302,12 +304,20 @@ export function useChatMotion(
     atLatestNow.current = visible;
     setAtLatest(visible);
   }, []);
+  const revealedCallback = useRef(onRevealed);
+  revealedCallback.current = onRevealed;
   const reveal = useCallback(() => {
     if (shown.current) return;
     shown.current = true;
     revealed.set(true);
-    setHistoryVisible(true);
-  }, [revealed]);
+    // Build 11.3 council A5: the zoom's ready signal follows the UI-thread reveal, one frame later. It no
+    // longer waits for the historyVisible re-render (every row's deferred content: web views, actions,
+    // media), which now comes as a transition after it, for zoom-opened chats only.
+    if (zoomed) {
+      requestAnimationFrame(() => revealedCallback.current?.());
+      startTransition(() => setHistoryVisible(true));
+    } else setHistoryVisible(true);
+  }, [revealed, zoomed]);
   /** The list finished the first position of its rows. */
   const onListReady = useCallback((withRows: boolean) => setPlacedWithRows(withRows), []);
 
