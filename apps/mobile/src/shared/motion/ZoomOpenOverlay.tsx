@@ -230,7 +230,10 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   }));
 
   return (
-    <View pointerEvents={passThrough ? "none" : "auto"} style={StyleSheet.absoluteFill}>
+    // Build 11.3 motion: never flattened. With pointerEvents "auto" this View was layout-only, so the push's
+    // "none" created its native view and re-parented the surface: the still's Skia canvas lost its surface
+    // and the screen went blank for ~2 frames (e2e 42022487160 rt-open.mp4, 420-445 ms after the tap).
+    <View collapsable={false} pointerEvents={passThrough ? "none" : "auto"} style={StyleSheet.absoluteFill}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dim]} />
       <Animated.View
         pointerEvents="none"
