@@ -1,5 +1,5 @@
 import { useThemeColor } from "heroui-native/hooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, useColorScheme, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
@@ -38,11 +38,12 @@ let hostMounted = false;
 const SAFETY_MS = 1200;
 /**
  * The longest the surface waits after the push for the chat's ready signal (`markZoomContentReady`)
- * before it dissolves anyway (build 11: 600 ms, spec §3; was 1.5 s on transitionEnd).
+ * before it dissolves anyway (build 11: 600 ms, spec §3; was 1.5 s on transitionEnd). Build 11.3 motion
+ * (open/close polish): 400 ms, so a slow chat holds the placeholder at most 400 ms past the push.
  */
-const SHOWN_SAFETY_MS = 600;
-/** Build 11: one dissolve of the surface (and its skeleton) off the painted chat. */
-const DISSOLVE_MS = 160;
+const SHOWN_SAFETY_MS = 400;
+/** Build 11: one dissolve of the surface (and its skeleton) off the painted chat. 11.3 polish: 160 → 120 ms. */
+const DISSOLVE_MS = 120;
 const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
 /**
@@ -128,8 +129,10 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   };
 
   // Mount-only: the overlay is keyed per request, and finish reads refs.
+  // Build 11.3 motion (open/close polish): the spring starts in the commit that mounts the overlay,
+  // not an effect after its first paint (one frame sooner, as the glass menu's open).
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only
-  useEffect(() => {
+  useLayoutEffect(() => {
     p.value = withSpring(1, zoom.openSpring);
     const safety = setTimeout(() => {
       if (!done.current) finish();

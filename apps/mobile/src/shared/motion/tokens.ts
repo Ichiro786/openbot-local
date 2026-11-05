@@ -132,8 +132,12 @@ export const composerFrost = {
 export const zoom = {
   /** ζ≈0.95, 90% at ~200 ms. Alt: { duration: 320, dampingRatio: 0.95 }. */
   openSpring: spring(380, 37),
-  /** Back/close toward the re-measured rect. */
-  closeSpring: spring(420, 40),
+  /**
+   * Back/close toward the re-measured rect, the re-measure retarget and a cancelled gesture's return.
+   * Build 11.3 motion (open/close polish): the open's own spring (was 420/40 close, 420/34 cancel), so
+   * the close is the open played backwards.
+   */
+  closeSpring: spring(380, 37),
   /** Background blur 10–12 dp (expo-blur intensity ≈ 70). Alt scale: 0.94. */
   backgroundBlurIntensity: 70,
   backgroundScale: 0.945,

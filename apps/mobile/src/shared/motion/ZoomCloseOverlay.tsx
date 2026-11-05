@@ -10,7 +10,6 @@ import {
   runOnJS,
   useDerivedValue,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 import { create } from "zustand";
 import { snapshotNavigator } from "./ColorOSMotionRoot";
@@ -73,7 +72,6 @@ export const STILL_WAIT_MS = 120;
 const MEASURE_MS = 32;
 const RETRY_MS = 100;
 const SAFETY_MS = 1600;
-const CANCEL_SPRING = { damping: 34, stiffness: 420, mass: 1 } as const;
 
 const useCloseStore = create<{ request: CloseRequest | null }>(() => ({ request: null }));
 let nextKey = 1;
@@ -211,7 +209,7 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
       if (!usable(rect) || !onScreen(rect)) {
         if (retry) later(() => land(animate, false), RETRY_MS);
         else if (!usable(source.rect) || !onScreen(source.rect) || rect) {
-          centre.value = animate ? withTiming(1, { duration: 140 }) : 1;
+          centre.value = animate ? withSpring(1, zoom.closeSpring) : 1;
         }
         return;
       }
@@ -225,8 +223,10 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
       if (!moved) return;
       // The open-time home still shows the row where it was; the live screen is right.
       homeShown.value = 0;
-      target.value = animate ? withTiming(rect, { duration: 140 }) : rect;
-      centre.value = animate ? withTiming(0, { duration: 140 }) : 0;
+      // Build 11.3 motion (open/close polish): the retarget springs on the close's own curve (keeps its
+      // velocity) instead of a 140 ms timing that kinked the running close.
+      target.value = animate ? withSpring(rect, zoom.closeSpring) : rect;
+      centre.value = animate ? withSpring(0, zoom.closeSpring) : 0;
     });
   land(false, false);
 
@@ -308,8 +308,8 @@ export function zoomCloseStart(source: ZoomSource, interactive: boolean, edge = 
         done();
         return;
       }
-      p.value = withSpring(1, CANCEL_SPRING);
-      preview.value = withSpring(0, CANCEL_SPRING, () => {
+      p.value = withSpring(1, zoom.closeSpring);
+      preview.value = withSpring(0, zoom.closeSpring, () => {
         runOnJS(done)();
       });
       // Build 11.3: the still never outlives a cancel, even if the spring is cut off.
