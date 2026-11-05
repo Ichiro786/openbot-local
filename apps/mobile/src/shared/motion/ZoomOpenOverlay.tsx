@@ -1,4 +1,4 @@
-import { Canvas, Image } from "@shopify/react-native-skia";
+import { Canvas, Image, type SkImage } from "@shopify/react-native-skia";
 import { useThemeColor } from "heroui-native/hooks";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BackHandler, StyleSheet, useColorScheme, useWindowDimensions, View } from "react-native";
@@ -19,7 +19,14 @@ import { COLOROS_CHAT_HEADER_GEOMETRY } from "@/features/chat/components/chat-he
 import { glass } from "@/shared/glass/tokens";
 import { COMPOSER_BAR_INSET, composerBottomGap, restingComposerHeight } from "@/shared/lib/composer-metrics";
 import { zoom } from "./tokens";
-import { armZoomPush, clearZoomOpenSurface, disarmZoomPush, setZoomOpenSurface, type ZoomSource } from "./zoomPush";
+import {
+  armZoomPush,
+  clearZoomOpenSurface,
+  disarmZoomPush,
+  setZoomOpenSurface,
+  whenZoomPushGone,
+  type ZoomSource,
+} from "./zoomPush";
 import { disposeStillLater, takeChatStill, zoomSkeletonFor } from "./zoomSkeleton";
 
 export type ZoomRect = { x: number; y: number; width: number; height: number };
@@ -50,6 +57,12 @@ const DISSOLVE_MS = 120;
 const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 /** Build 11.3 motion: the latest a reversed open (Back during the open) clears, whatever its spring does. */
 const REVERSE_SAFETY_MS = 900;
+/**
+ * Build 11.3 council A3: a reversed open whose chat was pushed keeps the home still behind it until the
+ * chat route has closed, at most this long, then fades it over REVERSE_FADE_MS (never an empty chat).
+ */
+const REVERSE_HOLD_MS = 300;
+const REVERSE_FADE_MS = 90;
 
 /**
  * Opens a bot or chat with the ColorOS zoom: a surface grows out of the source rect to the full
@@ -111,6 +124,11 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   // the skeleton (owned here: disposed on unmount). Null on a chat's first open: the skeleton.
   const [still] = useState(() => takeChatStill(source?.skeletonKey, width, height, Uniwind.currentTheme));
   const hasStill = still !== null;
+  // Build 11.3 council A3: the open-time home still, behind a reversed open whose chat was already pushed.
+  const [homeStill, setHomeStill] = useState<SkImage | null>(null);
+  const hold = useSharedValue(0);
+  const stopWaiting = useRef<(() => void) | null>(null);
+  const alive = useRef(true);
 
   const uncovered = useRef(false);
   const shownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,16 +158,45 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     uncovered.current = true;
     setZoomOpenSurface(request.key, null);
     if (shownTimer.current) clearTimeout(shownTimer.current);
+    const wasPending = !done.current;
     if (!done.current) {
       done.current = true;
       navigated.value = true;
       // Never armed: the home still is still ours.
       void source?.home.then((image) => image?.dispose());
     }
+    const pushed = !wasPending;
+    // Clears once the spring has ended (or was cut off) and, for a pushed chat, the home still has faded.
+    let springEnded = false;
+    let holdEnded = !pushed;
+    const settle = (spring: boolean) => {
+      if (spring) springEnded = true;
+      else holdEnded = true;
+      if (springEnded && holdEnded) clearMine();
+    };
+    if (pushed) {
+      // The chat is on the stack until its pop lands: the home still stands in for home until then.
+      hold.value = 1;
+      void source?.home.then((image) => {
+        if (image && alive.current) setHomeStill(image);
+      });
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        stopWaiting.current?.();
+        stopWaiting.current = null;
+        hold.value = withTiming(0, { duration: REVERSE_FADE_MS }, () => {
+          runOnJS(settle)(false);
+        });
+      };
+      stopWaiting.current = whenZoomPushGone(release);
+      setTimeout(release, REVERSE_HOLD_MS);
+    }
     disarmZoomPush();
     shownTimer.current = setTimeout(clearMine, REVERSE_SAFETY_MS);
     p.value = withSpring(0, zoom.closeSpring, () => {
-      runOnJS(clearMine)();
+      runOnJS(settle)(true);
     });
     return true;
   };
@@ -185,6 +232,8 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     return () => {
       clearTimeout(safety);
       back.remove();
+      alive.current = false;
+      stopWaiting.current?.();
       if (shownTimer.current) clearTimeout(shownTimer.current);
       clearZoomOpenSurface(request.key);
       disposeStillLater(still);
@@ -218,6 +267,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     };
   });
   const dim = useAnimatedStyle(() => ({ opacity: zoom.backgroundDim * Math.min(p.value, 1) * cover.value }));
+  const holdStyle = useAnimatedStyle(() => ({ opacity: hold.value }));
   // Build 11: the chat's silhouette fades in on the surface, so the hold before the chat is ready
   // already looks like the chat instead of a flat colour (spec §3 target).
   const skeletonStyle = useAnimatedStyle(() => ({
@@ -234,6 +284,13 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
     // "none" created its native view and re-parented the surface: the still's Skia canvas lost its surface
     // and the screen went blank for ~2 frames (e2e 42022487160 rt-open.mp4, 420-445 ms after the tap).
     <View collapsable={false} pointerEvents={passThrough ? "none" : "auto"} style={StyleSheet.absoluteFill}>
+      {homeStill ? (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, holdStyle]}>
+          <Canvas style={{ width, height }}>
+            <Image image={homeStill} x={0} y={0} width={width} height={height} fit="fill" />
+          </Canvas>
+        </Animated.View>
+      ) : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dim]} />
       <Animated.View
         pointerEvents="none"

@@ -37,6 +37,9 @@ export type ZoomSource = {
   skeletonKey?: string;
 };
 let pendingSource: ZoomSource | null = null;
+/** Build 11.3 council A3: the route the armed zoom pushed (null until the stack takes it), and who waits for it to close. */
+let lastPushed: string | null = null;
+const goneWaiters = new Map<string, Set<() => void>>();
 const sources = new Map<string, ZoomSource>();
 /** Build 11.2: routes being zoom-closed: their pop takes no native animation (the overlay plays it). */
 const closing = new Set<string>();
@@ -81,6 +84,7 @@ export function armZoomPush(shown: () => void, source: ZoomSource | null = null)
   disposeSource(pendingSource);
   pendingSource = source;
   shownKey = null;
+  lastPushed = null;
 }
 
 /** The overlay has cleared: nothing later is a zoom push. */
@@ -114,6 +118,7 @@ export function zoomPushAnimation<T extends string>(routeKey: string | undefined
     if (Date.now() >= armedUntil) return false;
     armedUntil = 0;
     shownKey = routeKey;
+    lastPushed = routeKey;
     if (pendingSource) sources.set(routeKey, pendingSource);
     pendingSource = null;
     return true;
@@ -150,10 +155,35 @@ export function markZoomContentReady(routeKey: string): void {
 
 /** The route has closed: forget its key, so the memo holds only routes that are on a stack. */
 export function forgetZoomRoute(routeKey: string): void {
+  const waiters = goneWaiters.get(routeKey);
+  goneWaiters.delete(routeKey);
+  if (lastPushed === routeKey) lastPushed = null;
+  for (const run of waiters ?? []) run();
   pushes.forget(routeKey);
   closing.delete(routeKey);
   disposeSource(sources.get(routeKey) ?? null);
   sources.delete(routeKey);
+}
+
+/**
+ * Build 11.3 council A3: runs `run` once the route the current zoom pushed has closed (its closing
+ * transitionEnd). Nothing when no route was taken yet: the caller's own time bound covers that. Returns
+ * the unsubscribe.
+ */
+export function whenZoomPushGone(run: () => void): () => void {
+  const key = lastPushed;
+  if (key === null) return () => undefined;
+  let set = goneWaiters.get(key);
+  if (!set) {
+    set = new Set();
+    goneWaiters.set(key, set);
+  }
+  set.add(run);
+  return () => {
+    const current = goneWaiters.get(key);
+    current?.delete(run);
+    if (current?.size === 0) goneWaiters.delete(key);
+  };
 }
 
 /** Build 11.2: the row a zoom-opened route came from (undefined for any other route). */
