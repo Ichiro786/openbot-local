@@ -1,8 +1,10 @@
 import { MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
 import Copy from "lucide-react-native/icons/copy";
 import GitFork from "lucide-react-native/icons/git-fork";
+import Hash from "lucide-react-native/icons/hash";
 import Reply from "lucide-react-native/icons/reply";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
+import Trash2 from "lucide-react-native/icons/trash";
 import { isAndroid } from "@/shared/lib/platform";
 import { type GlassMenuItem, type GlassReactions, openGlassMenu, reactionFromMenuId } from "@/shared/motion/GlassMenu";
 
@@ -93,6 +95,8 @@ export type MessageMenuLabels = {
   selectText: string;
   react: (emoji: string) => string;
   moreEmoji: string;
+  sendToChannel: string;
+  delete: string;
 };
 
 /**
@@ -113,6 +117,9 @@ export function openMessageMenu({
   onCopy,
   onSelectText,
   onReact,
+  sendToChannel,
+  onDelete,
+  danger,
 }: {
   /** The finger, in window coordinates. */
   x: number;
@@ -129,6 +136,12 @@ export function openMessageMenu({
   onCopy?: () => void;
   onSelectText?: () => void;
   onReact?: (emoji: string | null) => void;
+  /** Upstream 0.61 (#4957): the open channels the text can go to, as a sub-menu. */
+  sendToChannel?: { channels: readonly { id: string; name: string }[]; onSend: (channelId: string) => void };
+  /** Upstream 0.61 (#4957): asks, then deletes the message for everyone. */
+  onDelete?: () => void;
+  /** The colour of the Delete icon. */
+  danger?: string;
 }): boolean {
   if (!isAndroid) return false;
   const items: GlassMenuItem[] = [];
@@ -143,6 +156,24 @@ export function openMessageMenu({
       icon: <TextSelect size={18} color={icon} strokeWidth={2} />,
     });
   }
+  const channels = sendToChannel?.channels.slice(0, 14) ?? [];
+  if (sendToChannel && channels.length > 0) {
+    items.push({
+      id: "send",
+      title: labels.sendToChannel,
+      icon: <Hash size={18} color={icon} strokeWidth={2} />,
+      children: channels.map((channel) => ({ id: `channel:${channel.id}`, title: channel.name })),
+    });
+  }
+  if (onDelete) {
+    items.push({
+      id: "delete",
+      title: labels.delete,
+      icon: <Trash2 size={18} color={danger ?? icon} strokeWidth={2} />,
+      destructive: true,
+      separatorBefore: true,
+    });
+  }
   if (items.length === 0 && !onReact) return false;
   const reactions: GlassReactions | undefined = onReact
     ? { quick: QUICK_REACTIONS, all: ALL_REACTIONS, own, reactLabel: labels.react, moreLabel: labels.moreEmoji }
@@ -152,6 +183,7 @@ export function openMessageMenu({
     branch: onBranch,
     copy: onCopy,
     select: onSelectText,
+    delete: onDelete,
   };
   const key = openGlassMenu({
     anchor: { x, y, width: 0, height: 0 },
@@ -163,6 +195,10 @@ export function openMessageMenu({
       const emoji = reactionFromMenuId(id);
       if (emoji !== undefined) {
         onReact?.(emoji);
+        return;
+      }
+      if (id.startsWith("channel:")) {
+        sendToChannel?.onSend(id.slice("channel:".length));
         return;
       }
       handlers[id]?.();

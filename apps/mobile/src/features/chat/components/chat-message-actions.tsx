@@ -464,7 +464,8 @@ export function useMessageActions(input: MessageActionsInput | null) {
           onDelete: confirmDelete,
         })
     : undefined;
-  return { shown, react, open };
+  // Build 11.3 batch2: the ColorOS glass message menu offers the same Send to channel and Delete.
+  return { shown, react, open, sendToChannel: input?.sendToChannel, confirmDelete };
 }
 
 /**

@@ -94,8 +94,8 @@ import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { lineDirectionStyle, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatDayLabels } from "../model/chat-day-markers";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
@@ -397,6 +397,8 @@ interface MessageRowShared {
   canSend: boolean;
   muted: ViewStyle["backgroundColor"];
   themeMuted: string;
+  /** The Delete icon of the ColorOS message menu. */
+  themeDanger: string;
   foreground: ViewStyle["backgroundColor"];
   userForeground: string;
   /** Unset when the user's messages do not use the agent color. */
@@ -890,6 +892,8 @@ const MessageRow = memo(function MessageRow({
               selectText: t("mobile.chat.message.selectText"),
               react: (emoji) => t("mobile.chat.message.react", { emoji }),
               moreEmoji: t("mobile.chat.message.moreEmoji"),
+              sendToChannel: t("mobile.chat.message.sendToChannel"),
+              delete: t("common.delete"),
             },
             own: actionsControl.current?.own ?? null,
             onReply: shared.canReply ? () => actions.reply(bubble) : undefined,
@@ -897,6 +901,9 @@ const MessageRow = memo(function MessageRow({
             onCopy: copyText ? () => actionsControl.current?.copy() : undefined,
             onSelectText: selectable ? () => actions.selectText(bubble) : undefined,
             onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji) : undefined,
+            sendToChannel: messageActions.sendToChannel,
+            onDelete: messageActions.confirmDelete,
+            danger: shared.themeDanger,
           });
           if (!opened && selectable) actions.selectText(bubble);
         }
@@ -1255,14 +1262,16 @@ export const ChatMessageList = memo(function ChatMessageList({
       );
     }
   }, [approvals, agentsById, target.name, t]);
-  const [userForegroundColor, themeForegroundColor, themeMutedColor] = useCSSVariable([
+  const [userForegroundColor, themeForegroundColor, themeMutedColor, themeDangerColor] = useCSSVariable([
     "--openbot-text-on-light",
     "--openbot-text-primary",
     "--openbot-text-muted",
+    "--openbot-danger-text",
   ]);
   const userForeground = String(userForegroundColor);
   const themeForeground = String(themeForegroundColor);
   const themeMuted = String(themeMutedColor);
+  const themeDanger = String(themeDangerColor);
   const reducedMotion = useReducedMotion();
   const textReveal = useMotionPreference("textReveal");
   const animateMessages = isFocused && online && appActive;
@@ -1452,6 +1461,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canSend,
       muted,
       themeMuted,
+      themeDanger,
       foreground,
       userForeground,
       // A channel has no one agent color for the reader's messages.
@@ -1489,6 +1499,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       canSend,
       muted,
       themeMuted,
+      themeDanger,
       foreground,
       userForeground,
       userBubbleStyle,
