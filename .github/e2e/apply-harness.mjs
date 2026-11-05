@@ -143,7 +143,8 @@ function __e2eMark(name: string, at: number) {
   ${setReq}`);
     rep("function clear() {", "function clear() {\n  if (__e2eZ.uncover !== undefined) __e2eMark(\"clear\", Date.now());");
     rep("    uncovered.current = true;", "    uncovered.current = true;\n    __e2eMark(\"uncover\", Date.now());\n    if (__e2eZ.via === undefined) __e2eZ.via = \"ready\";");
-    rep("    done.current = true;", "    done.current = true;\n    __e2eMark(\"push\", Date.now());");
+    // 11.3 open hand-off: reverse() also sets done.current (before finish in the file): anchor on finish's next line.
+    rep("    done.current = true;\n    setPassThrough(true);", "    done.current = true;\n    __e2eMark(\"push\", Date.now());\n    setPassThrough(true);");
     rep("shownTimer.current = setTimeout(uncover, SHOWN_SAFETY_MS);", "shownTimer.current = setTimeout(() => {\n      if (!uncovered.current) __e2eZ.via = \"fallback\";\n      uncover();\n    }, SHOWN_SAFETY_MS);");
     rep("  const surfaceStyle = useAnimatedStyle(() => {", `  const __opq = useSharedValue(false);
   const __skel = useSharedValue(false);
