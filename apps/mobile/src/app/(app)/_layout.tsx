@@ -2,7 +2,7 @@ import { router, useGlobalSearchParams, useSegments } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useThemeColor } from "heroui-native/hooks";
 import { type PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
-import { TextInput } from "react-native";
+import { Keyboard, TextInput } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { AgentPinTransitionProvider } from "@/features/agents/components/agent-pin-transition";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
@@ -35,7 +35,7 @@ import { headerFontOptions } from "@/shared/lib/app-font";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
-import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
+import { colorOSMotionEnabled, useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 import { forgetZoomRoute, isZoomPush, releaseZoomPush, zoomPushAnimation } from "@/shared/motion/zoomPush";
 
 /** How long a notification tap waits for the channel list of its server before it opens the agent chat. */
@@ -51,6 +51,8 @@ const refocusNameField = isAndroid
         if (event.data.closing) return;
         const input = TextInput.State.currentlyFocusedInput();
         if (!input) return;
+        // Build 11.3 motion B8 (audit N17), ColorOS: the keyboard already shows, so no drop and re-rise.
+        if (colorOSMotionEnabled() && Keyboard.isVisible()) return;
         input.blur();
         input.focus();
       },

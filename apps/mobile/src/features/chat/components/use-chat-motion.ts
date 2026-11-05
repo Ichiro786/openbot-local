@@ -43,6 +43,8 @@ const ANTICIPATE_WAIT_MS = 1200;
 const lastKeyboardHeight = makeMutable(0);
 /** True once a keyboard show came only as a settled burst (no IME frames on this phone). */
 const framesMissing = makeMutable(false);
+/** Build 11.3 motion B8: this phone has sent real IME animation frames (duration > 0) at least once. */
+const framesSeen = makeMutable(false);
 
 /**
  * Build 10 diagnostic, declared before the keyboard worklets that call it: a keyboard that came only
@@ -127,6 +129,12 @@ export function useChatMotion(
             keyboardHeight.set(withTiming(event.height, timing));
             keyboardProgress.set(withTiming(1, timing));
           }
+        } else if (fallback.get() && framesSeen.get() && !framesMissing.get() && event.duration > 0) {
+          // Build 11.3 motion B8 (audit N06), ColorOS on Android with real IME frames: the hide follows
+          // the frames like the show, so the composer, the keyboard-aware list and the IME stay locked
+          // (an own out-cubic timing ran ahead of the IME). onEnd and keyboardDidHide still land it at 0.
+          cancelAnimation(keyboardHeight);
+          cancelAnimation(keyboardProgress);
         } else {
           // Complete the return from the destination event. An interrupted iOS
           // dismissal can omit its final frame; subsequent drag frames must not
@@ -148,7 +156,10 @@ export function useChatMotion(
         // Fallback: the settled burst (duration 0) is animated in onEnd, not jumped to here.
         if (fallback.get() && event.duration === 0 && event.height > 0) return;
         // Real frames: this phone animates the IME, so focus never anticipates it.
-        if (event.duration > 0) framesMissing.set(false);
+        if (event.duration > 0) {
+          framesMissing.set(false);
+          framesSeen.set(true);
+        }
         keyboardHeight.set(event.progress === 0 ? 0 : event.height);
         keyboardProgress.set(event.progress);
       },
