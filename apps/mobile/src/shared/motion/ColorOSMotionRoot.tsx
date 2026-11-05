@@ -35,6 +35,22 @@ const CAPTURE_SCALE = 0.5;
 const navigatorView = createRef<ViewInstance>();
 
 /**
+ * Build 11.3 council A1: an encoded image is lazy (Skia decodes it the first time it is drawn, which was
+ * on the UI thread in the middle of a close: the 32-64 ms hole). Decode it here on the JS thread instead.
+ * Without a GPU context on this thread the lazy image is kept (as before).
+ */
+function decodeNow(image: SkImage): SkImage {
+  try {
+    const raster = image.makeNonTextureImage();
+    if (!raster) return image;
+    image.dispose();
+    return raster;
+  } catch {
+    return image;
+  }
+}
+
+/**
  * Build 11.2: a still image of what the navigator shows now (the top screen, without the overlays).
  * Null when it is not mounted or the capture fails; the caller then closes without the zoom.
  */
@@ -46,7 +62,8 @@ export async function snapshotNavigator(): Promise<SkImage | null> {
   if (windowCapture) {
     try {
       const jpeg = await windowCapture.captureWindow(CAPTURE_SCALE);
-      return jpeg ? Skia.Image.MakeImageFromEncoded(Skia.Data.fromBase64(jpeg)) : null;
+      const image = jpeg ? Skia.Image.MakeImageFromEncoded(Skia.Data.fromBase64(jpeg)) : null;
+      return image ? decodeNow(image) : null;
     } catch {
       return null;
     }
