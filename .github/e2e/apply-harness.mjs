@@ -394,7 +394,7 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
   r = `import { withLiveZoom as __withLiveZoom } from "@/shared/motion/LiveZoomScreen";\n${r}\nexport default __withLiveZoom(E2ERealRoute);\n`;
   writeFileSync(real, r);
   // Routes: the same options and listener the real chat routes use.
-  const lzOptions = (fallback) => `({ route }) => ({ ...(__e2eLz(route.key) ? { animation: "none", presentation: "transparentModal", contentStyle: { backgroundColor: "transparent" } } : { animation: "slide_from_right", contentStyle: { backgroundColor: "#000" } }), headerShown: false${fallback} })`;
+  const lzOptions = (fallback) => `({ route }) => ({ ...(__e2eLz(route.key) ? { animation: __e2eLz(route.key).nativeClose ? "slide_from_right" : "none", presentation: "transparentModal", contentStyle: { backgroundColor: "transparent" } } : { animation: "slide_from_right", contentStyle: { backgroundColor: "#000" } }), headerShown: false${fallback} })`;
   const lzListeners = `({ route }) => ({ transitionEnd: (event) => { if (event.data?.closing) __e2eLzForget(route.key); } })`;
   src = `import { forgetLiveZoom as __e2eLzForget, liveZoomFor as __e2eLz } from "@/shared/motion/liveZoom";\n${src}`.replace(
     anchor,
