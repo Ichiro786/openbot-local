@@ -930,6 +930,85 @@ im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.a
 PYH
   adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
 }
+# ---------------- council judge 2 (motion design): recordings of every interaction, ColorOS ON (+ OFF parity) ----------------
+mrec() { # $1 name $2 seconds $3.. command (runs while recording; gfx framestats over the window)
+  local n=$1 s=$2; shift 2
+  gfx_reset; adb shell "screenrecord --time-limit $s --bit-rate 24000000 /sdcard/$n.mp4" & local rec=$!
+  sleep 0.6; eval "$@"; wait $rec 2>/dev/null
+  adb pull /sdcard/$n.mp4 "$OUT/$n.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$n.mp4
+  gfx "$n"; check "$n" || true; log "  rec $n done"
+}
+in_chat_xy() { dump "$1"; find_node "$OUT/$1.xml" "$2"; }
+if [ -f .github/e2e/council-motion ]; then
+  log "== COUNCIL MOTION recordings (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
+  adb shell settings put system show_touches 1
+  adb shell wm size > "$OUT/wm.txt"; adb shell wm density >> "$OUT/wm.txt"; adb shell dumpsys display | grep -m3 -E 'mRefreshRate|fps=' >> "$OUT/wm.txt"
+  touch "$OUT/real-lanes.txt"; ensure_running m
+  real_setup || log "FAIL motion: real_setup"
+  # cold first open (skeleton path): relaunch so no chat still is kept
+  adb shell am force-stop $PKG; sleep 1; adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  wait_for "E2E READY" 60 m-relaunch >/dev/null; sleep 2
+  RXY=$(real_row)
+  mrec m01-open-cold 3 "adb shell input tap $RXY; sleep 2.3"
+  mrec m02-close-header 3 "real_tap $BACKXY; sleep 2.2"
+  RXY=$(real_row)
+  mrec m03-open-warm 3 "adb shell input tap $RXY; sleep 2.3"
+  mrec m04-close-key 3 "adb shell input keyevent 4; sleep 2.2"
+  real_open 2.6
+  edge_swipe m05-predictive-commit 640 640; check m05 || true
+  real_open 2.6
+  edge_swipe m06-predictive-cancel 520 10; check m06 || true
+  dump m06c; on_real m06c && real_tap $BACKXY; sleep 2.4
+  RXY=$(real_row)
+  mrec m07-back-during-open 3 "adb shell input tap $RXY; sleep 0.22; adb shell input keyevent 4; sleep 2.2"
+  home; real_open 2.8
+  # in the chat
+  [ -n "$PILLXY" ] && mrec m08-thread-menu 4 "real_tap $PILLXY; sleep 1.4; adb shell input keyevent 4; sleep 1.2"
+  PXY=$(in_chat_xy m09a "Add attachment")
+  [ -n "$PXY" ] && mrec m09-plus-menu 4 "adb shell input tap $PXY; sleep 1.4; adb shell input tap 540 500; sleep 1.2"
+  [ -n "$EDITXY" ] && mrec m10-keyboard 5 "real_tap $EDITXY; sleep 1.8; adb shell input keyevent 111; sleep 1.8"
+  mrec m11-scroll-fling 5 "adb shell input swipe 540 700 540 1900 90; sleep 1.3; adb shell input swipe 540 1700 540 500 90; sleep 0.9; adb shell input swipe 540 1700 540 400 120; sleep 1.0"
+  set -- $BACKXY
+  mrec m12-glass-press 3 "adb shell input motionevent DOWN $1 $2; sleep 0.45; adb shell input motionevent MOVE $(( $1 + 60 )) $(( $2 + 40 )); sleep 0.25; adb shell input motionevent MOVE $(( $1 + 500 )) $(( $2 + 700 )); adb shell input motionevent UP $(( $1 + 500 )) $(( $2 + 700 )); sleep 1.2"
+  mrec m13-message-hold 4 "adb shell input swipe 400 1100 400 1100 700; sleep 1.4; adb shell input keyevent 4; sleep 1.0"
+  dump m13c; on_real m13c || { adb shell input keyevent 4; sleep 1; }
+  dump m13d; on_real m13d && { real_tap $BACKXY; sleep 2.4; }
+  home
+  # home
+  RB=$(wait_for "E2E Bot row" 10 m14r)
+  [ -n "$RB" ] && mrec m14-row-menu 4 "hold $RB; sleep 1.2; adb shell input keyevent 4; sleep 1.2"
+  home
+  DOTS=$(wait_for "Chat options" 10 m15d)
+  if [ -n "$DOTS" ]; then
+    mrec m15-dots-menu 4 "adb shell input tap $DOTS; sleep 1.4; adb shell input keyevent 4; sleep 1.2"
+    home
+    mrec m16-sheet 6 "adb shell input tap $DOTS; sleep 1.3; dump m16m; X=\$(menu_row 'Add agent' m16m); adb shell input tap \$X; sleep 2.0; adb shell input keyevent 4; sleep 1.5"
+    home
+    press_drag m17-glass-drag "$DOTS"
+    home
+  fi
+  # page push / pop: stand-in zoom chat -> agent page
+  ZX=$(wait_for "E2E Zoom chat" 10 m18z); adb shell input tap $ZX; sleep 2.6
+  AG=$(wait_for "E2E Open agent page" 6 m18a)
+  [ -n "$AG" ] && mrec m18-page-push-pop 5 "adb shell input tap $AG; sleep 2.0; adb shell input keyevent 4; sleep 2.0"
+  AP=$(wait_for "E2E Open agent page" 6 m19a); if [ -n "$AP" ]; then adb shell input tap $AP; sleep 1.8; APX=$(wait_for "E2E Appearance" 6 m19b); [ -n "$APX" ] && mrec m19-appearance-sheet 5 "adb shell input tap $APX; sleep 2.0; adb shell input keyevent 4; sleep 1.8"; fi
+  home
+  # streaming reply + keyboard on the list route
+  list_scn m20-list ON
+  # dark mode chat open/close (glass visibility)
+  adb shell cmd uimode night yes; sleep 2; home
+  RXY=$(real_row); mrec m21-dark-open 3 "adb shell input tap $RXY; sleep 2.3"
+  [ -n "$PILLXY" ] && mrec m22-dark-thread-menu 4 "real_tap $PILLXY; sleep 1.4; adb shell input keyevent 4; sleep 1.2"
+  mrec m23-dark-close 3 "real_tap $BACKXY; sleep 2.2"
+  adb shell cmd uimode night no; sleep 2; home
+  # ColorOS OFF parity
+  toggle_to m-off OFF
+  RXY=$(real_row); mrec m24-off-open 3 "adb shell input tap $RXY; sleep 2.3"
+  mrec m25-off-close 3 "real_tap $BACKXY; sleep 2.2"
+  toggle_to m-on ON
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  log "RESULT FAIL=$FAIL (council motion)"; exit 0
+fi
 if [ -f .github/e2e/quick113 ]; then
   adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
