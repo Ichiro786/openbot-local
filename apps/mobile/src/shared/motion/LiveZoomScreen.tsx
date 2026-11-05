@@ -75,7 +75,8 @@ function openClock(callback: AnimationCallback): number {
         animation.last = -1;
       },
       callback,
-      current: 0,
+      // The target, as withTiming's: Reanimated finishes at once an animation whose current equals the value.
+      current: 1,
       toValue: 1,
       last: -1,
     };
