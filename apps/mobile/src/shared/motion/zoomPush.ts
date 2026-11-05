@@ -1,5 +1,13 @@
 import type { SkImage } from "@shopify/react-native-skia";
+import { makeMutable } from "react-native-reanimated";
 import { routeMemo } from "./routeMemo";
+
+/**
+ * Build 11.3 council A7: how many zoom overlays (open or close) are on screen. Animated plush avatars
+ * hold their frame meanwhile, so no avatar canvas redraws on the UI thread during the zoom. Each overlay
+ * adds itself on mount and removes itself on unmount.
+ */
+export const zoomMotionCount = makeMutable(0);
 
 /**
  * Build 10: the route that a ColorOS zoom-open pushes gets no native push animation.

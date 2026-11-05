@@ -15,7 +15,7 @@ import { Uniwind } from "uniwind";
 import { create } from "zustand";
 import { snapshotNavigator } from "./ColorOSMotionRoot";
 import { zoom } from "./tokens";
-import { type ZoomSource, zoomOpenSurfaceUp } from "./zoomPush";
+import { type ZoomSource, zoomMotionCount, zoomOpenSurfaceUp } from "./zoomPush";
 import { keepChatStill } from "./zoomSkeleton";
 
 /**
@@ -373,6 +373,13 @@ function ZoomCloseOverlay({ request }: { request: CloseRequest }) {
   const { width, height } = useWindowDimensions();
   const surface = String(useThemeColor("background") ?? "#000");
   const { chat, home, source, interactive } = request;
+  // Build 11.3 council A7: animated avatars hold their frame while the close is on screen.
+  useEffect(() => {
+    zoomMotionCount.value = zoomMotionCount.value + 1;
+    return () => {
+      zoomMotionCount.value = Math.max(0, zoomMotionCount.value - 1);
+    };
+  }, []);
   const radius = source.radius;
 
   // The surface rect for p (1 = full screen, 0 = on the row; toward the centre 60 % when c = 1).

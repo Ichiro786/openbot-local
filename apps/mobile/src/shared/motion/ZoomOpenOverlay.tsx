@@ -26,6 +26,7 @@ import {
   setZoomOpenSurface,
   whenZoomPushGone,
   type ZoomSource,
+  zoomMotionCount,
 } from "./zoomPush";
 import { disposeStillLater, takeChatStill, zoomSkeletonFor } from "./zoomSkeleton";
 
@@ -218,6 +219,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
   // not an effect after its first paint (one frame sooner, as the glass menu's open).
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only
   useLayoutEffect(() => {
+    zoomMotionCount.value = zoomMotionCount.value + 1;
     p.value = withSpring(1, zoom.openSpring);
     setZoomOpenSurface(request.key, null);
     const safety = setTimeout(() => {
@@ -233,6 +235,7 @@ function ZoomOpenOverlay({ request }: { request: ZoomRequest }) {
       clearTimeout(safety);
       back.remove();
       alive.current = false;
+      zoomMotionCount.value = Math.max(0, zoomMotionCount.value - 1);
       stopWaiting.current?.();
       if (shownTimer.current) clearTimeout(shownTimer.current);
       clearZoomOpenSurface(request.key);
