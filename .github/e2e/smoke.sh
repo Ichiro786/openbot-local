@@ -930,6 +930,10 @@ im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.a
 PYH
   adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
 }
+if [ -f .github/e2e/latency ]; then
+  . .github/e2e/latency.sh
+  log "RESULT FAIL=$FAIL (latency lane)"; exit $FAIL
+fi
 if [ -f .github/e2e/quick113 ]; then
   adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
