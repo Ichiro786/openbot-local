@@ -206,6 +206,8 @@ export const messages = {
   "mobile.chat.message.copied": "消息已复制",
   "mobile.chat.message.readAloud": "朗读",
   "mobile.chat.message.stopReading": "停止朗读",
+  "mobile.chat.message.readAloudSpeed": "播放速度：{speed}×",
+  "mobile.chat.message.readAloudSpeedValue": "{speed}×",
   "mobile.chat.message.readAloudFailed": "无法朗读消息",
   "mobile.chat.message.selectText": "选择文本",
   "mobile.chat.message.text": "消息文本",

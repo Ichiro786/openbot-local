@@ -185,6 +185,8 @@ export const messages = {
   "mobile.chat.message.copied": "Bericht gekopieerd",
   "mobile.chat.message.readAloud": "Voorlezen",
   "mobile.chat.message.stopReading": "Stoppen met voorlezen",
+  "mobile.chat.message.readAloudSpeed": "Afspeelsnelheid: {speed}×",
+  "mobile.chat.message.readAloudSpeedValue": "{speed}×",
   "mobile.chat.message.readAloudFailed": "Kan het bericht niet voorlezen",
   "mobile.chat.message.selectText": "Selecteer tekst",
   "mobile.chat.message.text": "Berichttekst",

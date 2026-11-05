@@ -211,6 +211,8 @@ export const messages = defineMessages("mobile.chat", {
   "mobile.chat.message.copied": "Message copied",
   "mobile.chat.message.readAloud": "Read aloud",
   "mobile.chat.message.stopReading": "Stop reading",
+  "mobile.chat.message.readAloudSpeed": "Playback speed: {speed}×",
+  "mobile.chat.message.readAloudSpeedValue": "{speed}×",
   "mobile.chat.message.readAloudFailed": "Could not read the message aloud",
   "mobile.chat.message.selectText": "Select text",
   "mobile.chat.message.text": "Message text",
