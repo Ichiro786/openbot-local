@@ -17,6 +17,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid } from "@/shared/lib/platform";
+import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatContentIsVisible } from "../model/chat-layout";
 
@@ -72,10 +73,8 @@ export function useChatMotion(
   holdOpening = false,
   /** The chat shows the messages that the phone kept, and reads the latest page of the host. */
   catchingUp = false,
-  /** Build 11: opened by the ColorOS zoom. The zoom surface's dissolve is the fade, so no inner fade. */
+  /** Build 11: opened by the ColorOS zoom. The chat's own open is the fade, so no inner fade. */
   zoomed = false,
-  /** Build 11.3 council A5: runs one frame after the list is revealed (the zoom's ready signal). */
-  onRevealed?: () => void,
 ) {
   const listRef = useRef<LegendListRef>(null);
   const reducedMotion = useReducedMotion();
@@ -292,6 +291,16 @@ export function useChatMotion(
   // list has no position to wait for, and Legend List calls `onReady` only after it lays out a row.
   const listPlaced = !hasRows || placedWithRows === true;
   const shown = useRef(false);
+  /** Build 11.3 simple zoom: the zoom open has settled; a reveal before that shows its history after it. */
+  const settled = useLiveZoomSettled();
+  const settledNow = useRef(settled);
+  settledNow.current = settled;
+  const historyPending = useRef(false);
+  useEffect(() => {
+    if (!settled || !historyPending.current) return;
+    historyPending.current = false;
+    startTransition(() => setHistoryVisible(true));
+  }, [settled]);
   // While the chat opens, the list keeps the latest message in view: older rows come above the
   // first rows and get their sizes, and the latest page can add messages after the kept ones.
   const [openingFollow, setOpeningFollow] = useState(!holdOpening);
@@ -304,18 +313,15 @@ export function useChatMotion(
     atLatestNow.current = visible;
     setAtLatest(visible);
   }, []);
-  const revealedCallback = useRef(onRevealed);
-  revealedCallback.current = onRevealed;
   const reveal = useCallback(() => {
     if (shown.current) return;
     shown.current = true;
     revealed.set(true);
-    // Build 11.3 council A5: the zoom's ready signal follows the UI-thread reveal, one frame later. It no
-    // longer waits for the historyVisible re-render (every row's deferred content: web views, actions,
-    // media), which now comes as a transition after it, for zoom-opened chats only.
+    // Build 11.3 council A5 + simple zoom: for zoom-opened chats, every row's deferred content (web views,
+    // actions, media) comes as a transition after the UI-thread reveal, and never during the open.
     if (zoomed) {
-      requestAnimationFrame(() => revealedCallback.current?.());
-      startTransition(() => setHistoryVisible(true));
+      if (settledNow.current) startTransition(() => setHistoryVisible(true));
+      else historyPending.current = true;
     } else setHistoryVisible(true);
   }, [revealed, zoomed]);
   /** The list finished the first position of its rows. */

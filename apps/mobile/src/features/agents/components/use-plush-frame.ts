@@ -14,7 +14,6 @@ import {
 } from "@/features/agents/model/plush/plush-frames";
 import { useAppDrawerShownOnUI } from "@/features/servers/components/app-drawer-activity";
 import { isAndroid } from "@/shared/lib/platform";
-import { zoomMotionCount } from "@/shared/motion/zoomPush";
 
 interface Playback {
   frames: PlushFrame[];
@@ -72,8 +71,6 @@ export function usePlushFrame(geometry: PlushGeometry, animate: boolean) {
 
   const clock = useFrameCallback(({ timeSincePreviousFrame }) => {
     if (isAndroid && drawerShown.get()) return;
-    // Build 11.3 council A7: no avatar redraw on the UI thread while a ColorOS zoom open/close runs.
-    if (zoomMotionCount.get() > 0) return;
     const current = playback.get();
     const last = current.frames.length - 1;
     if (current.loopStart === null && current.index >= last) return;

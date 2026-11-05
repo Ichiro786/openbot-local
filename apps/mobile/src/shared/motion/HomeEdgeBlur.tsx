@@ -56,9 +56,14 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
       setBlurring(true);
       return;
     }
+    // Build 11.3 simple zoom: under a menu or a zoomed chat the blur already stopped: no later commit.
+    if (menuOpen) {
+      setBlurring(false);
+      return;
+    }
     const timer = setTimeout(() => setBlurring(false), edges.homeFadeMs + 40);
     return () => clearTimeout(timer);
-  }, [shown]);
+  }, [shown, menuOpen]);
   const running = (shown || blurring) && !menuOpen;
   const live = useBlurLive(running);
   useBlurBudget(live && enabled && ANDROID_BLUR && Boolean(target) && height > 0, "home-edge");

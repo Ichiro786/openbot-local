@@ -3,7 +3,7 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
-import { runChatBack } from "@/shared/motion/useZoomClose";
+import { runChatBack } from "@/shared/motion/LiveZoomScreen";
 
 /**
  * Build 11.3: how long one close holds the next Back. A close that has not taken the chat off the
@@ -52,7 +52,7 @@ export function useLeaveChat(): () => void {
     };
   }, [navigation]);
   return useCallback(() => {
-    // Build 11.3 zoomfix: a zoom-opened chat (ColorOS on) closes by its zoom, bounded in useZoomClose.
+    // Build 11.3 zoomfix: a zoom-opened chat (ColorOS on) closes by its zoom, bounded in LiveZoomScreen.
     if (runChatBack(route.key)) {
       void KeyboardController.dismiss();
       return;
@@ -68,7 +68,7 @@ export function useLeaveChat(): () => void {
     if (retry.current) clearTimeout(retry.current);
     retry.current = setTimeout(() => {
       retry.current = null;
-      // Still on top: the first Back was swallowed. This one meets no close in progress (useZoomClose
+      // Still on top: the first Back was swallowed. This one meets no close in progress (LiveZoomScreen
       // pops a repeated Back the plain way), so the chat leaves.
       const state = navigation.getState();
       if (state.routes[state.index]?.key !== route.key) return;

@@ -83,7 +83,6 @@ import { ComposerFrost } from "@/shared/motion/ComposerFrost";
 import { glassMenuHostBox, openGlassMenu, useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { menu as menuTokens } from "@/shared/motion/tokens";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
 import { applyMarkdownListEdit, markdownListReturn } from "../model/composer-lists";
 import { largePastedText } from "../model/composer-paste";
@@ -183,8 +182,6 @@ interface ChatComposerProps {
   /** Tells the chat when the `@` list opens and closes, so that a drag in it does not move the keyboard. */
   onSuggestionsVisibleChange?: (visible: boolean) => void;
   bottomInset: number;
-  /** Build 11.2: the chat's id; the zoom-open skeleton of this chat then draws this capsule's size. */
-  skeletonKey?: string;
   disabled: boolean;
   draft: string;
   fallbackBackground: ViewStyle["backgroundColor"];
@@ -298,7 +295,6 @@ export const ChatComposer = memo(function ChatComposer({
   skillPickerVersion = 0,
   onSuggestionsVisibleChange,
   bottomInset,
-  skeletonKey,
   disabled,
   draft,
   fallbackBackground,
@@ -514,11 +510,6 @@ export const ChatComposer = memo(function ChatComposer({
   // snapping it. The first measurement is taken at once, as before: the bar must not shrink in
   // from full width when the chat opens.
   const restWidthValue = useSharedValue(restWidth);
-  // Build 11.2: the capsule at rest, for the next zoom-open skeleton of this chat (once measured).
-  useEffect(() => {
-    if (skeletonKey && placeholderWidth > 0)
-      recordZoomSkeleton(skeletonKey, { composerWidth: restWidth, composerHeight: restHeight });
-  }, [skeletonKey, placeholderWidth, restWidth, restHeight]);
   const restWidthMeasured = useRef(false);
   useLayoutEffect(() => {
     if (!restWidthMeasured.current) {

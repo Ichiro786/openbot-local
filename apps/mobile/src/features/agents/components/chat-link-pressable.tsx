@@ -1,27 +1,22 @@
 import { useNavigation, useRoute } from "expo-router/react-navigation";
 import { type ComponentProps, createContext, useContext, useEffect, useRef } from "react";
-import { Pressable, type ViewInstance } from "react-native";
+import { Pressable } from "react-native";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
 import type { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
-import { snapshotNavigator } from "@/shared/motion/ColorOSMotionRoot";
-import { predictiveBack } from "@/shared/motion/predictiveBack";
+import { armLiveZoom } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { zoomCovering, zoomOpen } from "@/shared/motion/ZoomOpenOverlay";
-import { measureZoomRow, registerZoomRow } from "@/shared/motion/zoomPush";
 
 export const ChatNavigationGateContext = createContext<ReturnType<typeof createChatNavigationGate> | null>(null);
 
 /**
- * Build 11.3 batch 1 (F05): the tap whose row is being measured for a zoom-open (0: none). Reserved
- * at the tap, before the async measure, so a second tap while it measures (or while a zoom is up) is
- * dropped instead of navigating a second time. A measure that never answers frees it after the bound.
+ * Build 11.3 simple zoom: a second tap this soon after a zoom-open is dropped instead of navigating a
+ * second time (a plain time, so nothing ever stays blocked).
  */
-let measuringTap = 0;
-let tapSeq = 0;
-const MEASURE_BOUND_MS = 400;
+let lastZoomTapAt = 0;
+const ZOOM_TAP_GUARD_MS = 500;
 
 // Link injects its handler here. Defer that exact handler rather than recreating navigation with
 // router.push.
@@ -30,7 +25,6 @@ export function ChatLinkPressable({
   prefetchServerId,
   onPress,
   onPressIn,
-  ref,
   ...props
 }: ComponentProps<typeof Pressable> & {
   /** The chat this row opens. The chat list pane does not open the chat that shows already. */
@@ -49,12 +43,8 @@ export function ChatLinkPressable({
   const route = useRoute();
   const navigation = useNavigation();
   const mounted = useRef(true);
-  const self = useRef<ViewInstance | null>(null);
-  // Build 11.2: a recycled list row can show another chat by the time the opened one closes.
-  const shownChat = useRef(chatId);
-  shownChat.current = chatId;
   const { enabled: colorOS, reduceMotion } = useColorOSMotion();
-  // ColorOS motion on Android: the row zooms open into the chat (iOS keeps Link.AppleZoom).
+  // ColorOS motion on Android: the chat zooms open from the row (iOS keeps Link.AppleZoom).
   const zoom = isAndroid && colorOS && !reduceMotion && !pane;
   useEffect(() => {
     mounted.current = true;
@@ -62,17 +52,10 @@ export function ChatLinkPressable({
       mounted.current = false;
     };
   }, []);
-  // Build 11.3 zoomfix: the close finds this chat's row here even after the row it opened from remounted.
-  useEffect(() => (zoom && chatId ? registerZoomRow(chatId, self) : undefined), [zoom, chatId]);
 
   return (
     <Pressable
       {...props}
-      ref={(node: ViewInstance | null) => {
-        self.current = node;
-        if (typeof ref === "function") ref(node);
-        else if (ref && "current" in ref) ref.current = node;
-      }}
       onPressIn={(event) => {
         if (chatId && prefetchServerId && !conversationStore.isUpToDate(chatId))
           void loadConversation(chatId, prefetchServerId).catch(() => undefined);
@@ -93,53 +76,15 @@ export function ChatLinkPressable({
           else if (gate && route.name === "connected") gate.request(navigate, navigation.isFocused);
           else navigate();
         };
-        const node = self.current;
-        if (!zoom || !node) {
+        if (!zoom) {
           go();
           return;
         }
-        if (measuringTap || zoomCovering()) return;
-        const tap = ++tapSeq;
-        measuringTap = tap;
-        const settle = () => {
-          if (measuringTap !== tap) return false;
-          measuringTap = 0;
-          clearTimeout(bound);
-          return true;
-        };
-        const bound = setTimeout(() => {
-          if (settle() && navigation.isFocused()) go();
-        }, MEASURE_BOUND_MS);
-        node.measureInWindow((x, y, width, height) => {
-          // A zoom another row started meanwhile owns this open (its tap navigates once).
-          if (!settle() || zoomCovering()) return;
-          // The screen lost focus while measuring: no zoom; the home gate still waits for its focus.
-          if (!navigation.isFocused()) {
-            if (gate && route.name === "connected") go();
-            return;
-          }
-          if (!width || !height) {
-            go();
-            return;
-          }
-          // Build 11.2: the close zooms back into this row: it re-measures the row then, and shows a
-          // still of this screen behind the chat while a predictive back gesture is undecided.
-          const openedChat = chatId;
-          const source = {
-            skeletonKey: chatId,
-            // Build 11.3 motion B3: only a predictive gesture shows the home still; no capture without one.
-            home: predictiveBack ? snapshotNavigator() : Promise.resolve(null),
-            // Build 11.3 zoomfix: this row if it still shows the chat, else the chat's current row (pinned or not).
-            measure: (done: (rect: { x: number; y: number; width: number; height: number } | null) => void) => {
-              const row = mounted.current && shownChat.current === openedChat ? self.current : null;
-              measureZoomRow(openedChat, row, done);
-            },
-          };
-          if (!zoomOpen({ x, y, width, height }, go, 0, source)) {
-            void source.home.then((image) => image?.dispose());
-            go();
-          }
-        });
+        if (Date.now() - lastZoomTapAt < ZOOM_TAP_GUARD_MS) return;
+        lastZoomTapAt = Date.now();
+        // The chat grows from the tapped row's height (LiveZoomScreen).
+        armLiveZoom(event.nativeEvent.pageY);
+        go();
       }}
     />
   );

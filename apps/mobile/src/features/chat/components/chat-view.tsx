@@ -66,9 +66,8 @@ import { END_X } from "@/shared/lib/text-direction";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
+import { liveZoomOf } from "@/shared/motion/liveZoom";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { useZoomClose } from "@/shared/motion/useZoomClose";
-import { isZoomPush, markZoomContentReady } from "@/shared/motion/zoomPush";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import { getComposerDraft, useComposerDraft } from "../model/composer-drafts";
@@ -604,13 +603,10 @@ export function ChatView({
         setAwaitingTurn(true);
       }
   }, [outboxMessages, target.kind]);
-  // Build 11: this chat was opened by the ColorOS zoom (decided at mount, before its options release it).
+  // Build 11: this chat was opened by the ColorOS zoom (its route decided it before it mounted). Its live
+  // root animates the open and the Back (LiveZoomScreen); the rows are in the first commit (B8).
   const routeKey = useRoute().key;
-  const [zoomed] = useState(() => isZoomPush(routeKey));
-  // Build 11.2: Back zooms a zoom-opened chat back into its home row (predictive on Android 14+).
-  // Build 11.3 council A4: whether the list shows its end, read when a Back starts.
-  const atEndForClose = useRef(false);
-  useZoomClose(routeKey, atEndForClose);
+  const [zoomed] = useState(() => liveZoomOf(routeKey) !== undefined);
   const rowsShown = useRowsAfterOpenTransition(zoomed);
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;
@@ -629,19 +625,8 @@ export function ChatView({
     holdOpening,
     catchingUp,
     zoomed,
-    () => markZoomContentReady(routeKey),
   );
   const atLatest = motion.atLatest;
-  atEndForClose.current = atLatest;
-  // Build 11: tell the zoom overlay the chat has painted (list revealed, or an empty/starter chat with
-  // its history read), one frame after the commit, so its single dissolve uncovers a finished chat.
-  // Not gated on `zoomed`: a no-op for any route but the armed zoom push, even one mounted late.
-  const zoomPainted = motion.historyVisible || (ready && rowsShown && messages.length === 0);
-  useEffect(() => {
-    if (!zoomPainted) return;
-    const frame = requestAnimationFrame(() => markZoomContentReady(routeKey));
-    return () => cancelAnimationFrame(frame);
-  }, [zoomPainted, routeKey]);
   // The end of a window around a searched message is not the latest message.
   const showLatest = () => {
     if (!detached || !showLatestMessages) {
@@ -1300,7 +1285,6 @@ export function ChatView({
                 />
               ) : (
                 <ChatComposer
-                  skeletonKey={target.id}
                   sendRetryVersion={sendRetryVersion}
                   replyTarget={replyTarget}
                   replyFocusVersion={replyFocusVersion}

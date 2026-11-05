@@ -1,22 +1,10 @@
 package run.openbot.predictiveback
 
-import android.graphics.Bitmap
-import android.graphics.Rect
 import android.os.Build
-import android.os.Handler
-import android.os.HandlerThread
-import android.util.Base64
-import android.view.PixelCopy
-import android.view.View
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
-import androidx.annotation.RequiresApi
-import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
-import java.io.ByteArrayOutputStream
-import kotlin.math.max
-import kotlin.math.roundToInt
 import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
@@ -40,23 +28,6 @@ class PredictiveBackModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OpenBotPredictiveBack")
     Events("onBackStart", "onBackProgress", "onBackCancel", "onBackInvoke")
-
-    /**
-     * Build 11.3 motion B3 (audit N01): a still of the window for the zoom open/close, without blocking
-     * the main thread. Skia's makeImageFromView software-drew the whole navigator into a full-size
-     * bitmap ON the main thread (tens of ms at the first frames of every open and Back). PixelCopy
-     * copies the last frame the GPU drew, scaled into a `scale`-size bitmap, on a background thread,
-     * where it is also encoded (JPEG, base64). Only the request itself is posted to the main thread.
-     * Resolves null when there is nothing to copy (no activity, below API 26, copy failed).
-     */
-    AsyncFunction("captureWindow") { scale: Double, promise: Promise ->
-      val activity = appContext.currentActivity
-      if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-        promise.resolve(null)
-        return@AsyncFunction
-      }
-      captureWindow(activity, scale, promise)
-    }
 
     /** Whether the system can send progress at all (API 34+). */
     Function("hasProgress") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE }
@@ -122,64 +93,10 @@ class PredictiveBackModule : Module() {
     }
 
     OnDestroy {
-      captureThread?.quitSafely()
-      captureThread = null
       callback?.remove()
       callback = null
       owner = null
     }
-  }
-
-  @RequiresApi(Build.VERSION_CODES.O)
-  private fun captureWindow(activity: android.app.Activity, scale: Double, promise: Promise) {
-    // Sizes are plain fields and the bitmap is allocated here (the module's background queue).
-    val window = activity.window
-    // The React root (android.R.id.content), the area the navigator fills, as the Skia capture was.
-    val view = window.peekDecorView()?.let { it.findViewById<View>(android.R.id.content) ?: it }
-    val width = view?.width ?: 0
-    val height = view?.height ?: 0
-    if (width <= 0 || height <= 0) {
-      promise.resolve(null)
-      return
-    }
-    val factor = scale.coerceIn(0.1, 1.0)
-    val bitmap = try {
-      Bitmap.createBitmap(max(1, (width * factor).roundToInt()), max(1, (height * factor).roundToInt()), Bitmap.Config.ARGB_8888)
-    } catch (error: Throwable) {
-      promise.resolve(null)
-      return
-    }
-    activity.runOnUiThread {
-      try {
-        val at = IntArray(2)
-        view?.getLocationInWindow(at)
-        val area = Rect(at[0], at[1], at[0] + width, at[1] + height)
-        PixelCopy.request(window, area, bitmap, { result ->
-          if (result != PixelCopy.SUCCESS) {
-            bitmap.recycle()
-            promise.resolve(null)
-            return@request
-          }
-          val out = ByteArrayOutputStream(256 * 1024)
-          bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out)
-          bitmap.recycle()
-          promise.resolve(Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP))
-        }, captureHandler())
-      } catch (error: Throwable) {
-        bitmap.recycle()
-        promise.resolve(null)
-      }
-    }
-  }
-
-  private var captureThread: HandlerThread? = null
-
-  private fun captureHandler(): Handler {
-    val thread = captureThread ?: HandlerThread("OpenBotWindowCapture").also {
-      it.start()
-      captureThread = it
-    }
-    return Handler(thread.looper)
   }
 
   private val reactBackOn = java.util.Collections.newSetFromMap(java.util.WeakHashMap<ComponentActivity, Boolean>())

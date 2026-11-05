@@ -1,4 +1,3 @@
-import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
@@ -25,9 +24,8 @@ import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
 import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { prewarmZoomClose } from "@/shared/motion/ZoomCloseOverlay";
-import { recordZoomSkeleton } from "@/shared/motion/zoomSkeleton";
 import type { ChatTarget } from "../model/chat-target";
 
 /** Hotfix 11.1 (Syed, ChatGPT-style reference): a big avatar right over a compact name pill. */
@@ -37,9 +35,6 @@ const OVERLAP = 4;
 const PILL_HEIGHT = 32;
 /** Build 11.3: Avatar size grows the header avatar at most 10 % (it overlaps the pill by 4 dp). */
 const HEADER_AVATAR_MAX_SCALE = 1.1;
-/** The back and ••• glass: 40 dp in the 48 dp side boxes. */
-const BUTTON = 40;
-const BUTTON_INSET = 4;
 /** Row top below the status bar; the plush fur reaches ~3 dp above the avatar box. */
 const ROW_TOP = 4;
 const ROW_HEIGHT = AVATAR - OVERLAP + PILL_HEIGHT;
@@ -53,32 +48,6 @@ const EDGE_PAD = 16;
 const MORE_WIDTH = 60;
 /** Build 11.3 (Syed): the header's frost ends this far ABOVE the name pill's top edge. */
 const BAND_GAP = 6;
-/**
- * Build 11.2: the header's geometry for the zoom-open skeleton (ZoomOpenOverlay), from the constants
- * above, so the skeleton draws the shapes exactly where this header puts them. Offsets are from the
- * top of the safe area (add the status bar inset) and from the screen's left and right edges (add the
- * side insets).
- */
-export const COLOROS_CHAT_HEADER_GEOMETRY = {
-  rowTop: ROW_TOP,
-  avatar: AVATAR,
-  overlap: OVERLAP,
-  pillHeight: PILL_HEIGHT,
-  /** The pill's narrowest width (it hugs the name): never narrower than the avatar over it. */
-  pillMinWidth: AVATAR + 16,
-  pillMaxWidth: 220,
-  back: { left: EDGE_PAD + BUTTON_INSET, top: ROW_TOP + SIDE_TOP + BUTTON_INSET, size: BUTTON },
-  more: {
-    right: EDGE_PAD + BUTTON_INSET,
-    top: ROW_TOP + SIDE_TOP + BUTTON_INSET,
-    width: MORE_WIDTH - BUTTON_INSET * 2,
-    height: BUTTON,
-  },
-  /** The middle column (avatar and pill are centred in it) starts after the leading side box. */
-  sideBox: SIDE_BOX,
-  edgePad: EDGE_PAD,
-} as const;
-
 /**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
  * the left, the agent's avatar over the top edge of a frosted name pill (name, the thread menu's
@@ -129,7 +98,9 @@ export function ColorOSChatHeader({
   // + menu, ••• menus) takes the composer's blur instead (ChatComposer pauses), so the band stays.
   // Only a two-blur menu (message long-press: reaction bar + card) pauses it; its dim stays.
   const menuDouble = useGlassMenuDoubleFrost();
-  const bandOn = Boolean(frostTarget) && !menuDouble;
+  // Build 11.3 simple zoom: the band's blur starts once a zoom open has settled (none under the moving chat).
+  const settled = useLiveZoomSettled();
+  const bandOn = Boolean(frostTarget) && !menuDouble && settled;
   // Build 11.3: the band ends above the pill, so the pill and the side buttons (which reach below it)
   // carry their own solid glass fill; text under them never shows through sharp.
   const material = "solid";
@@ -225,7 +196,6 @@ export function ColorOSChatHeader({
               liquidGlassAvailable={false}
               glassMaterial={material}
               press={backPress}
-              onPressIn={prewarmZoomClose}
               onPress={onBack}
             >
               <ArrowLeft color={iconColor} size={24} strokeWidth={2} />
@@ -235,18 +205,7 @@ export function ColorOSChatHeader({
         <View pointerEvents="box-none" style={styles.middle}>
           <Animated.View
             style={{ marginTop: AVATAR - OVERLAP }}
-            onLayout={(event) => {
-              const { width } = event.nativeEvent.layout;
-              setPillWidth(width);
-              // Build 11.2: the next zoom-open of this chat draws its skeleton pill this wide.
-              recordZoomSkeleton(target.id, {
-                pillWidth: width,
-                avatarColor:
-                  target.kind === "agent"
-                    ? avatarHeadColor(target.avatarSeed, target.avatarHue, target.avatarColor)
-                    : undefined,
-              });
-            }}
+            onLayout={(event) => setPillWidth(event.nativeEvent.layout.width)}
             {...pillHandlers}
           >
             <GlassFace press={pillPress} variant="pill" size={PILL_HEIGHT} material={material} contentPadding={0}>

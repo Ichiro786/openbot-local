@@ -11,8 +11,6 @@ type Events = {
 declare class PredictiveBackModule extends NativeModule<Events> {
   hasProgress(): boolean;
   setEnabled(enabled: boolean): boolean;
-  /** Build 11.3 motion B3: a JPEG (base64) still of the window at `scale`, copied off the main thread. */
-  captureWindow(scale: number): Promise<string | null>;
 }
 
 /**
@@ -21,8 +19,6 @@ declare class PredictiveBackModule extends NativeModule<Events> {
  */
 const native = requireOptionalNativeModule<PredictiveBackModule>("OpenBotPredictiveBack");
 export const predictiveBack = native?.hasProgress() ? native : null;
-/** Build 11.3 motion B3: the window still (any Android with the module, API 26+), for the zoom stills. */
-export const windowCapture = native;
 
 /**
  * Something in the chat takes Back first (the attachment panel, dictation, voice, a live conversation).

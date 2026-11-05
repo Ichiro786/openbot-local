@@ -85,6 +85,7 @@ import { typeScale } from "@/shared/lib/type-scale";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { HomeEdgeBlur } from "@/shared/motion/HomeEdgeBlur";
+import { useHomeCovered } from "@/shared/motion/liveZoom";
 import { edges } from "@/shared/motion/tokens";
 
 /**
@@ -1045,7 +1046,9 @@ function useHomeAtRest(): boolean {
  */
 function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeof GlassCapsule>) {
   const drawerShown = useAppDrawerShown();
-  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown} colorOSFrost />;
+  // Build 11.3 simple zoom: home stays drawn under a zoomed chat; its blurs pause while a chat covers it.
+  const covered = useHomeCovered();
+  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown || covered} colorOSFrost />;
 }
 
 /** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
@@ -1057,7 +1060,10 @@ function HomeSearchEdge({
   // Build 10: a frosted glass menu (••• or an agent row's long-press) is one more blur over the pill,
   // so the edge pauses while it is open and home runs at most two.
   const menuFrost = useGlassMenuFrostOpen();
-  return <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost} menuOpen={menuFrost} />;
+  const covered = useHomeCovered();
+  return (
+    <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost || covered} menuOpen={menuFrost || covered} />
+  );
 }
 
 interface Shortcut {

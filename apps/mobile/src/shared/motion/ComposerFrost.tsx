@@ -1,14 +1,14 @@
 import { BlurView } from "expo-blur";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { GlintRim } from "@/shared/glass/GlintRim";
+import { useLiveZoomSettled } from "./liveZoom";
 import { composerFrost } from "./tokens";
 import { useBlurLive } from "./useBlurLive";
-import { zoomCovering } from "./ZoomOpenOverlay";
 
 /**
  * Build 10 (ColorOS motion, Android 12+): the chat composer's frosted glass, the home search pill's
@@ -36,20 +36,17 @@ export function ComposerFrost({
   const dark = useUniwind().theme === "dark";
   const [ready, setReady] = useState(false);
   const visible = useSharedValue(0);
-  const on = ready && shown && ANDROID_BLUR;
+  // Build 11.3 simple zoom: no blur starts during a zoom open (it would re-render under the moving chat).
+  const settled = useLiveZoomSettled();
+  const on = ready && shown && ANDROID_BLUR && settled;
   // Paused = not blurring at once (build 9 rule 8): the blur is hidden and set to `none` in the same
   // commit and the glass goes with it (the solid fill takes its place), so a menu that takes this
   // frost's place never runs alongside it and no unblurred glass fill is ever seen.
   const live = useBlurLive(on);
   useBlurBudget(live, "composer-frost");
-  // Build 11 (review R3-2): mounted under the zoom surface, the first frost comes on at once; the
-  // surface's one dissolve is the fade, so the composer never crossfades after the reveal.
-  const underZoom = useRef(zoomCovering());
   useEffect(() => {
-    const instant = on && underZoom.current;
-    if (on) underZoom.current = false;
     // Paused: the glass goes at once with its blur (fading the fill alone would show unblurred text).
-    visible.set(withTiming(on ? 1 : 0, { duration: on && !instant ? composerFrost.fadeInMs : 0 }));
+    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : 0 }));
   }, [on, visible]);
   const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
   const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));

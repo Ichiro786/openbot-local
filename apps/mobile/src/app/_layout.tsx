@@ -56,8 +56,6 @@ import { untilForeground } from "@/shared/lib/until-foreground";
 import { SplashContentReadyContext, useSplashGate } from "@/shared/lib/use-splash-gate";
 import { ColorOSMotionRoot } from "@/shared/motion/ColorOSMotionRoot";
 import { GlassMenuHost } from "@/shared/motion/GlassMenu";
-import { ZoomCloseHost } from "@/shared/motion/ZoomCloseOverlay";
-import { ZoomOpenHost } from "@/shared/motion/ZoomOpenOverlay";
 
 import { installLocalEngine } from "../../modules/openbot-engine";
 
@@ -167,15 +165,7 @@ function RootNavigator() {
         >
           {!loading && preferencesReady ? (
             <View className="flex-1" onLayout={session || pathname !== "/" ? reportContentReady : undefined}>
-              <ColorOSMotionRoot
-                overlay={
-                  <>
-                    <GlassMenuHost />
-                    <ZoomOpenHost />
-                    <ZoomCloseHost />
-                  </>
-                }
-              >
+              <ColorOSMotionRoot overlay={<GlassMenuHost />}>
                 <Stack
                   screenOptions={{
                     headerBackButtonDisplayMode: "minimal",

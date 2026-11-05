@@ -1,4 +1,5 @@
 import { router, useGlobalSearchParams, useSegments } from "expo-router";
+import type { NativeStackNavigationOptions } from "expo-router/native-stack";
 import { Stack } from "expo-router/stack";
 import { useThemeColor } from "heroui-native/hooks";
 import { type PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
@@ -35,8 +36,8 @@ import { headerFontOptions } from "@/shared/lib/app-font";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { forgetLiveZoom, liveZoomFor } from "@/shared/motion/liveZoom";
 import { colorOSMotionEnabled, useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
-import { forgetZoomRoute, isZoomPush, releaseZoomPush, zoomPushAnimation } from "@/shared/motion/zoomPush";
 
 /** How long a notification tap waits for the channel list of its server before it opens the agent chat. */
 const NOTIFICATION_CHANNEL_WAIT_MS = 8_000;
@@ -60,34 +61,13 @@ const refocusNameField = isAndroid
   : undefined;
 
 /**
- * The longest a zoom-pushed chat keeps its native animation off, if its transition end never comes.
- * Long enough that a slow push is on screen before its slide comes back (review R12-1).
+ * Build 11.3 simple zoom: a zoomed chat route's choice is kept until it has closed (liveZoom.ts).
  */
-const ZOOM_RELEASE_MS = 2000;
-
-/**
- * Build 10 (ColorOS zoom-open): once a zoom-pushed chat has appeared, its animation override is
- * dropped, so Back pops it with the stack's normal animation. `setOptions({})` only re-renders the
- * descriptors, so the options function reads the released route again.
- */
-function zoomPushListeners({
-  navigation,
-  route,
-}: {
-  navigation: { setOptions: (options: Record<string, never>) => void };
-  route: { key?: string };
-}) {
+function liveZoomListeners({ route }: { route: { key?: string } }) {
   const key = route.key;
-  const release = () => {
-    if (key !== undefined && releaseZoomPush(key)) navigation.setOptions({});
-  };
   return {
     transitionEnd: (event: { data?: { closing?: boolean } }) => {
-      if (!event.data?.closing) release();
-      else if (key !== undefined) forgetZoomRoute(key);
-    },
-    focus: () => {
-      if (key !== undefined && isZoomPush(key)) setTimeout(release, ZOOM_RELEASE_MS);
+      if (event.data?.closing && key !== undefined) forgetLiveZoom(key);
     },
   };
 }
@@ -127,10 +107,16 @@ function AuthenticatedStack() {
   const background = useThemeColor("background");
   const sheetBackground = String(useCSSVariable("--openbot-bg-sheet") ?? background);
   // The chat, task and channel routes open alike.
-  const chatRouteOptions = ({ route }: { route: { key?: string } }) => ({
-    // Build 10: a ColorOS zoom-open push has no native slide of its own (zoomPush.ts).
-    animation: zoomPushAnimation(route.key, chatAnimation),
-    contentStyle: { backgroundColor: background },
+  const chatRouteOptions = ({ route }: { route: { key?: string } }): NativeStackNavigationOptions => ({
+    // Build 11.3 simple zoom: a ColorOS zoom-opened chat is a transparent modal with no native animation
+    // (home stays drawn under it); its live root grows in and shrinks back (LiveZoomScreen).
+    ...(liveZoomFor(route.key)
+      ? {
+          animation: "none" as const,
+          presentation: "transparentModal" as const,
+          contentStyle: { backgroundColor: "transparent" },
+        }
+      : { animation: chatAnimation, contentStyle: { backgroundColor: background } }),
     // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
     // reply: react-native-screens is patched so that the back swipe waits for it.
     fullScreenGestureEnabled: true,
@@ -263,12 +249,12 @@ function AuthenticatedStack() {
         })}
       >
         <Stack.Screen name="connected" options={{ animation: "fade", gestureEnabled: false, title: "" }} />
-        <Stack.Screen name="chat/[agentId]" options={chatRouteOptions} listeners={zoomPushListeners} />
+        <Stack.Screen name="chat/[agentId]" options={chatRouteOptions} listeners={liveZoomListeners} />
         <Stack.Screen
           name="task/[taskId]"
           // A task is a chat of its own, so it opens as the agent's chat does.
           options={chatRouteOptions}
-          listeners={zoomPushListeners}
+          listeners={liveZoomListeners}
         />
         <Stack.Screen
           name="code-preview/[previewId]"
@@ -328,7 +314,7 @@ function AuthenticatedStack() {
             sheetGrabberVisible: true,
           }}
         />
-        <Stack.Screen name="channel/[channelId]" options={chatRouteOptions} listeners={zoomPushListeners} />
+        <Stack.Screen name="channel/[channelId]" options={chatRouteOptions} listeners={liveZoomListeners} />
         <Stack.Screen
           name="channel-info/[channelId]"
           options={{
