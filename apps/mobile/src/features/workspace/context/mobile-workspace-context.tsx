@@ -942,10 +942,11 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           conversations: agents.flatMap((agent) => conversationStore.cachedPage(agent.id) ?? []),
           capabilities: serverCapabilities.current.get(serverId) ?? keptCapabilities.current.get(serverId) ?? null,
           drawer: drawerSnapshot(serverId),
+          channels: channelStore.cachedChannels(serverId),
         })
         .catch(() => undefined);
     },
-    [workspaceCache, conversationStore],
+    [workspaceCache, conversationStore, channelStore],
   );
   // The first time a server is listed in this run, it shows what the phone kept, until its own reads
   // replace it. Its first attempt is then quiet, as a return to the app.
@@ -971,6 +972,8 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           if (cached.sidebar) applySidebarLayout(id, cached.sidebar);
           replaceServerAgents(id, cached.agents);
           for (const page of cached.conversations) conversationStore.restore(page);
+          if (cached.channels && cached.capabilities)
+            channelStore.restore(id, cached.capabilities, cached.channels.channels, cached.channels.pages);
           const connection = connections.current.get(id);
           if (connection) connection.quietStart();
           else quietStarts.current.add(id);
@@ -985,6 +988,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     applySidebarLayout,
     replaceServerAgents,
     conversationStore,
+    channelStore,
   ]);
 
   const loadConversation = useCallback(
