@@ -582,7 +582,8 @@ d=dict(re.findall(r"(\w+)=(\S+)",line))
 ok=True;out=[]
 if not line.startswith("E2ECLOSE done"): print("FAIL: no E2ECLOSE done line"); sys.exit()
 if d.get("mode")!=want: out.append(f"FAIL: mode={d.get('mode')} (want {want})"); ok=False
-if d.get("land","none")=="none" or d.get("row","none")=="none": out.append("FAIL: no land/row rect"); ok=False
+if d.get("live")=="1": out.append(f"ok: live-screen close (no row landing to check), {d.get('ms')} ms")
+elif d.get("land","none")=="none" or d.get("row","none")=="none": out.append("FAIL: no land/row rect"); ok=False
 else:
     L=[float(v) for v in d["land"].split(",")]; R=[float(v) for v in d["row"].split(",")]
     dj=max(abs(a-b) for a,b in zip(L,R))
@@ -621,7 +622,7 @@ close_scn() { # $1 name $2 ON|OFF
   # 1. system Back key (no predictive start: React Native's Back -> non-interactive reverse zoom)
   zoom_open "$n-a" "$2" || return
   adb shell "screenrecord --time-limit 3 --bit-rate 20000000 /sdcard/$n-a-close.mp4" & local rec=$!
-  sleep 0.6; adb shell input keyevent 4; sleep 2.2; wait $rec 2>/dev/null
+  sleep 0.6; gfx_reset; adb shell input keyevent 4; sleep 2.2; wait $rec 2>/dev/null; gfx "$n-a-close"
   adb pull /sdcard/$n-a-close.mp4 "$OUT/$n-a-close.mp4" >/dev/null 2>&1; check "$n-a-close" || return
   if [ "$2" = OFF ]; then
     [ "$(close_count)" = "$c0" ] && log "ok: OFF closes with the classic pop (no zoom-close)" || { log "FAIL $n: zoom-close ran with ColorOS OFF"; FAIL=1; }
@@ -631,11 +632,13 @@ close_scn() { # $1 name $2 ON|OFF
   close_land "$n-a" button "$rp"
   # 2. header Back
   zoom_open "$n-b" "$2" || return
+  adb shell "screenrecord --time-limit 6 --bit-rate 20000000 /sdcard/$n-b-close.mp4" & rec=$!
+  sleep 0.6; gfx_reset
   tapl_last "Back" "$n-b-h" || { log "FAIL $n: no header Back"; FAIL=1; }
-  sleep 2; check "$n-b-close" || return; close_land "$n-b" button "$rp"
+  sleep 2; wait $rec 2>/dev/null; gfx "$n-b-close"; adb pull /sdcard/$n-b-close.mp4 "$OUT/$n-b-close.mp4" >/dev/null 2>&1; check "$n-b-close" || return; close_land "$n-b" button "$rp"
   # 3. predictive back: slow edge swipe, released past the threshold
   zoom_open "$n-c" "$2" || return
-  edge_swipe "$n-c-swipe" 640 640; check "$n-c-close" || return; close_land "$n-c" gesture "$rp"
+  gfx_reset; edge_swipe "$n-c-swipe" 640 640; gfx "$n-c-close"; check "$n-c-close" || return; close_land "$n-c" gesture "$rp"
   # 4. predictive back cancelled: out and back to the edge -> springs back, the chat stays
   zoom_open "$n-d" "$2" || return
   local k0; k0=$(cancel_count)

@@ -59,6 +59,15 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
   );
   console.log("build 10 harness variant applied");
 }
+// Build 11.3 simple zoom: the same stand-in routes, copied before the shared blocks below patch them;
+// the live-zoom block at the end wires them (liveZoom.ts has no zoomPush.ts).
+if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
+  cpSync(".github/e2e/harness-b10/app", "apps/mobile/src/app", { recursive: true });
+  cpSync(".github/e2e/harness-b10/lib", "apps/mobile/src/e2e", { recursive: true });
+  cpSync(".github/e2e/harness-b113/app/e2e-real.tsx", "apps/mobile/src/app/e2e-real.tsx");
+  cpSync(".github/e2e/harness-b113/lib/real-workspace.tsx", "apps/mobile/src/e2e/real-workspace.tsx");
+  cpSync(".github/e2e/harness-b112/app/e2e-picker.tsx", "apps/mobile/src/app/e2e-picker.tsx");
+}
 
 // Build 11+: the blur counter as on-screen text, and the upstream v0.60 plush avatars route.
 {
@@ -89,7 +98,7 @@ if (existsSync("apps/mobile/src/shared/motion/zoomPush.ts")) {
     console.log("plush route applied");
   }
   // Build 11 item 3: the stand-in chat tells the zoom it has painted (as ChatView does), one frame after mount.
-  if (existsSync(chat) && readFileSync("apps/mobile/src/shared/motion/zoomPush.ts", "utf8").includes("export function markZoomContentReady")) {
+  if (existsSync(chat) && existsSync("apps/mobile/src/shared/motion/zoomPush.ts") && readFileSync("apps/mobile/src/shared/motion/zoomPush.ts", "utf8").includes("export function markZoomContentReady")) {
     let f = readFileSync(chat, "utf8");
     const marker = 'function E2EChat() {\n  "use no memo";';
     if (!f.includes(marker)) throw new Error("e2e-chat marker missing");
@@ -335,6 +344,89 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts") && existsSync(".
                     />`,
   );
   console.log("build 11.3 real chat route applied");
+}
+// Build 11.3 simple zoom (liveZoom.ts, no zoomPush/overlays): the stand-in zoom chat, the real chat and the
+// picker routes on the live-screen zoom, plus ZOOMT / E2ECLOSE marks from LiveZoomScreen (same log lines
+// the smoke lanes read; E2ECLOSE carries live=1 so close_land skips the old row-landing checks).
+if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
+  const index = "apps/mobile/src/app/index.tsx";
+  const chat = "apps/mobile/src/app/e2e-chat.tsx";
+  // (routes copied early, before the shared blocks patch them)
+  const must = (f, a, b) => {
+    if (!f.includes(a)) throw new Error(`live zoom harness anchor missing: ${a.slice(0, 70)}`);
+    return f.replace(a, b);
+  };
+  // Home rows: arm the zoom at the row's centre (as chat-link-pressable arms it at the tap), then push.
+  let f = readFileSync(index, "utf8");
+  f = must(f, 'import { zoomOpen } from "@/shared/motion/ZoomOpenOverlay";', 'import { armLiveZoom as __arm } from "@/shared/motion/liveZoom";');
+  f = must(f, "      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0)) go();", "      (globalThis as any).__e2eTap = Date.now();\n      if (width && height) __arm(y + height / 2);\n      go();");
+  const ref = "const zoomRow = useRef<View>(null);";
+  const row = '<Text style={{ color: "#fff", fontSize: 17 }}>E2E Zoom chat (tap me)</Text>\n        </Pressable>';
+  f = must(f, ref, `${ref}
+  const __realRow = useRef<View>(null);
+  const __openReal = () => {
+    const go = () => router.push({ pathname: "/e2e-real", params: { agentId: "e2e-agent" } });
+    const view = __realRow.current;
+    if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
+    view.measureInWindow((x, y, width, height) => {
+      (globalThis as any).__e2eTap = Date.now();
+      if (width && height) __arm(y + height / 2);
+      go();
+    });
+  };`);
+  f = must(f, row, `${row}
+        <Pressable ref={__realRow} accessibilityRole="button" accessibilityLabel="E2E Real chat" onPress={__openReal} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#1f6f8b", justifyContent: "center", paddingHorizontal: 16 }}>
+          <Text style={{ color: "#fff", fontSize: 17 }}>E2E Real chat</Text>
+        </Pressable>`);
+  const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
+  f = must(f, toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E Picker" onPress={() => router.push("/e2e-picker")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#7a5b3b", borderRadius: 12 }}><Text style={{ color: "#fff" }}>Picker</Text></Pressable>`);
+  writeFileSync(index, f);
+  // The stand-in chat: the live zoom frame, and header Back as the real chat does it (useLeaveChat).
+  let c = readFileSync(chat, "utf8");
+  c = must(c, "export default function E2EChatRoute() {", "function E2EChatRoute() {");
+  c = must(c, 'function E2EChat() {\n  "use no memo";', 'function E2EChat() {\n  "use no memo";\n  const __leave = __useLeaveChat();');
+  c = must(c, "onBack={() => router.back()}", "onBack={__leave}");
+  c = `import { useLeaveChat as __useLeaveChat } from "@/features/chat/components/use-leave-chat";\nimport { withLiveZoom as __withLiveZoom } from "@/shared/motion/LiveZoomScreen";\n${c}\nexport default __withLiveZoom(E2EChatRoute);\n`;
+  writeFileSync(chat, c);
+  const real = "apps/mobile/src/app/e2e-real.tsx";
+  let r = readFileSync(real, "utf8");
+  r = must(r, "export default function E2ERealRoute() {", "function E2ERealRoute() {");
+  r = `import { withLiveZoom as __withLiveZoom } from "@/shared/motion/LiveZoomScreen";\n${r}\nexport default __withLiveZoom(E2ERealRoute);\n`;
+  writeFileSync(real, r);
+  // Routes: the same options and listener the real chat routes use.
+  const lzOptions = (fallback) => `({ route }) => ({ ...(__e2eLz(route.key) ? { animation: "none", presentation: "transparentModal", contentStyle: { backgroundColor: "transparent" } } : { animation: "slide_from_right", contentStyle: { backgroundColor: "#000" } }), headerShown: false${fallback} })`;
+  const lzListeners = `({ route }) => ({ transitionEnd: (event) => { if (event.data?.closing) __e2eLzForget(route.key); } })`;
+  src = `import { forgetLiveZoom as __e2eLzForget, liveZoomFor as __e2eLz } from "@/shared/motion/liveZoom";\n${src}`.replace(
+    anchor,
+    `${anchor}
+                    <Stack.Screen name="e2e-agent" options={{ headerShown: false, presentation: "card", animation: "slide_from_right" }} />
+                    <Stack.Screen name="e2e-chat" options={${lzOptions("")}} listeners={${lzListeners}} />
+                    <Stack.Screen name="e2e-real" options={${lzOptions("")}} listeners={${lzListeners}} />
+                    <Stack.Screen name="e2e-picker" options={{ headerShown: false }} />`,
+  );
+  // Marks. ZOOMT: tap=0, push = the frame mounted, opaque/skel/uncover = the open animation started (no
+  // featureless hold exists any more), clear = the open settled. E2ECLOSE: one line per committed close.
+  const lz = "apps/mobile/src/shared/motion/LiveZoomScreen.tsx";
+  let z = readFileSync(lz, "utf8");
+  z = must(z, "let gestureCancelledAt = 0;", `let gestureCancelledAt = 0;
+const __e2e: { push?: number; start?: number; close?: { t0: number; mode: string }; maxP: number } = { maxP: 0 };
+const __e2eSince = () => Date.now() - ((globalThis as any).__e2eTap ?? 0);`);
+  z = must(z, "      if (st.settled || st.leaving) return;", `      if (st.settled || st.leaving) return;
+      {
+        const text = \`ZOOMT tap=0 opaque=\${__e2e.start ?? -1} skel=\${__e2e.start ?? -1} push=\${__e2e.push ?? -1} uncover=\${__e2e.start ?? -1} clear=\${__e2eSince()} via=ready\`;
+        (globalThis as any).__e2eZoomLast = text;
+        console.log(\`E2EZOOM \${text}\`);
+      }`);
+  z = must(z, "      current.popped = true;\n      api.popNow();", `      current.popped = true;
+      console.log(\`E2ECLOSE done live=1 mode=\${__e2e.close?.mode ?? "?"} still land=none row=none centre=0 p=\${visible.get().toFixed(3)} maxP=\${__e2e.maxP.toFixed(2)} ms=\${Date.now() - (__e2e.close?.t0 ?? Date.now())}\`);
+      api.popNow();`);
+  z = must(z, "      st.leaving = { popped: false, timer };", "      __e2e.close = { t0: Date.now(), mode: st.gestureOn ? \"gesture\" : \"button\" };\n      st.leaving = { popped: false, timer };");
+  z = must(z, "    const done = api.opened;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {", "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = undefined;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {\n        __e2e.start = __e2eSince();");
+  z = must(z, "        st.gestureOn = true;", "        st.gestureOn = true;\n        __e2e.maxP = 0;");
+  z = must(z, "        if (st.gestureOn) gesture.set(progress);", "        if (st.gestureOn) gesture.set(progress);\n        __e2e.maxP = Math.max(__e2e.maxP, progress);");
+  z = must(z, "        gestureCancelledAt = Date.now();", "        gestureCancelledAt = Date.now();\n        console.log(\"E2ECLOSE cancel\");");
+  writeFileSync(lz, z);
+  console.log("build 11.3 simple zoom harness applied");
 }
 writeFileSync(path, src);
 console.log("harness applied");
