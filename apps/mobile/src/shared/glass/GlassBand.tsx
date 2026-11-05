@@ -104,6 +104,8 @@ export function GlassBand({
             blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
             intensity={INTENSITY}
             blurReductionFactor={REDUCTION}
+            // Council D12: blur only the band's part of the list (plus the blur's reach), not the whole list.
+            blurRegion
             tint={dark ? "dark" : "light"}
             style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
           />

@@ -418,6 +418,7 @@
   "patchedDependencies": {
     "react-native-reserved-regions@0.2.0": "patches/react-native-reserved-regions@0.2.0.patch",
     "expo-splash-screen@58.0.11": "patches/expo-splash-screen@58.0.11.patch",
+    "expo-blur@58.0.5": "patches/expo-blur@58.0.5.patch",
     "react-native-screens@4.30.0": "patches/react-native-screens@4.30.0.patch",
     "expo@58.0.17": "patches/expo@58.0.17.patch",
     "@kobalte/core@2.0.0-alpha.0": "patches/@kobalte%2Fcore@2.0.0-alpha.0.patch",

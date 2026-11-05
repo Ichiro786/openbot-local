@@ -64,6 +64,8 @@ export function ComposerFrost({
             intensity={composerFrost.intensity}
             // The composer is small: blur a quarter-size image of the list, as the home pill does.
             blurReductionFactor={4}
+            // Council D12: blur only the card's part of the list (plus the blur's reach), not the whole list.
+            blurRegion
             tint={dark ? "dark" : "light"}
             style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
           />
