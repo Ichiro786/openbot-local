@@ -428,7 +428,9 @@ function GlassMenuOverlay({
       // closeScale) keeps shrinking from where it is toward the scale it opened from.
       const now = open.get();
       const to = now > menu.closeScale ? menu.closeScale : Math.min(now, menu.fromScale);
-      open.set(withTiming(to, { duration: menu.closeMs }));
+      // Build 11.3 motion (F16 review note): the open's own spring, which takes over the running
+      // spring's velocity, so a menu dismissed mid-open turns round without a kink (was a 90 ms timing).
+      open.set(withSpring(to, menu.openSpring));
     }
   };
 
