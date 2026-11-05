@@ -25,6 +25,7 @@ import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
 import { END_X } from "@/shared/lib/text-direction";
 import { addChatBackListener } from "@/shared/motion/predictiveBack";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { ChatCameraContent } from "./chat-camera-panel";
 import type { ChatAttachmentAnchor, ChatAttachments } from "./use-chat-attachments";
 
@@ -52,6 +53,11 @@ const SURFACE_RADIUS = 28;
 // that springs past its own size reads as a toy. `ReduceMotion.System` lets
 // Reanimated land every one of these on the spot when the setting is on.
 const MORPH = { duration: 320, dampingRatio: 1, reduceMotion: ReduceMotion.System };
+/**
+ * Build 11.3 motion B10 (audit N12), ColorOS: a duration spring runs about 1.5x its `duration`, so 320
+ * took ~480 ms; 220 lands the card in ~330 ms, a ColorOS popup. ColorOS off keeps MORPH.
+ */
+const MORPH_COLOROS = { duration: 220, dampingRatio: 1, reduceMotion: ReduceMotion.System };
 // Room the camera leaves below the top safe area.
 const CAMERA_TOP_GAP = 12;
 // The material's own fade. An opacity on the card is what broke the glass, so
@@ -171,6 +177,7 @@ export function ChatAttachmentPanel({
 }) {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const morphSpring = useColorOSMotion().enabled ? MORPH_COLOROS : MORPH;
   // The camera centres between the side insets: the rail of iPhone Duo and the edges in landscape.
   const safeWidth = useColumnWidth() - insets.left - insets.right;
   // The anchor and the card count from the start edge: the right in a right-to-left layout.
@@ -231,17 +238,17 @@ export function ChatAttachmentPanel({
     setClosing(true);
     setGlassLit(false);
     progress.set(
-      withSpring(0, MORPH, (finished) => {
+      withSpring(0, morphSpring, (finished) => {
         if (finished) scheduleOnRN(finish);
       }),
     );
-  }, [finish, progress]);
+  }, [finish, progress, morphSpring]);
 
   const showOptions = useCallback(() => {
     if (busyRef.current) return;
     setMode("options");
-    morph.set(withSpring(0, MORPH));
-  }, [morph]);
+    morph.set(withSpring(0, morphSpring));
+  }, [morph, morphSpring]);
 
   // Build 11.3: a card the ColorOS + menu opened straight on the camera has no
   // options of its own to go back to (the glass menu already closed), so
@@ -306,7 +313,7 @@ export function ChatAttachmentPanel({
       return;
     }
     setMode("camera");
-    morph.set(withSpring(1, MORPH));
+    morph.set(withSpring(1, morphSpring));
   }
 
   // Build 11: Camera chosen from the ColorOS glass + menu opens this card on the camera.
@@ -378,7 +385,7 @@ export function ChatAttachmentPanel({
               listHeight.set(nativeEvent.layout.height);
               if (openedRef.current || closingRef.current) return;
               openedRef.current = true;
-              progress.set(withSpring(1, MORPH));
+              progress.set(withSpring(1, morphSpring));
             }}
             style={[
               {

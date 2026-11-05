@@ -23,7 +23,7 @@ export const spring = (stiffness: number, damping: number, mass = 1, overshootCl
   overshootClamping,
 });
 
-/** 1. Press feedback (PressableSquish). */
+/** 1. Press feedback. */
 export const press = {
   /** Spec §2: ≤0.96–0.97 (compression <3% invisible). Alt: COUI SinkFeedback 0.94. */
   scale: 0.96,
@@ -154,12 +154,6 @@ export const zoom = {
   /** Navigate once the overlay covers ≥ 90%. */
   navigateAt: 0.9,
   unmountBelow: 0.01,
-} as const;
-
-/** Overscroll return (spec §5, H). Alt (COUI): 280 / ζ1. */
-export const overscroll = {
-  returnSpring: spring(225, 30),
-  rubberBand: 160,
 } as const;
 
 /** Glow (Skia only). */
