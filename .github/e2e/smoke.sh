@@ -810,7 +810,9 @@ check launch || true
 # header Back tap (gone now = "IGNORED": the lane's taps were lost, e.g. under the open overlay); still
 # there = probe 2 = system Back key; still there = "STUCK" (Syed's bug). STUCK fails the run.
 REALN=${REALN:-$(cat .github/e2e/realn 2>/dev/null || echo 20)}
-real_row() { [ -s "$OUT/.realrow" ] || { wait_for "E2E Real chat" 10 rr0 > "$OUT/.realrow" || return 1; }; cat "$OUT/.realrow"; }
+# Build 11.3 open timing: never cached. The ZOOMT text line above the rows appears after the first zoom and
+# moved the row down 86 px, so a cached centre missed it: every real lane after real_setup tapped empty space.
+real_row() { wait_for "E2E Real chat" 10 rr0; }
 real_open() { local xy; xy=$(real_row) || return 1; adb shell input tap $xy; sleep "${1:-2.6}"; }
 real_tap() { adb shell input tap $1 $2; }
 edge_quick() { # $1 out_x $2 end_x : left-edge swipe as motion events, no recording
@@ -910,6 +912,7 @@ real_timing() { # build 11.3 open timing: 6 zoom opens of the real chat (with hi
       sleep 0.7; adb shell input tap $xy; sleep 2.6; wait $rec 2>/dev/null
       adb pull /sdcard/rt-open.mp4 "$OUT/rt-open.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/rt-open.mp4
     else adb shell input tap $xy; sleep 2.6; fi
+    dump "rt-$i-c"; on_real "rt-$i-c" && echo "--- open $i: chat shown" >> "$OUT/real-timing.txt" || log "  timing open $i: chat NOT shown"
     { echo "--- open $i"; adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE '(E2EMARK|E2EZOOM|E2EREADY)[^"]*' | tail -12; } >> "$OUT/real-timing.txt"
     real_tap $BACKXY; sleep 2.2; on_home "rt-$i" || { log "  timing open $i: not home after Back"; home; }
   done
