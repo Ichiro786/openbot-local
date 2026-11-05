@@ -2,6 +2,7 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation } from "expo-router/react-navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { BackHandler } from "react-native";
+import { supportLog } from "@/features/support/model/support-log";
 import { isAndroid } from "@/shared/lib/platform";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
@@ -14,6 +15,14 @@ import { markZoomClosing, unmarkZoomClosing, zoomOpenHolding, zoomOpenReverse, z
  * within a frame or STILL_WAIT_MS).
  */
 export const BACK_HARD_MS = 250;
+
+/**
+ * Build 11.3 council D18 (diagnostic): a header Back right after a cancelled back gesture was lost 7 of 8
+ * times in e2e. The support log records each cancel and any Back that reaches the chat soon after, so a
+ * phone log tells "never delivered" from "delivered and ignored".
+ */
+let gestureCancelledAt = 0;
+const CANCEL_LOG_MS = 1500;
 
 /** The zoom Back of each zoom-opened chat in front, for the header Back (useLeaveChat). */
 const chatBacks = new Map<string, () => boolean>();
@@ -81,6 +90,13 @@ export function useZoomClose(
     },
     /** Every Back of a zoom-opened chat. False: not ours, the caller goes back the usual way. */
     back(): boolean {
+      const sinceCancel = Date.now() - gestureCancelledAt;
+      if (sinceCancel < CANCEL_LOG_MS)
+        supportLog.add(
+          "info",
+          "app",
+          `Chat Back ${sinceCancel} ms after a cancelled back gesture (leaving=${Boolean(leaving.current)}, focused=${navigation.isFocused()})`,
+        );
       if (!activeNow.current) return false;
       const source = zoomSource(routeKey);
       if (!source) return false;
@@ -166,7 +182,11 @@ export function useZoomClose(
         if (source) gesture.current = zoomCloseStart(source, true, edge, atEnd?.current);
       }),
       module.addListener("onBackProgress", ({ progress }) => gesture.current?.progress(progress)),
-      module.addListener("onBackCancel", () => api.dropGesture()),
+      module.addListener("onBackCancel", () => {
+        gestureCancelledAt = Date.now();
+        supportLog.add("info", "app", "Back gesture cancelled on a zoom-opened chat");
+        api.dropGesture();
+      }),
       module.addListener("onBackInvoke", () => {
         // Never swallowed: a Back the close cannot take goes back the stack's way.
         if (!api.back()) {
