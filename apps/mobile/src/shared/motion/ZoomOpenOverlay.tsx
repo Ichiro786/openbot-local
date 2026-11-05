@@ -38,10 +38,11 @@ let hostMounted = false;
 const SAFETY_MS = 1200;
 /**
  * The longest the surface waits after the push for the chat's ready signal (`markZoomContentReady`)
- * before it dissolves anyway (build 11: 600 ms, spec §3; was 1.5 s on transitionEnd). Build 11.3 motion
- * (open/close polish): 400 ms, so a slow chat holds the placeholder at most 400 ms past the push.
+ * before it dissolves anyway (build 11: 600 ms, spec §3; was 1.5 s on transitionEnd). Build 11.3 motion:
+ * 400 ms was tried and dropped - the timer fires only once the JS thread is free of the chat's mount, so
+ * it shortened nothing and uncovered the chat before its list showed (e2e 42001829714: 8 of 12 opens).
  */
-const SHOWN_SAFETY_MS = 400;
+const SHOWN_SAFETY_MS = 600;
 /** Build 11: one dissolve of the surface (and its skeleton) off the painted chat. 11.3 polish: 160 → 120 ms. */
 const DISSOLVE_MS = 120;
 const DISSOLVE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
