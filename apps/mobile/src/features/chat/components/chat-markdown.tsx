@@ -15,7 +15,7 @@ import Blocks from "lucide-react-native/icons/blocks";
 import FileText from "lucide-react-native/icons/file-text";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import type { Token, Tokens } from "marked";
-import { Fragment, memo, type ReactNode, useMemo } from "react";
+import { Fragment, memo, type PropsWithChildren, type ReactNode, useId, useLayoutEffect, useMemo } from "react";
 import {
   type ColorValue,
   Platform,
@@ -26,6 +26,15 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
+import Animated, {
+  Easing,
+  ReduceMotion,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useCSSVariable } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
@@ -48,6 +57,7 @@ import {
   textDirection,
   textDirectionStyle,
 } from "@/shared/lib/text-direction";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import {
   parseFinishedChatMarkdown,
   parseInlineChatMarkdown,
@@ -611,28 +621,146 @@ function MarkdownBlocks({
   tokens,
   presentation,
   inList = false,
+  veil,
 }: {
   tokens: Token[];
   presentation: TextPresentation;
   inList?: boolean;
+  /** The streaming reply's tail veil, for its last block only (see `ParagraphText`). */
+  veil?: TailVeilState;
 }) {
   return (
     <View className={inList ? "min-w-0 gap-1.5" : "min-w-0 gap-2.5"}>
-      {sourceEntries(tokens, (token) => token.raw).map(({ value: token, offset }) => (
-        <MarkdownBlock key={offset} token={token} presentation={presentation} inList={inList} />
+      {sourceEntries(tokens, (token) => token.raw).map(({ value: token, offset }, index) => (
+        <MarkdownBlock
+          key={offset}
+          token={token}
+          presentation={presentation}
+          inList={inList}
+          veil={index === tokens.length - 1 ? veil : undefined}
+        />
       ))}
     </View>
   );
+}
+
+/** Council D16: how wide the soft edge over the newest words is, and how fast it clears. */
+const VEIL_WIDTH = 36;
+const VEIL_FADE = { duration: 160, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
+
+/** Council D16: one streaming reply's tail veil, its colour and where it is. */
+interface TailVeilState {
+  color: string;
+  origin: SharedValue<{ x: number; y: number }>;
+  tail: SharedValue<{ end: number; y: number; height: number }>;
+  fade: SharedValue<number>;
+}
+
+/**
+ * A paragraph's text. Council D16 (Android, ColorOS motion, a reply that streams): Android shows each
+ * new word at once (a nested text has no view to fade), so a soft veil of the bubble's colour sits at
+ * the end of the last line and clears over 160 ms each time the line grows. It is placed from the
+ * text's own line layout through shared values, so the paragraph never re-renders or re-lays out for it.
+ * Without a veil this is the plain text, as before.
+ */
+function ParagraphText({
+  veil,
+  selectable,
+  style,
+  children,
+}: PropsWithChildren<{ veil?: TailVeilState; selectable: boolean; style: TextStyle[] }>) {
+  return (
+    <>
+      <Text
+        selectable={selectable}
+        style={style}
+        onLayout={
+          veil ? ({ nativeEvent }) => veil.origin.set({ x: nativeEvent.layout.x, y: nativeEvent.layout.y }) : undefined
+        }
+        onTextLayout={
+          veil
+            ? ({ nativeEvent }) => {
+                const line = nativeEvent.lines.at(-1);
+                if (!line) return;
+                const end = line.x + line.width;
+                const previous = veil.tail.get();
+                if (end === previous.end && line.y === previous.y) return;
+                veil.tail.set({ end, y: line.y, height: line.height });
+                veil.fade.set(1);
+                veil.fade.set(withTiming(0, VEIL_FADE));
+              }
+            : undefined
+        }
+      >
+        {children}
+      </Text>
+      {veil ? <TailVeil veil={veil} /> : null}
+    </>
+  );
+}
+
+function TailVeil({ veil }: { veil: TailVeilState }) {
+  const id = useId().replaceAll(":", "");
+  const { origin, tail, fade, color } = veil;
+  // A new last paragraph starts hidden until its own line layout places the veil.
+  useLayoutEffect(() => {
+    tail.set({ end: -1, y: 0, height: 0 });
+  }, [tail]);
+  const style = useAnimatedStyle(() => {
+    const { end, y, height } = tail.get();
+    const { x: left, y: top } = origin.get();
+    return {
+      opacity: end < 0 ? 0 : fade.get(),
+      height,
+      transform: [{ translateX: left + end + 2 - VEIL_WIDTH }, { translateY: top + y }],
+    };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width: VEIL_WIDTH }, style]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={`tail-veil-${id}`} x1="0" x2="1" y1="0" y2="0">
+            <Stop offset="0" stopColor={color} stopOpacity={0} />
+            <Stop offset="0.55" stopColor={color} stopOpacity={1} />
+            <Stop offset="1" stopColor={color} stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#tail-veil-${id})`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** An opaque `#rrggbb` of `over` at `alpha` on `base` (both `#rgb`/`#rrggbb`), or undefined. */
+function blendHex(base: string, over: string, alpha: number): string | undefined {
+  const rgb = (hex: string) => {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/iu.exec(hex.trim());
+    if (!m?.[1]) return undefined;
+    const full = m[1].length === 3 ? [...m[1]].map((c) => c + c).join("") : m[1];
+    return [0, 2, 4].map((i) => Number.parseInt(full.slice(i, i + 2), 16));
+  };
+  const a = rgb(base);
+  const b = rgb(over);
+  if (!a || !b) return undefined;
+  return `#${a
+    .map((v, i) =>
+      Math.round(v + ((b[i] ?? v) - v) * alpha)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 const MarkdownBlock = memo(function MarkdownBlock({
   token,
   presentation,
   inList,
+  veil,
 }: {
   token: Token;
   presentation: TextPresentation;
   inList: boolean;
+  veil?: TailVeilState;
 }) {
   // The list row draws the task mark, so the checkbox token adds nothing.
   if (token.type === "space" || token.type === "def" || token.type === "checkbox") return null;
@@ -643,7 +771,13 @@ const MarkdownBlock = memo(function MarkdownBlock({
       return <ListParagraph tokens={token.tokens} presentation={presentation} />;
     }
     return (
-      <Text
+      <ParagraphText
+        // The veil sits at the end of a left-to-right line in a left-to-right layout only.
+        veil={
+          veil && presentation.direction === "ltr" && textDirection(token.raw, presentation.direction) === "ltr"
+            ? veil
+            : undefined
+        }
         selectable={presentation.selectable}
         style={[
           CHAT_TEXT_STYLES[presentation.type],
@@ -653,7 +787,7 @@ const MarkdownBlock = memo(function MarkdownBlock({
       >
         {blockDirectionMark(token.raw, presentation)}
         {token.tokens ? inline(token.tokens, presentation) : token.text}
-      </Text>
+      </ParagraphText>
     );
   }
   if (tokenIs(token, "heading")) {
@@ -856,6 +990,22 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   const codeColor = useThemeColor("foreground");
   const { t } = useText();
   const animateTail = (streaming || (Boolean(playback?.enabled) && !flushed)) && animationEnabled && textReveal;
+  // Council D16: an agent reply (it has playback) streaming on Android with ColorOS motion gets the tail
+  // veil, in the colour of its bubble (bg-control/60 over the chat background).
+  const colorOS = useColorOSMotion().enabled;
+  const canvas = useThemeColor("background");
+  const [control] = useCSSVariable(["--openbot-bg-control"]);
+  const veilColor =
+    Platform.OS === "android" && colorOS && animateTail && playback && !inlineOnly
+      ? blendHex(String(canvas), String(control), 0.6)
+      : undefined;
+  const veilOrigin = useSharedValue({ x: 0, y: 0 });
+  const veilTail = useSharedValue({ end: -1, y: 0, height: 0 });
+  const veilFade = useSharedValue(0);
+  const veil = useMemo(
+    () => (veilColor ? { color: veilColor, origin: veilOrigin, tail: veilTail, fade: veilFade } : undefined),
+    [veilColor, veilOrigin, veilTail, veilFade],
+  );
   // One object while its values stay, so each block keeps its memo when the message renders again.
   const presentation = useMemo<TextPresentation>(
     () => ({
@@ -890,7 +1040,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   );
   return (
     <StreamRevealProvider>
-      <MarkdownBlocks tokens={visibleTokens} presentation={presentation} />
+      <MarkdownBlocks tokens={visibleTokens} presentation={presentation} veil={veil} />
     </StreamRevealProvider>
   );
 });
