@@ -82,8 +82,11 @@ export function ChatLinkPressable({
         if (event.defaultPrevented) return;
         void haptics.impact("soft");
         event.persist();
+        // Build 11.3 council A6: a zoom-open navigates even if this row remounted meanwhile (a list
+        // refresh or a settings re-render between the tap and the push dropped the open silently).
+        // Link's handler pushes through the router, not through this instance.
         const navigate = () => {
-          if (mounted.current) onPress?.(event);
+          if (mounted.current || zoom) onPress?.(event);
         };
         const go = () => {
           if (pane) openChatFromPane(pane, chatId, navigate);
