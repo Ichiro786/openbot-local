@@ -7,7 +7,7 @@ import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
 import { View, type ViewStyle } from "react-native";
 import { AnimatedPressable } from "@/shared/components/animated-pressable";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
-import { GlassButton } from "@/shared/glass/GlassButton";
+import { GlassButton, GlassHeaderRoom } from "@/shared/glass/GlassButton";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
@@ -58,16 +58,18 @@ export function AndroidHeaderButton({
       : colorOS && Icon && hasGlass
         ? () => (
             // Build 11 (ColorOS): the Notes glass; it shrinks, follows the finger and springs back.
-            <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
-              <GlassButton
-                accessibilityLabel={accessibilityLabel}
-                disabled={disabled}
-                style={{ opacity: disabled ? 0.38 : 1 }}
-                onPress={() => press.current()}
-              >
-                <Icon color={foreground} size={22} strokeWidth={2} />
-              </GlassButton>
-            </View>
+            <GlassHeaderRoom>
+              <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+                <GlassButton
+                  accessibilityLabel={accessibilityLabel}
+                  disabled={disabled}
+                  style={{ opacity: disabled ? 0.38 : 1 }}
+                  onPress={() => press.current()}
+                >
+                  <Icon color={foreground} size={22} strokeWidth={2} />
+                </GlassButton>
+              </View>
+            </GlassHeaderRoom>
           )
         : () => (
             <AnimatedPressable
@@ -105,15 +107,17 @@ function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: boolean; 
   const colorOS = useColorOSMotion().enabled;
   if (colorOS && hasGlass) {
     return (
-      <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
-        <GlassButton
-          accessibilityLabel={t("common.back")}
-          // GlassButton gives the one press-in tick (review R2-2).
-          onPress={onPress}
-        >
-          <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
-        </GlassButton>
-      </View>
+      <GlassHeaderRoom>
+        <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+          <GlassButton
+            accessibilityLabel={t("common.back")}
+            // GlassButton gives the one press-in tick (review R2-2).
+            onPress={onPress}
+          >
+            <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
+          </GlassButton>
+        </View>
+      </GlassHeaderRoom>
     );
   }
   return (

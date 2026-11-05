@@ -197,6 +197,22 @@ export function GlassFace({
 }
 
 /**
+ * Build 11.3 motion (Syed's 1000053850 video): room round a glass button in a native header slot. The
+ * react-native-screens header subview is a plain Android ViewGroup (clipChildren = true), so it cuts
+ * its React root at the root's own bounds; a button that follows the finger (up to followMax 0.32 of
+ * its size, ~13 dp) out of its 48 dp box lost its far edges flat. The margin hands the space back, so
+ * layout and touch target stay where they were while the root, and so the clip, is ROOM dp larger.
+ */
+const HEADER_ROOM = 16;
+export function GlassHeaderRoom({ children }: { children: ReactNode }) {
+  return (
+    <View pointerEvents="box-none" style={{ margin: -HEADER_ROOM, padding: HEADER_ROOM }}>
+      {children}
+    </View>
+  );
+}
+
+/**
  * Build 11 (ColorOS motion): a round or pill glass control in the Notes material (see `GlassFace`).
  * The press shrinks to 0.955, follows a drag and squashes across it, then springs back with the Notes
  * bounce (205/10). Reduced motion keeps only the scale and the highlight.

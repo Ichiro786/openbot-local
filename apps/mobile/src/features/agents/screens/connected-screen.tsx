@@ -99,7 +99,13 @@ import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { LargeTitle, LargeTitleBar, useLargeTitleScroll } from "@/shared/components/large-title";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
-import { GlassButton, GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
+import {
+  GlassButton,
+  GlassFace,
+  GlassHeaderRoom,
+  useGlassPress,
+  useGlassPressHandlers,
+} from "@/shared/glass/GlassButton";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { haptics } from "@/shared/lib/haptics";
 import { BAR_BUTTON_SIZE, NATIVE_BAR_HEIGHT, useBarTop } from "@/shared/lib/native-bar";
@@ -1109,8 +1115,15 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
           options={{
             // The first-run flow is a whole screen with its own back and skip actions.
             headerShown: !onboarding.active,
-            headerLeft: isAndroid && headerActions && !search.open ? () => headerLeading : undefined,
-            headerRight: isAndroid && headerActions && !search.open ? () => headerTrailing : undefined,
+            // Build 11.3 motion: ColorOS glass buttons get room round the native slot (GlassHeaderRoom).
+            headerLeft:
+              isAndroid && headerActions && !search.open
+                ? () => (colorOSHeader ? <GlassHeaderRoom>{headerLeading}</GlassHeaderRoom> : headerLeading)
+                : undefined,
+            headerRight:
+              isAndroid && headerActions && !search.open
+                ? () => (colorOSHeader ? <GlassHeaderRoom>{headerTrailing}</GlassHeaderRoom> : headerTrailing)
+                : undefined,
             headerTintColor: foreground,
             headerTransparent: true,
             scrollEdgeEffects: { top: "hidden" },
