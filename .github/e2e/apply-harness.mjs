@@ -230,7 +230,11 @@ if (existsSync("apps/mobile/src/shared/motion/useZoomClose.ts")) {
   if (o.includes("export function zoomCloseStart(")) {
     // Build 11.3 zoomfix overlay (zoomCloseStart, visual only): same marks on its own anchors.
     orep("  let committed = false;", "  let committed = false;\n  let __maxP = 0;\n  const __t0 = Date.now();");
-    orep("      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);", "      __maxP = Math.max(__maxP, value);\n      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);");
+    // Build 11.3 motion B1: the gesture drives a decelerated preview instead of p.
+    const __progLine = o.includes("      preview.value = decelerate(Math.min(Math.max(value, 0), 1));")
+      ? "      preview.value = decelerate(Math.min(Math.max(value, 0), 1));"
+      : "      p.value = 1 - PEEK * Math.min(Math.max(value, 0), 1);";
+    orep(__progLine, `      __maxP = Math.max(__maxP, value);\n${__progLine}`);
     orep("    if (request?.key === key) {\n      useCloseStore.setState({ request: null });\n      // The home still", `    if (request?.key === key && committed && popped) {
       const t = target.value;
       const c = centre.value;
