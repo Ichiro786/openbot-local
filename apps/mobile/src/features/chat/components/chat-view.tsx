@@ -213,15 +213,11 @@ const OPEN_TRANSITION_DEADLINE_MS = 700;
  */
 export function useRowsAfterOpenTransition(zoomed = false): boolean {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
-  const [shown, setShown] = useState(!isAndroid);
+  // Build 11.3 council B8: a zoom push has no native slide to keep short (animation "none" under the
+  // opaque zoom surface), so its rows are in its first commit (was: the frame after mount).
+  const [shown, setShown] = useState(!isAndroid || zoomed);
   useEffect(() => {
     if (shown) return;
-    // Build 11: a zoom push has no native slide to keep short (animation "none" under the opaque zoom
-    // surface), so its rows come on the first frame after mount instead of after transitionEnd.
-    if (zoomed) {
-      const frame = requestAnimationFrame(() => setShown(true));
-      return () => cancelAnimationFrame(frame);
-    }
     const unsubscribe = navigation.addListener("transitionEnd", (event) => {
       if (!event.data.closing) setShown(true);
     });

@@ -346,7 +346,10 @@ export function useChatMotion(
       const last = state ? state.data.length - 1 : -1;
       // The size of a row is unset until the list has measured it.
       if (state && last >= 0 && state.sizeAtIndex(last) > 0) measuredFrames += 1;
-      if (list && (measuredFrames > ANDROID_PLACE_FRAMES || Date.now() - started >= ANDROID_PLACE_TIMEOUT_MS)) {
+      // Build 11.3 council B8: under the zoom's opaque surface the list is placed on the first frame its
+      // last row has a size (the opening follow keeps the end while rows settle).
+      const placeFrames = zoomed ? 0 : ANDROID_PLACE_FRAMES;
+      if (list && (measuredFrames > placeFrames || Date.now() - started >= ANDROID_PLACE_TIMEOUT_MS)) {
         // The list calls `onReady` when this ends its wait. The end of the scroll places the list
         // also if it had no wait left to end.
         void list.scrollToEnd({ animated: false }).then(() => setPlacedWithRows(true));
@@ -355,7 +358,7 @@ export function useChatMotion(
       frame = requestAnimationFrame(place);
     });
     return () => cancelAnimationFrame(frame);
-  }, [hasRows, placedWithRows, ready, holdOpening]);
+  }, [hasRows, placedWithRows, ready, holdOpening, zoomed]);
   useEffect(() => {
     if (!openingFollow || !ready || catchingUp) return;
     const timer = setTimeout(() => setOpeningFollow(false), OPENING_FOLLOW_MS);
