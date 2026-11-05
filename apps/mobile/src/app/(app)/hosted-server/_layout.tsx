@@ -6,6 +6,7 @@ import { isIOS } from "@/shared/lib/platform";
 import { sheetBackHaptics } from "@/shared/lib/sheet-back-haptics";
 import { sheetHeaderInsetOptions } from "@/shared/lib/sheet-header";
 import { useText } from "@/shared/lib/text";
+import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 
 export const unstable_settings = { anchor: "index" };
 
@@ -13,6 +14,7 @@ export const unstable_settings = { anchor: "index" };
 // not allow a purchase outside the store. The setup of a server in setup is an inner page. Join with
 // an invitation is an inner page too, so the user can go back to the plans.
 export default function HostedServerLayout() {
+  const page = useColorOSPageAnimation();
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
   return (
@@ -22,6 +24,7 @@ export default function HostedServerLayout() {
         ...androidBackOptions(props),
         ...sheetHeaderInsetOptions,
         presentation: "card",
+        ...page,
         headerBackButtonDisplayMode: "minimal",
         ...headerFontOptions,
         headerShadowVisible: false,

@@ -35,6 +35,7 @@ import { headerFontOptions } from "@/shared/lib/app-font";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 import { forgetZoomRoute, isZoomPush, releaseZoomPush, zoomPushAnimation } from "@/shared/motion/zoomPush";
 
 /** How long a notification tap waits for the channel list of its server before it opens the agent chat. */
@@ -114,6 +115,10 @@ function RouteRefs({
 function AuthenticatedStack() {
   // Reduced motion, from the device or from Settings, replaces the full-screen slide with a cross-fade.
   const pushAnimation = useReducedMotion() ? "fade" : "slide_from_right";
+  // Build 11.3 motion B2 (audit N03): with ColorOS motion on Android, pages (not chats) push the ColorOS
+  // way: a strong ease-out, the page under it moves −25 % and dims. react-native-screens is patched to
+  // retune its unused ios_from_right set for this. ColorOS off keeps the stock slide.
+  const pageAnimation = useColorOSPageAnimation().animation ?? pushAnimation;
   // Beside the chat list pane, a chat takes the place of the chat before it, so it fades in place.
   const chatAnimation = useSplitLayout() ? "fade" : pushAnimation;
   const { t } = useText();
@@ -139,7 +144,7 @@ function AuthenticatedStack() {
     title: "",
   } as const;
   const largeTitlePage = {
-    animation: pushAnimation,
+    animation: pageAnimation,
     contentStyle: { backgroundColor: sheetBackground },
     headerTransparent: true,
     scrollEdgeEffects: { top: "hidden", bottom: "soft" },
@@ -266,7 +271,7 @@ function AuthenticatedStack() {
         <Stack.Screen
           name="code-preview/[previewId]"
           options={{
-            animation: pushAnimation,
+            animation: pageAnimation,
             contentStyle: { backgroundColor: background },
             // The diagram pans with one finger, so only the screen edge goes back.
             fullScreenGestureEnabled: false,
@@ -278,7 +283,7 @@ function AuthenticatedStack() {
         <Stack.Screen
           name="image-gallery/[galleryId]"
           options={{
-            animation: pushAnimation,
+            animation: pageAnimation,
             contentStyle: { backgroundColor: background },
             fullScreenGestureEnabled: true,
             gestureEnabled: true,
@@ -289,7 +294,7 @@ function AuthenticatedStack() {
         <Stack.Screen
           name="browser/[agentId]"
           options={{
-            animation: pushAnimation,
+            animation: pageAnimation,
             contentStyle: { backgroundColor: background },
             // Every finger on the page is the page's mouse, so only the screen edge goes back.
             fullScreenGestureEnabled: false,
@@ -379,7 +384,7 @@ function AuthenticatedStack() {
                   contentStyle: { backgroundColor: sheetBackground },
                   headerShown: false,
                   presentation: "card",
-                  animation: pushAnimation,
+                  animation: pageAnimation,
                 }
               : {
                   contentStyle: { backgroundColor: sheetBackground },
@@ -525,7 +530,7 @@ function AuthenticatedStack() {
         <Stack.Screen
           name="server-routines/agent-routine"
           options={{
-            animation: pushAnimation,
+            animation: pageAnimation,
             contentStyle: { backgroundColor: sheetBackground },
             headerStyle: { backgroundColor: isIOS ? "transparent" : sheetBackground },
             headerBlurEffect: "none",
@@ -536,7 +541,7 @@ function AuthenticatedStack() {
         <Stack.Screen
           name="server-routines/channel-routine"
           options={{
-            animation: pushAnimation,
+            animation: pageAnimation,
             contentStyle: { backgroundColor: sheetBackground },
             headerStyle: { backgroundColor: isIOS ? "transparent" : sheetBackground },
             headerBlurEffect: "none",

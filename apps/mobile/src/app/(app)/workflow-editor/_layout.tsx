@@ -8,11 +8,13 @@ import { isIOS } from "@/shared/lib/platform";
 import { sheetBackHaptics } from "@/shared/lib/sheet-back-haptics";
 import { sheetHeaderInsetOptions } from "@/shared/lib/sheet-header";
 import { useText } from "@/shared/lib/text";
+import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 
 export const unstable_settings = { anchor: "index" };
 
 /** The editor sheet: one sheet with the pages of the editor, which share one draft. */
 export default function WorkflowEditorLayout() {
+  const page = useColorOSPageAnimation();
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
   // The draft lives while the sheet is open, so a closed sheet does not open on an old draft.
@@ -24,6 +26,7 @@ export default function WorkflowEditorLayout() {
         ...androidBackOptions(props),
         ...sheetHeaderInsetOptions,
         presentation: "card",
+        ...page,
         headerBackButtonDisplayMode: "minimal",
         ...headerFontOptions,
         headerShadowVisible: false,

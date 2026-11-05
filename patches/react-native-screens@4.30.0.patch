@@ -63,3 +63,76 @@ index 5da11964f5932cb44e1131c44a2480803c0a62b5..a04b4678830bb5ea16984486072eacad
  
  - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
      shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer
+diff --git a/android/src/main/res/base/anim/rns_ios_from_right_background_close.xml b/android/src/main/res/base/anim/rns_ios_from_right_background_close.xml
+index 66a611f..09a2cfe 100644
+--- a/android/src/main/res/base/anim/rns_ios_from_right_background_close.xml
++++ b/android/src/main/res/base/anim/rns_ios_from_right_background_close.xml
+@@ -1,5 +1,13 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<translate xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:duration="@android:integer/config_shortAnimTime"
+-    android:fromXDelta="-30%"
+-    android:toXDelta="0%" />
++<!-- OpenBot Local build 11.3 (ColorOS page pop): the page under it comes back from -25% and undims. -->
++<set xmlns:android="http://schemas.android.com/apk/res/android"
++    android:duration="300"
++    android:interpolator="@android:interpolator/decelerate_quint"
++    android:shareInterpolator="true">
++    <translate
++        android:fromXDelta="-25%"
++        android:toXDelta="0%" />
++    <alpha
++        android:fromAlpha="0.85"
++        android:toAlpha="1.0" />
++</set>
+diff --git a/android/src/main/res/base/anim/rns_ios_from_right_background_open.xml b/android/src/main/res/base/anim/rns_ios_from_right_background_open.xml
+index 1d92c95..21d4a0a 100644
+--- a/android/src/main/res/base/anim/rns_ios_from_right_background_open.xml
++++ b/android/src/main/res/base/anim/rns_ios_from_right_background_open.xml
+@@ -1,5 +1,13 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<translate xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:duration="@android:integer/config_shortAnimTime"
+-    android:fromXDelta="0%"
+-    android:toXDelta="-30%" />
++<!-- OpenBot Local build 11.3 (ColorOS page push): the page under it moves -25% and dims. -->
++<set xmlns:android="http://schemas.android.com/apk/res/android"
++    android:duration="330"
++    android:interpolator="@android:interpolator/decelerate_quint"
++    android:shareInterpolator="true">
++    <translate
++        android:fromXDelta="0%"
++        android:toXDelta="-25%" />
++    <alpha
++        android:fromAlpha="1.0"
++        android:toAlpha="0.85" />
++</set>
+diff --git a/android/src/main/res/base/anim/rns_ios_from_right_foreground_close.xml b/android/src/main/res/base/anim/rns_ios_from_right_foreground_close.xml
+index 1073ae6..8a4a6ae 100644
+--- a/android/src/main/res/base/anim/rns_ios_from_right_foreground_close.xml
++++ b/android/src/main/res/base/anim/rns_ios_from_right_foreground_close.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!-- OpenBot Local build 11.3 (ColorOS page pop): the push mirrored, 300 ms. -->
+ <translate xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:duration="@android:integer/config_shortAnimTime"
+-    android:interpolator="@android:interpolator/accelerate_decelerate"
++    android:duration="300"
++    android:interpolator="@android:interpolator/decelerate_quint"
+     android:fromXDelta="0%"
+-    android:toXDelta="100%"/>
++    android:toXDelta="100%" />
+diff --git a/android/src/main/res/base/anim/rns_ios_from_right_foreground_open.xml b/android/src/main/res/base/anim/rns_ios_from_right_foreground_open.xml
+index e687584..2d53f46 100644
+--- a/android/src/main/res/base/anim/rns_ios_from_right_foreground_open.xml
++++ b/android/src/main/res/base/anim/rns_ios_from_right_foreground_open.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!-- OpenBot Local build 11.3 (ColorOS page push): strong ease-out, 330 ms. -->
+ <translate xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:duration="@android:integer/config_shortAnimTime"
+-    android:interpolator="@android:interpolator/accelerate_decelerate"
++    android:duration="330"
++    android:interpolator="@android:interpolator/decelerate_quint"
+     android:fromXDelta="100%"
+     android:toXDelta="0%" />

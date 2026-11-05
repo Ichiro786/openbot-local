@@ -8,10 +8,12 @@ import { isIOS } from "@/shared/lib/platform";
 import { sheetBackHaptics } from "@/shared/lib/sheet-back-haptics";
 import { sheetHeaderInsetOptions } from "@/shared/lib/sheet-header";
 import { useText } from "@/shared/lib/text";
+import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 
 export const unstable_settings = { anchor: "index" };
 
 export default function AgentInfoLayout() {
+  const page = useColorOSPageAnimation();
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
   // Build 10: the full-screen agent page (ColorOS) is under the status bar, so its headers keep the
@@ -25,6 +27,7 @@ export default function AgentInfoLayout() {
           ...androidBackOptions(props),
           ...(full ? {} : sheetHeaderInsetOptions),
           presentation: "card",
+          ...page,
           headerBackButtonDisplayMode: "minimal",
           ...headerFontOptions,
           headerShadowVisible: false,

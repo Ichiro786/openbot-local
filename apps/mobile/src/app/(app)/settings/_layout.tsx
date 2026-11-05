@@ -6,10 +6,12 @@ import { isIOS } from "@/shared/lib/platform";
 import { sheetBackHaptics } from "@/shared/lib/sheet-back-haptics";
 import { sheetHeaderInsetOptions } from "@/shared/lib/sheet-header";
 import { useText } from "@/shared/lib/text";
+import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 
 export const unstable_settings = { anchor: "index" };
 
 export default function SettingsLayout() {
+  const page = useColorOSPageAnimation();
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
   return (
@@ -19,6 +21,7 @@ export default function SettingsLayout() {
         ...androidBackOptions(props),
         ...sheetHeaderInsetOptions,
         presentation: "card",
+        ...page,
         headerBackButtonDisplayMode: "minimal",
         ...headerFontOptions,
         headerShadowVisible: false,
