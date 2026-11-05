@@ -423,7 +423,13 @@ function GlassMenuOverlay({
         runOnJS(finish)(id);
       }),
     );
-    if (!reduceMotion) open.set(withTiming(menu.closeScale, { duration: menu.closeMs }));
+    if (!reduceMotion) {
+      // Build 11.3 batch 1 (F16): never grow on close. A menu dismissed while still opening (below
+      // closeScale) keeps shrinking from where it is toward the scale it opened from.
+      const now = open.get();
+      const to = now > menu.closeScale ? menu.closeScale : Math.min(now, menu.fromScale);
+      open.set(withTiming(to, { duration: menu.closeMs }));
+    }
   };
 
   const clearHighlight = () => {
