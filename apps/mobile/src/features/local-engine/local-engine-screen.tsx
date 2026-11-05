@@ -90,7 +90,30 @@ function answerText(response: ControlResponse): string {
   return `${response.status}${fields ? `  ${fields}` : response.body ? `  ${response.body.trim()}` : ""}`;
 }
 
-const SIGNED_OUT = /^(|none|null|-|false|no|signed[-_ ]?out|anonymous)$/i;
+/**
+ * The engine's /v1/status account fields: `account` is the account STATUS (signed_out, signing_in,
+ * code_sent, error, signed_in), `email` is set only when signed in, `account_message` only on error.
+ */
+type EngineAccount = { status: string; email: string | null; message: string | null };
+
+function readAccount(fields: Record<string, string | undefined>): EngineAccount {
+  const clean = (value: string | undefined) => {
+    const text = (value ?? "").trim();
+    return text && text !== "null" ? text : null;
+  };
+  return {
+    status: clean(fields.account) ?? "signed_out",
+    email: clean(fields.email),
+    message: clean(fields.account_message),
+  };
+}
+
+function accountLabel(account: EngineAccount): string {
+  if (account.status === "signed_in") return account.email ?? "Signed in";
+  if (account.status === "code_sent") return "Code sent";
+  if (account.status === "error") return "Sign-in failed";
+  return "Not signed in";
+}
 
 /** The human label of a phase, such as "Installing 42%" or "Error". */
 export function engineLabel(status: EngineStatus): string {
@@ -200,7 +223,7 @@ function LocalEngineScreenInner() {
   const stopped =
     status.phase === "stopped" || status.phase === "idle" || status.phase === "crashed" || status.phase === "error";
 
-  const [account, setAccount] = useState<string | null>(null);
+  const [account, setAccount] = useState<EngineAccount | null>(null);
   const [accountLoaded, setAccountLoaded] = useState(false);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -212,8 +235,7 @@ function LocalEngineScreenInner() {
   const refreshAccount = useCallback(async () => {
     try {
       const answer = await controlStatus();
-      const value = (answer.fields.account ?? "").trim();
-      setAccount(SIGNED_OUT.test(value) ? null : value);
+      setAccount(readAccount(answer.fields));
     } catch {
       setAccount(null);
     } finally {
@@ -244,6 +266,7 @@ function LocalEngineScreenInner() {
     }
   }, []);
 
+  const signedIn = account?.status === "signed_in";
   const toggle = () => void act(running || busy ? engine.stop : engine.start);
   const restart = () =>
     Alert.alert("Restart the local engine?", "Chats on this phone pause for a few seconds while it starts again.", [
@@ -257,7 +280,7 @@ function LocalEngineScreenInner() {
       const next = answer.fields.challenge;
       if (!answer.ok || !next) throw new Error(`Sign-in did not start: ${answerText(answer)}`);
       setChallenge(next);
-    }, "We sent a code to your email.");
+    }, "We sent a code to your email.").then(refreshAccount);
 
   const verify = () =>
     void act(async () => {
@@ -270,7 +293,7 @@ function LocalEngineScreenInner() {
     }, "Signed in.");
 
   const signOut = () =>
-    Alert.alert("Sign out of the local engine?", account ?? undefined, [
+    Alert.alert("Sign out of the local engine?", account?.email ?? undefined, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign out",
@@ -440,7 +463,7 @@ function LocalEngineScreenInner() {
               disclosure={false}
               trailing={
                 <Typography.Paragraph className="text-grouped-secondary" numberOfLines={1}>
-                  {accountLoaded ? (account ?? "Not signed in") : "…"}
+                  {accountLoaded ? (account ? accountLabel(account) : "Not signed in") : "…"}
                 </Typography.Paragraph>
               }
             >
@@ -584,7 +607,7 @@ function LocalEngineScreenInner() {
 
       {running && accountLoaded ? (
         <Animated.View layout={layout} entering={enter} exiting={leave} className="gap-3">
-          {account ? (
+          {signedIn ? (
             <SettingsSection>
               <SettingsRow disclosure={false} disabled={pending} onPress={signOut}>
                 <Typography.Paragraph className="text-danger-text">Sign out</Typography.Paragraph>
@@ -644,6 +667,11 @@ function LocalEngineScreenInner() {
               </SettingsSection>
             </Animated.View>
           )}
+          {!signedIn && !note && account?.message ? (
+            <Typography.Paragraph accessibilityRole="alert" className="px-4 text-danger-text">
+              {account.message}
+            </Typography.Paragraph>
+          ) : null}
         </Animated.View>
       ) : !running ? (
         <Animated.View layout={layout} entering={enter} exiting={leave}>
