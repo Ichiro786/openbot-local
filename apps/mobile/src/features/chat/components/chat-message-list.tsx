@@ -826,6 +826,8 @@ const MessageRow = memo(function MessageRow({
                 <ChatMarkdown
                   agents={agents}
                   body={message.body}
+                  // Build 11.3 batch 1 (F23): an HTML/Mermaid block mid-stream stays a code excerpt.
+                  streaming={isStreamingReply(message)}
                   finished={!isStreamingReply(message)}
                   selectable={message.author === "user" && !bubble}
                   color={textColor}
