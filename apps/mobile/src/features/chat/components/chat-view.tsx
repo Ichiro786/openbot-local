@@ -226,7 +226,7 @@ export function useRowsAfterOpenTransition(zoomed = false): boolean {
       unsubscribe();
       clearTimeout(deadline);
     };
-  }, [navigation, shown, zoomed]);
+  }, [navigation, shown]);
   return shown;
 }
 
