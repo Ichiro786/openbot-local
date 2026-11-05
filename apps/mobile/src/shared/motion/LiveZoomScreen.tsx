@@ -71,6 +71,7 @@ type MotionFlags = {
  */
 function useLiveZoomMotion(
   routeKey: string,
+  zoom: LiveZoom,
   onSettled: () => void,
   visible: SharedValue<number>,
   gesture: SharedValue<number>,
@@ -138,7 +139,8 @@ function useLiveZoomMotion(
           "app",
           `Chat Back ${sinceCancel} ms after a cancelled back gesture (leaving=${Boolean(st.leaving)}, focused=${navigation.isFocused()})`,
         );
-      if (!activeNow.current) return false;
+      // ColorOS turned off, or home is no longer under the chat (a screen was pushed over it): the stack's way.
+      if (!activeNow.current || zoom.nativeClose) return false;
       if (st.leaving) {
         // A repeated Back never waits for the close: the chat pops now.
         api.popNow();
@@ -206,7 +208,15 @@ function useLiveZoomMotion(
       navigation.addListener("focus", () => {
         if (st.leaving || st.gestureOn) api.showAgain();
       }),
-      navigation.addListener("blur", () => api.dropGesture()),
+      navigation.addListener("blur", () => {
+        api.dropGesture();
+        // A screen was pushed over the chat: home is detached under it from now on (LiveZoom.nativeClose).
+        // The options re-read it, so the chat's pop takes the normal animation.
+        if (!st.leaving && !zoom.nativeClose) {
+          zoom.nativeClose = true;
+          navigation.setOptions({});
+        }
+      }),
     ];
     return () => {
       for (const unsubscribe of subscriptions) unsubscribe();
@@ -217,7 +227,7 @@ function useLiveZoomMotion(
       st.recover = null;
       releaseLiveZoomHome(routeKey);
     };
-  }, [api, navigation, routeKey, st]);
+  }, [api, navigation, routeKey, st, zoom]);
 
   // System Back without the predictive callback (3-button navigation, or while it is off): this
   // listener runs before React Navigation's. Off while a chat listener takes Back first (held).
@@ -236,7 +246,7 @@ function useLiveZoomMotion(
     const module = predictiveBack;
     const subscriptions = [
       module.addListener("onBackStart", ({ edge: swipeEdge, progress }) => {
-        if (st.leaving || !navigation.isFocused()) return;
+        if (st.leaving || zoom.nativeClose || !navigation.isFocused()) return;
         st.gestureOn = true;
         // BackEventCompat.EDGE_LEFT = 0: the chat moves right, with the finger.
         edge.set(swipeEdge === 0 ? 1 : -1);
@@ -264,7 +274,7 @@ function useLiveZoomMotion(
       release();
       api.dropGesture();
     };
-  }, [api, edge, gesture, navigation, predictive, st]);
+  }, [api, edge, gesture, navigation, predictive, st, zoom]);
 }
 
 function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey: string; children: ReactNode }) {
@@ -275,7 +285,7 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
   const edge = useSharedValue(1);
   // One commit, after the open: the chat's frosts and deferred content start then.
   const [settled, setSettled] = useState(false);
-  useLiveZoomMotion(routeKey, () => setSettled(true), visible, gesture, edge);
+  useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge);
   const frameStyle = useAnimatedStyle(() => {
     const open = visible.get();
     const drag = gesture.get();

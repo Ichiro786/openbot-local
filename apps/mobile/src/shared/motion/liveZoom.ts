@@ -51,7 +51,16 @@ let armed: { until: number; originY: number; release: () => void; expire: Return
 /** The home blur pause each zoomed route holds from its tap until it unmounts (or closes). */
 const homeHolds = new Map<string, () => void>();
 
-export type LiveZoom = { originY: number };
+export type LiveZoom = {
+  originY: number;
+  /**
+   * Set once a screen was pushed over the chat. react-native-screens then detaches home under the
+   * transparent chat and does not attach it again when the chat is back in front, so a live close would
+   * fade the chat over black (e2e 42084677042, stuck lanes 3 and 8). From then on the chat closes the
+   * stack's way: its pop takes the chat route's normal animation, which brings home back natively.
+   */
+  nativeClose?: boolean;
+};
 /** For each chat route the stack has seen: its zoom, or false (decided once, when first seen). */
 const routes = routeMemo<LiveZoom | false>();
 

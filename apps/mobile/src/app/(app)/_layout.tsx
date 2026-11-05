@@ -107,22 +107,26 @@ function AuthenticatedStack() {
   const background = useThemeColor("background");
   const sheetBackground = String(useCSSVariable("--openbot-bg-sheet") ?? background);
   // The chat, task and channel routes open alike.
-  const chatRouteOptions = ({ route }: { route: { key?: string } }): NativeStackNavigationOptions => ({
-    // Build 11.3 simple zoom: a ColorOS zoom-opened chat is a transparent modal with no native animation
-    // (home stays drawn under it); its live root grows in and shrinks back (LiveZoomScreen).
-    ...(liveZoomFor(route.key)
-      ? {
-          animation: "none" as const,
-          presentation: "transparentModal" as const,
-          contentStyle: { backgroundColor: "transparent" },
-        }
-      : { animation: chatAnimation, contentStyle: { backgroundColor: background } }),
-    // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
-    // reply: react-native-screens is patched so that the back swipe waits for it.
-    fullScreenGestureEnabled: true,
-    gestureEnabled: true,
-    ...nativeBarOptions,
-  });
+  const chatRouteOptions = ({ route }: { route: { key?: string } }): NativeStackNavigationOptions => {
+    const zoom = liveZoomFor(route.key);
+    return {
+      // Build 11.3 simple zoom: a ColorOS zoom-opened chat is a transparent modal with no native animation
+      // (home stays drawn under it); its live root grows in and shrinks back (LiveZoomScreen). Once a
+      // screen was pushed over it, its pop takes the normal animation again (LiveZoom.nativeClose).
+      ...(zoom
+        ? {
+            animation: zoom.nativeClose ? chatAnimation : "none",
+            presentation: "transparentModal" as const,
+            contentStyle: { backgroundColor: "transparent" },
+          }
+        : { animation: chatAnimation, contentStyle: { backgroundColor: background } }),
+      // A swipe to the right anywhere in the chat goes back. A message bubble keeps its swipe to
+      // reply: react-native-screens is patched so that the back swipe waits for it.
+      fullScreenGestureEnabled: true,
+      gestureEnabled: true,
+      ...nativeBarOptions,
+    };
+  };
   // iOS shows the native bar over a chat and the browser, so its bar items morph with the items of the
   // screen under it. The screen fills the bar with Back, the title and the buttons. Android draws them.
   const nativeBarOptions = {
