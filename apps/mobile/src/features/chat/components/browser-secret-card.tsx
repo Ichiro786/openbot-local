@@ -1,5 +1,6 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { BrowserTakeoverRequest, RespondToBrowserSecretInput } from "@openbot/contracts/ipc";
+import { markdownInlinePlainText } from "@openbot/contracts/markdown-preview-text";
 import { GlassView } from "expo-glass-effect";
 import { Spinner, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
@@ -381,7 +382,7 @@ export function QuestionSecretComposer({
   ...colors
 }: SecureComposerColors & { controller: QuestionPromptController }) {
   const { t } = useText();
-  const label = controller.question?.question ?? "";
+  const label = markdownInlinePlainText(controller.question?.question ?? "");
   const value = controller.draft;
   const ready = !controller.disabled && Boolean(value.trim());
   return (
