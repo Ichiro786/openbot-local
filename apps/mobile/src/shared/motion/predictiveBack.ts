@@ -56,10 +56,6 @@ export function addChatBackListener(handler: () => boolean | undefined): { remov
 
 /** Each zoom-opened chat in front holds the native callback on; it is off when none does. */
 let enabledHolds = 0;
-/** Build 11.3 Back debug: chat listeners that take Back first, and holds on the native predictive callback. */
-export function backHoldCounts(): { chatHolds: number; predictiveHolds: number } {
-  return { chatHolds: holds, predictiveHolds: enabledHolds };
-}
 export function holdPredictiveBack(): () => void {
   enabledHolds += 1;
   if (enabledHolds === 1) predictiveBack?.setEnabled(true);

@@ -2,7 +2,6 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation } from "expo-router/react-navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { BackHandler } from "react-native";
-import { logBack, registerBackFlags } from "@/shared/debug/backDebug";
 import { isAndroid } from "@/shared/lib/platform";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
@@ -47,14 +46,14 @@ export function useZoomClose(routeKey: string) {
   const zoomed = active && zoomSource(routeKey) !== undefined;
   const activeNow = useRef(active);
   activeNow.current = active;
-  /** A Back is taking this chat: since when, whether its pop went out, and its hard bound. */
-  const leaving = useRef<{ at: number; popped: boolean; timer: ReturnType<typeof setTimeout> } | null>(null);
+  /** A Back is taking this chat: whether its pop went out, and its hard bound. */
+  const leaving = useRef<{ popped: boolean; timer: ReturnType<typeof setTimeout> } | null>(null);
   /** The predictive gesture's close while the gesture is undecided. */
   const gesture = useRef<ZoomCloseHandle | null>(null);
 
   const api = useRef({
     /** The real pop of this chat, at most once per Back; a no-op once the chat is not on top. */
-    popNow(why: string) {
+    popNow() {
       const current = leaving.current;
       if (current) {
         if (current.popped) return;
@@ -62,7 +61,6 @@ export function useZoomClose(routeKey: string) {
       }
       const state = navigation.getState();
       if (state.routes[state.index]?.key !== routeKey) return;
-      logBack("zoom pop", `${routeKey} ${why}`);
       navigation.dispatch({ ...StackActions.pop(), source: routeKey, target: state.key });
     },
     /** Ends a Back that did not take the chat (the chat is in front again). */
@@ -78,44 +76,42 @@ export function useZoomClose(routeKey: string) {
       current?.cancel();
     },
     /** Every Back of a zoom-opened chat. False: not ours, the caller goes back the usual way. */
-    back(origin: string): boolean {
+    back(): boolean {
       if (!activeNow.current) return false;
       const source = zoomSource(routeKey);
       if (!source) return false;
       if (leaving.current) {
         // A repeated Back never waits for the close: the chat pops now.
-        logBack("zoom back again", origin);
         const current = leaving.current;
         current.popped = false;
-        api.popNow("repeat");
+        api.popNow();
         return true;
       }
       if (!navigation.isFocused()) return false;
-      logBack("zoom back", origin);
       const timer = setTimeout(() => {
         const current = leaving.current;
         if (current) current.popped = false;
-        api.popNow("hard bound");
+        api.popNow();
       }, BACK_HARD_MS);
-      leaving.current = { at: Date.now(), popped: false, timer };
+      leaving.current = { popped: false, timer };
       const handle = gesture.current ?? zoomCloseStart(source, false);
       gesture.current = null;
       // The pop takes animation "none": the overlay plays the close. The options function reads the mark.
       markZoomClosing(routeKey);
       navigation.setOptions({});
       if (!handle) {
-        requestAnimationFrame(() => api.popNow("no host"));
+        requestAnimationFrame(() => api.popNow());
         return true;
       }
       // One frame after the options change, so react-native-screens has "none" before the removal.
-      handle.commit(() => requestAnimationFrame(() => api.popNow("close")));
+      handle.commit(() => requestAnimationFrame(() => api.popNow()));
       return true;
     },
   }).current;
 
   // Header Back reaches the close through runChatBack.
   useEffect(() => {
-    const back = () => api.back("header");
+    const back = () => api.back();
     chatBacks.set(routeKey, back);
     return () => {
       if (chatBacks.get(routeKey) === back) chatBacks.delete(routeKey);
@@ -141,38 +137,12 @@ export function useZoomClose(routeKey: string) {
     };
   }, [api, navigation]);
 
-  // Build 11.3 Back debug: this chat's lifecycle and Back flags (no-op while Back debug is off).
-  const zoomedNow = useRef(zoomed);
-  zoomedNow.current = zoomed;
-  useEffect(() => {
-    logBack("chat mount", routeKey);
-    const unregister = registerBackFlags("chat", () => ({
-      key: routeKey,
-      focused: navigation.isFocused(),
-      zoomed: zoomedNow.current,
-      leavingMs: leaving.current ? Date.now() - leaving.current.at : null,
-      popped: leaving.current?.popped ?? null,
-      gesture: gesture.current !== null,
-    }));
-    const subscriptions = [
-      navigation.addListener("focus", () => logBack("chat focus", routeKey)),
-      navigation.addListener("blur", () => logBack("chat blur", routeKey)),
-      navigation.addListener("transitionStart", (e) => logBack("transitionStart", `closing=${e.data.closing}`)),
-      navigation.addListener("transitionEnd", (e) => logBack("transitionEnd", `closing=${e.data.closing}`)),
-    ];
-    return () => {
-      unregister();
-      for (const unsubscribe of subscriptions) unsubscribe();
-      logBack("chat unmount", routeKey);
-    };
-  }, [navigation, routeKey]);
-
   // System Back without the predictive callback (3-button navigation, or while the callback is off):
   // this listener runs before React Navigation's. Off while a chat listener takes Back first (held).
   const listen = zoomed && focused && !held;
   useEffect(() => {
     if (!listen) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => api.back("system"));
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => api.back());
     return () => subscription.remove();
   }, [api, listen]);
 
@@ -192,9 +162,8 @@ export function useZoomClose(routeKey: string) {
       module.addListener("onBackCancel", () => api.dropGesture()),
       module.addListener("onBackInvoke", () => {
         // Never swallowed: a Back the close cannot take goes back the stack's way.
-        if (!api.back("predictive")) {
+        if (!api.back()) {
           api.dropGesture();
-          logBack("predictive invoke", "not ours; goBack");
           if (navigation.isFocused() && navigation.canGoBack()) navigation.goBack();
         }
       }),
