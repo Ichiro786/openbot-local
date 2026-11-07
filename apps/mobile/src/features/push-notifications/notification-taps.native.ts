@@ -1,6 +1,7 @@
 import { isString } from "@openbot/contracts/runtime-values";
 import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
+import { isCurrentNotificationChat } from "./notification-current-chat";
 import { type NotificationTarget, SOUND_PREVIEW_KEY } from "./push-notifications-native.types";
 
 /**
@@ -21,7 +22,10 @@ let handled: string | null = null;
  * into the notification data when they open the seal.
  * While the app is on screen, a notification of the chat that shows is not shown again.
  */
-export function useNotificationTaps(open: (target: NotificationTarget) => void, openChat: () => string | null): void {
+export function useNotificationTaps(
+  open: (target: NotificationTarget) => void,
+  openChat: () => NotificationTarget | null,
+): void {
   const response = Notifications.useLastNotificationResponse();
   const openRef = useRef(open);
   openRef.current = open;
@@ -35,8 +39,7 @@ export function useNotificationTaps(open: (target: NotificationTarget) => void, 
         if (notification.request.content.data?.[SOUND_PREVIEW_KEY] === true) {
           return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: true, shouldSetBadge: false };
         }
-        const agentId = notificationTarget(notification)?.agentId ?? null;
-        const shown = agentId !== null && agentId === openChatRef.current();
+        const shown = isCurrentNotificationChat(notificationTarget(notification), openChatRef.current());
         return { shouldShowBanner: !shown, shouldShowList: !shown, shouldPlaySound: !shown, shouldSetBadge: false };
       },
     });

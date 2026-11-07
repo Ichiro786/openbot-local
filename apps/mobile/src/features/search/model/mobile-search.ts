@@ -299,7 +299,7 @@ export function mobileSearchView({
       failed = messageState.failed || fileState.failed || routinesFailed;
       break;
   }
-  sections = sections.filter((section) => section.results.length > 0);
+  sections = sections.filter((section) => section.results.length > 0 || section.more);
   // A host search that stopped reading by itself still offers its next page.
   const state =
     sections.length > 0 || canLoadMore

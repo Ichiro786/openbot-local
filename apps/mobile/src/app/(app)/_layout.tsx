@@ -28,6 +28,7 @@ import { AppDrawerShell, useAppDrawer } from "@/features/servers/components/app-
 import { setShareSheetOpener } from "@/features/share/model/share-sheet-opener";
 import {
   MobileWorkspaceProvider,
+  useMobileWorkspaceActions,
   useMobileWorkspaceReader,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { AdaptiveSplit, useSplitLayout } from "@/shared/components/adaptive-split";
@@ -190,6 +191,7 @@ function AuthenticatedStack() {
   useEffect(() => setQuickActionNavigator(openQuickAction), [openQuickAction]);
   useEffect(() => setShareSheetOpener(() => whenUnlocked(() => router.push("/share"))), []);
   const workspace = useMobileWorkspaceReader();
+  const { loadAgentTasks } = useMobileWorkspaceActions();
   /**
    * A prompt, an approval or a takeover on a channel thread opens the channel, as on desktop. A tap
    * at a cold start comes before the server connects, so it waits a short time for the channel list.
@@ -202,12 +204,25 @@ function AuthenticatedStack() {
       }
       void workspace()
         .channelStore.whenListed(serverId, NOTIFICATION_CHANNEL_WAIT_MS)
-        .then((state) => {
+        .then(async (state) => {
           const channel = state.channels.find(
             (item) => !item.archived && item.threads?.some((thread) => thread.threadId === threadId),
           );
           if (!channel) {
-            openFromOutside(agentId);
+            const tasks = await loadAgentTasks(agentId, serverId).catch(() => null);
+            const task = tasks?.tasks.find((item) => item.threadId === threadId);
+            if (!task) {
+              openFromOutside(agentId);
+              return;
+            }
+            whenUnlocked(() => {
+              closeDrawer();
+              if (router.canDismiss()) router.dismissAll();
+              navigationGate.request(
+                () => router.push({ pathname: "/task/[taskId]", params: { serverId, agentId, taskId: task.id } }),
+                () => onChatList.current,
+              );
+            });
             return;
           }
           whenUnlocked(() => {
@@ -220,9 +235,19 @@ function AuthenticatedStack() {
           });
         });
     },
-    [workspace, openFromOutside, closeDrawer, navigationGate],
+    [workspace, loadAgentTasks, openFromOutside, closeDrawer, navigationGate],
   );
-  useNotificationTaps(openFromNotification, () => openChat.current);
+  useNotificationTaps(openFromNotification, () => {
+    const agentId = openChat.current;
+    if (!agentId) return null;
+    const state = workspace();
+    const agent = state.agents.find((item) => item.id === agentId);
+    return {
+      agentId,
+      serverId: agent?.serverId ?? null,
+      threadId: state.conversationStore.get(agentId)?.threadId ?? null,
+    };
+  });
 
   return (
     <ChatNavigationGateContext value={navigationGate}>

@@ -29,13 +29,8 @@ const FOCUS_GAP = 12;
 const ANDROID_PLACE_FRAMES = 2;
 /** The longest wait on Android before the chat takes the latest message, also without a measured row. */
 const ANDROID_PLACE_TIMEOUT_MS = 250;
-/**
- * Build #101: the opening chat keeps the latest message in view until its content has not changed for
- * this long, after it has its rows and its latest page (and, when zoom-opened, after the open settled).
- */
+/** How long the list keeps the latest message in view after the chat has its rows and its latest page. */
 const OPENING_FOLLOW_MS = 600;
-/** Build #101: the opening follow ends at the latest this long after it could first end. */
-const OPENING_FOLLOW_CAP_MS = 4000;
 
 /** Build 11.2: the longest a sent message's scroll waits for the keyboard to finish moving. */
 const KEYBOARD_SETTLE_MS = 450;
@@ -309,10 +304,6 @@ export function useChatMotion(
   // While the chat opens, the list keeps the latest message in view: older rows come above the
   // first rows and get their sizes, and the latest page can add messages after the kept ones.
   const [openingFollow, setOpeningFollow] = useState(!holdOpening);
-  // Build #101: read by onContentSizeChange; the last time the list's content changed size.
-  const openingFollowNow = useRef(openingFollow);
-  openingFollowNow.current = openingFollow && !holdOpening;
-  const contentChangedAt = useRef(0);
   const heldOpening = useRef(holdOpening);
   const current = useRef({ lastUserId });
   current.current = { lastUserId };
@@ -374,22 +365,18 @@ export function useChatMotion(
     });
     return () => cancelAnimationFrame(frame);
   }, [hasRows, placedWithRows, ready, holdOpening, zoomed]);
-  // Build #101 (chat opened at older messages): a fixed 600 ms from `ready` could end before the rows,
-  // the latest page or the anchored end space under the latest user message had their sizes, and Legend
-  // List's maintainScrollAtEnd follows only within 10% of the end, so a late jump left the chat higher up.
-  // The follow now ends once the content has been still for OPENING_FOLLOW_MS (cap OPENING_FOLLOW_CAP_MS).
   useEffect(() => {
-    if (!openingFollow || !ready || catchingUp || (zoomed && !settled)) return;
-    const started = Date.now();
-    let timer: ReturnType<typeof setTimeout>;
-    const check = () => {
-      const quiet = Date.now() - contentChangedAt.current;
-      if (quiet >= OPENING_FOLLOW_MS || Date.now() - started >= OPENING_FOLLOW_CAP_MS) setOpeningFollow(false);
-      else timer = setTimeout(check, OPENING_FOLLOW_MS - quiet);
-    };
-    timer = setTimeout(check, OPENING_FOLLOW_MS);
+    if (!openingFollow || !ready || catchingUp) return;
+    const timer = setTimeout(() => setOpeningFollow(false), OPENING_FOLLOW_MS);
     return () => clearTimeout(timer);
-  }, [openingFollow, ready, catchingUp, zoomed, settled]);
+  }, [openingFollow, ready, catchingUp]);
+  const prevCatchingUp = useRef(catchingUp);
+  useEffect(() => {
+    if (prevCatchingUp.current && !catchingUp && followLatest.current && shown.current) {
+      void listRef.current?.scrollToEnd({ animated: false });
+    }
+    prevCatchingUp.current = catchingUp;
+  }, [catchingUp]);
   useLayoutEffect(() => {
     if (requiredInputId !== lastRequiredInputId.current && requiredInputId && followLatest.current && shown.current) {
       // The question row renders in this commit; its size is known from the next frame.
@@ -420,9 +407,6 @@ export function useChatMotion(
     (_width: number, height: number) => {
       measurements.current.content = height;
       content.set(height);
-      contentChangedAt.current = Date.now();
-      // Build #101: while the chat opens, any growth (rows measured, latest page, end space) keeps the end.
-      if (openingFollowNow.current) void listRef.current?.scrollToEnd({ animated: false });
     },
     [content],
   );
@@ -569,7 +553,6 @@ export function useChatMotion(
   }, []);
   const onScrollBeginDrag = useCallback(() => {
     // A drag is the reader's choice. A move of the list while rows get their sizes is not.
-    openingFollowNow.current = false;
     setOpeningFollow(false);
     leaveLatest();
     reveal();

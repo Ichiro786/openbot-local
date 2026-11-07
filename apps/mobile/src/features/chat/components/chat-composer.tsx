@@ -988,14 +988,14 @@ export const ChatComposer = memo(function ChatComposer({
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!disabled && !focused && !voiceOpen)
+        .enabled(!disabled && !focused && !voiceOpen && !hasDraft && !draft.length && !anchored)
         .activeOffsetY(-16)
         .failOffsetY(16)
         .failOffsetX([-24, 24])
         .onEnd((event) => {
           if (event.translationY < -24 || event.velocityY < -250) scheduleOnRN(focusInput);
         }),
-    [disabled, focused, focusInput, voiceOpen],
+    [anchored, disabled, draft.length, focusInput, focused, hasDraft, voiceOpen],
   );
 
   return (
