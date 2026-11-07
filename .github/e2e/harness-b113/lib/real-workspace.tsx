@@ -108,6 +108,7 @@ const longKept = { ...base, agentId: "e2e-long", messages: LONG_MESSAGES.slice(0
 const longLatest = { ...base, agentId: "e2e-long", revision: 2, messages: LONG_MESSAGES };
 let longNow = longKept;
 let longUpToDate = false;
+let longTimer: ReturnType<typeof setTimeout> | null = null;
 const longListeners = new Set<() => void>();
 // The home row resets the long chat before each open, so every open catches up again.
 (globalThis as any).__e2eLongReset = () => {
@@ -119,6 +120,9 @@ const conversationStore = {
   subscribe: (agentId?: string, notify?: () => void) => {
     if (agentId !== "e2e-long" || !notify) return () => undefined;
     longListeners.add(notify);
+    // The stand-in server is not "online" (no state), so the chat never fetches: the latest page comes
+    // as a store update 900 ms after the chat subscribes (after the old fixed 600 ms follow, inside the open).
+    if (longNow === longKept && !longTimer) longTimer = setTimeout(() => { longTimer = null; void loadLong(); }, 200);
     return () => longListeners.delete(notify);
   },
   isUpToDate: (agentId?: string) => (agentId === "e2e-long" ? longUpToDate : true),
