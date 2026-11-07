@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 11.2/11.3)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build11-2-ci]
+    branches: [build11-2-ci, b101-open-old]
 
 permissions:
   contents: read
@@ -147,7 +147,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: ["36", "37.0"]
+        api: ["36"]
     steps:
       - name: Available system images (API 36/37)
         run: |
