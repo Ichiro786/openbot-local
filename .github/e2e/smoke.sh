@@ -930,9 +930,9 @@ open_latest() {
   log "== open at latest: $label x$n (screen h $H)"
   for i in $(seq 1 $n); do
     home; xy=$(wait_for "$label" 10 "ol-row") || { log "FAIL open-latest: no row $label"; FAIL=1; return 1; }
-    adb shell input tap $xy
+    gfx_reset; adb shell input tap $xy; sleep 1.2; gfx "ol-$mark-$i-open"
     for t in a b; do
-      if [ $t = a ]; then sleep 2.6; else sleep 1.5; fi
+      if [ $t = a ]; then sleep 1.4; else sleep 1.5; fi
       dump "ol-$mark-$i-$t"; b=$(marker_y "ol-$mark-$i-$t" "$mark")
       if [ -z "$b" ]; then r=MISSING; else read -r _x1 y1 _x2 y2 <<< "$b"; if [ "$y1" -ge 150 ] && [ "$y2" -le $((H - 120)) ]; then r=ok; else r="OLD(y=$y1-$y2)"; fi; fi
       echo "openend $mark $i $t $r" >> "$OUT/open-latest.txt"
