@@ -921,6 +921,27 @@ real_timing() { # build 11.3 open timing: 6 zoom opens of the real chat (with hi
   done
   log "  real open timing: $(grep -oE 'ZOOMT.*' "$OUT/real-timing.txt" | tr '\n' ' | ')"
 }
+# Build #101: the chat opens at its latest message. $1 row label $2 marker text (in the last row) $3 opens.
+# Each open: zoom-open from the home row, then the marker must be on screen (not under the header/composer)
+# at 2.6 s and again 1.5 s later; then header Back. Lines "openend <agent> <i> ok|OLD|MISSING" in open-latest.txt.
+marker_y() { node "$OUT/$1.xml" "$2" b; }
+open_latest() {
+  local label=$1 mark=$2 n=$3 i xy b t H r y1 y2 _x1 _x2; H=$(adb shell wm size | grep -oE '[0-9]+$' | tail -1 | tr -d '\r'); H=${H:-2400}
+  log "== open at latest: $label x$n (screen h $H)"
+  for i in $(seq 1 $n); do
+    home; xy=$(wait_for "$label" 10 "ol-row") || { log "FAIL open-latest: no row $label"; FAIL=1; return 1; }
+    adb shell input tap $xy
+    for t in a b; do
+      if [ $t = a ]; then sleep 2.6; else sleep 1.5; fi
+      dump "ol-$mark-$i-$t"; b=$(marker_y "ol-$mark-$i-$t" "$mark")
+      if [ -z "$b" ]; then r=MISSING; else read -r _x1 y1 _x2 y2 <<< "$b"; if [ "$y1" -ge 150 ] && [ "$y2" -le $((H - 120)) ]; then r=ok; else r="OLD(y=$y1-$y2)"; fi; fi
+      echo "openend $mark $i $t $r" >> "$OUT/open-latest.txt"
+      [ "$r" = ok ] || { log "FAIL open-latest $mark open $i ($t): $r"; FAIL=1; shot "ol-$mark-$i-$t"; }
+    done
+    [ -n "${BACKXY:-}" ] && real_tap $BACKXY; sleep 2.2; on_home "ol-h-$i" || home
+  done
+  log "  open at latest $mark: $(grep -c "^openend $mark .* ok$" "$OUT/open-latest.txt") ok of $((n * 2)) checks"
+}
 header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (real ChatHeader + list), dark
   log "== header frost shot ($1)"
   home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
@@ -938,7 +959,7 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
-  if real_setup; then real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
+  if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
   log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"

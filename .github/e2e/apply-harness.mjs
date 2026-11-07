@@ -373,10 +373,26 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
       if (width && height) __arm(y + height / 2);
       go();
     });
+  };
+  // Build #101: a second agent with a long history whose latest page loads after the kept one (catch-up).
+  const __longRow = useRef<View>(null);
+  const __openLong = () => {
+    (globalThis as any).__e2eLongReset?.();
+    const go = () => router.push({ pathname: "/e2e-real", params: { agentId: "e2e-long" } });
+    const view = __longRow.current;
+    if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
+    view.measureInWindow((x, y, width, height) => {
+      (globalThis as any).__e2eTap = Date.now();
+      if (width && height) __arm(y + height / 2);
+      go();
+    });
   };`);
   f = must(f, row, `${row}
         <Pressable ref={__realRow} accessibilityRole="button" accessibilityLabel="E2E Real chat" onPress={__openReal} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#1f6f8b", justifyContent: "center", paddingHorizontal: 16 }}>
           <Text style={{ color: "#fff", fontSize: 17 }}>E2E Real chat</Text>
+        </Pressable>
+        <Pressable ref={__longRow} accessibilityRole="button" accessibilityLabel="E2E Long chat" onPress={__openLong} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#5b3b7a", justifyContent: "center", paddingHorizontal: 16 }}>
+          <Text style={{ color: "#fff", fontSize: 17 }}>E2E Long chat</Text>
         </Pressable>`);
   const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
   f = must(f, toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E Picker" onPress={() => router.push("/e2e-picker")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#7a5b3b", borderRadius: 12 }}><Text style={{ color: "#fff" }}>Picker</Text></Pressable>`);

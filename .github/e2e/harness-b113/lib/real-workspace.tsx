@@ -32,6 +32,7 @@ export const REAL_AGENT = {
   avatarUrl: null,
   pinned: false,
 };
+export const LONG_AGENT = { ...REAL_AGENT, id: "e2e-long", name: "LORE", avatarSeed: "e2e-long-seed" };
 const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
   const user = i % 2 === 0;
   const text = user
@@ -48,6 +49,7 @@ const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
         "}",
         "```",
         "Re-running the job should fix it. I can do that for you if you want, or wait for the next push.",
+        ...(i === 27 ? ["LATEST-END-VEYR"] : []),
       ].join("\n");
   return {
     id: `e2e-msg-${i}`,
@@ -58,25 +60,79 @@ const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
     status: "completed",
   };
 });
-const conversation = {
-  agentId: REAL_AGENT.id,
+// Build #101 open-at-latest: a long history (like Syed's agents: long list replies between short
+// exchanges). The phone keeps an older page; the latest page (6 more rows) loads after the chat opens.
+const LONG_COUNT = 140;
+const LONG_MESSAGES = Array.from({ length: LONG_COUNT }, (_, i) => {
+  const user = i % 2 === 0;
+  const long = !user && i % 6 === 1;
+  const text = user
+    ? i % 4 === 0
+      ? `Great thanks (${i})`
+      : `Message ${i}: please set up the team and review the stack for the Android app.`
+    : long
+      ? [
+          `**Team Setup ${i}**`,
+          ...Array.from({ length: 9 }, (_, k) => `- **Role ${k + 1}:** grounded in the official Compose standards, high-performance layout rendering and on-device checks for build ${i}.`),
+          "Everything is synced with the full mobile reference set.",
+        ].join("\n")
+      : i === LONG_COUNT - 1
+        ? "Anytime. Glad that's sorted out. LATEST-END-LONG"
+        : `Anytime. We're fully equipped whenever you want to build or review something new (${i}).`;
+  return {
+    id: `e2e-long-${i}`,
+    turnId: `e2e-long-turn-${Math.floor(i / 2)}`,
+    author: user ? "user" : "assistant",
+    text,
+    createdAt: new Date(Date.UTC(2026, 10, 4, 8, i)).toISOString(),
+    status: "completed",
+  };
+});
+const base = {
   threadId: null,
   activeTurnId: null,
   revision: 1,
-  // Build 11.3 open timing: a history like a real chat (markdown, lists, code), so the open measures ChatView's real cost.
-  messages: REAL_MESSAGES,
   references: {},
   pageInfo: { hasOlder: false, olderCursor: null },
   olderLoading: false,
   olderError: false,
   detached: false,
 };
+const conversation = {
+  ...base,
+  agentId: "e2e-agent",
+  // Build 11.3 open timing: a history like a real chat (markdown, lists, code), so the open measures ChatView's real cost.
+  messages: REAL_MESSAGES,
+};
+const longKept = { ...base, agentId: "e2e-long", messages: LONG_MESSAGES.slice(0, LONG_COUNT - 6) };
+const longLatest = { ...base, agentId: "e2e-long", revision: 2, messages: LONG_MESSAGES };
+let longNow = longKept;
+let longUpToDate = false;
+const longListeners = new Set<() => void>();
+// The home row resets the long chat before each open, so every open catches up again.
+(globalThis as any).__e2eLongReset = () => {
+  longNow = longKept;
+  longUpToDate = false;
+};
 const conversationStore = {
-  get: () => conversation,
-  subscribe: () => () => undefined,
-  isUpToDate: () => true,
+  get: (agentId?: string) => (agentId === "e2e-long" ? longNow : conversation),
+  subscribe: (agentId?: string, notify?: () => void) => {
+    if (agentId !== "e2e-long" || !notify) return () => undefined;
+    longListeners.add(notify);
+    return () => longListeners.delete(notify);
+  },
+  isUpToDate: (agentId?: string) => (agentId === "e2e-long" ? longUpToDate : true),
   cachedPage: () => undefined,
 };
+const loadLong = () =>
+  new Promise<typeof longLatest>((resolve) =>
+    setTimeout(() => {
+      longNow = longLatest;
+      longUpToDate = true;
+      for (const notify of longListeners) notify();
+      resolve(longLatest);
+    }, 700),
+  );
 const server = { id: "e2e-server", name: "E2E", status: "online", online: true, connected: true, initialConnectionPending: false };
 // Every live map the chat reads (use-live-workspace, use-live-activity), empty and stable.
 const liveSnapshot = {
@@ -90,14 +146,14 @@ const liveSnapshot = {
 };
 const live = { get: () => liveSnapshot, subscribe: () => () => undefined };
 const known: Record<string, unknown> = {
-  agents: [REAL_AGENT],
+  agents: [REAL_AGENT, LONG_AGENT],
   servers: [server],
   activeServer: server,
   liveState: live,
   conversationStore,
-  loadConversation: async () => conversation,
+  loadConversation: async (agentId?: string) => (agentId === "e2e-long" ? loadLong() : conversation),
   loadConversationAround: async () => true,
-  loadLatestMessages: async () => conversation,
+  loadLatestMessages: async (agentId?: string) => (agentId === "e2e-long" ? loadLong() : conversation),
   loadOlderMessages: async () => undefined,
   markAgentRead: () => undefined,
   canUseTasks: () => true,
