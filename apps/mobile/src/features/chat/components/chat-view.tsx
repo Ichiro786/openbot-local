@@ -29,7 +29,7 @@ import type { ApprovalDecision } from "@/features/chat/components/chat-approval-
 import { ChatComposer, type MentionSkill } from "@/features/chat/components/chat-composer";
 import { ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import { ChatHeader, colorOSChatHeaderShown } from "@/features/chat/components/chat-header";
-import { ChatMessageList } from "@/features/chat/components/chat-message-list";
+import { ChatMessageList, ChatOpeningSkeleton } from "@/features/chat/components/chat-message-list";
 import type { ChatThreadMenu } from "@/features/chat/components/chat-thread-menu";
 import { useChatAttachments } from "@/features/chat/components/use-chat-attachments";
 import { useChatMotion } from "@/features/chat/components/use-chat-motion";
@@ -1150,6 +1150,13 @@ export function ChatView({
                 upload={listUpload}
                 outboxStatuses={outboxStatuses}
               />
+              {/* Build #101: placeholder bubbles until the rows show (ColorOS ON only; OFF is as #82), while the
+                  history loads or is ready; an error or offline takes it away, and it hides itself. */}
+              {colorOSHeaderOn &&
+              isAndroid &&
+              (ready || server?.initialConnectionPending || (serverOnline && !historyLoadFailed)) ? (
+                <ChatOpeningSkeleton revealed={motion.revealed} top={insets.top + 84} />
+              ) : null}
             </ChatFrostTarget>
             <Animated.View
               style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, motion.composerStyle]}

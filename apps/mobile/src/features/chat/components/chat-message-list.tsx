@@ -6,7 +6,7 @@ import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references"
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
 import { markdownInlinePlainText, markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import { useIsFocused } from "expo-router";
-import { Typography } from "heroui-native";
+import { Skeleton, Typography } from "heroui-native";
 import type { LucideIcon } from "lucide-react-native";
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import CalendarPlus from "lucide-react-native/icons/calendar-plus";
@@ -25,6 +25,7 @@ import {
   memo,
   type PropsWithChildren,
   type ReactNode,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -48,12 +49,15 @@ import Animated, {
   FadeIn,
   FadeInDown,
   ReduceMotion,
+  type SharedValue,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { useCSSVariable } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/components/chat-activity-row";
@@ -92,6 +96,7 @@ import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { lineDirectionStyle, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
+import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatDayLabels } from "../model/chat-day-markers";
 import { mentionDraft } from "../model/chat-mentions";
@@ -1145,6 +1150,73 @@ const NO_BROWSER_REQUESTS: readonly BrowserTakeoverRequest[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_CHANNELS: readonly { id: string; name: string }[] = [];
 
+/** Build #101: the skeleton fades into the chat over this long once the rows show. */
+const SKELETON_FADE_MS = 180;
+/** Build #101: the skeleton never stays longer than this, whatever the history does. */
+const SKELETON_MAX_MS = 6000;
+const SKELETON_LINES = ["92%", "84%", "88%", "52%"] as const;
+
+/**
+ * Build #101 (ColorOS motion): static placeholder bubbles where the latest exchange lands (the latest
+ * user message under the header, the reply under it) until the list shows its rows, then a fade into
+ * them. Plain views, no shimmer. During a zoom open it is swapped for the rows in one frame (a fade there
+ * would redraw the open's texture every frame). It unmounts after its fade, on error or offline (the
+ * caller stops rendering it), and after SKELETON_MAX_MS at the latest.
+ */
+export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<boolean>; top: number }) {
+  const insets = useSafeAreaInsets();
+  const settled = useLiveZoomSettled();
+  const [done, setDone] = useState(false);
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    const timer = setTimeout(() => setDone(true), SKELETON_MAX_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  useAnimatedReaction(
+    () => revealed.get(),
+    (shown) => {
+      if (!shown) return;
+      if (!settled) {
+        opacity.set(0);
+        scheduleOnRN(setDone, true);
+        return;
+      }
+      opacity.set(
+        withTiming(0, { duration: SKELETON_FADE_MS, reduceMotion: ReduceMotion.System }, () => {
+          scheduleOnRN(setDone, true);
+        }),
+      );
+    },
+    [settled],
+  );
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  if (done) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      style={[
+        {
+          position: "absolute",
+          top: top + 8,
+          left: insets.left + LIST_PADDING,
+          right: insets.right + LIST_PADDING,
+          gap: 10,
+        },
+        style,
+      ]}
+    >
+      <Skeleton variant="none" style={{ alignSelf: "flex-end", width: "58%", height: 44, borderRadius: 22 }} />
+      <View style={{ gap: 10, paddingTop: 6 }}>
+        {SKELETON_LINES.map((width) => (
+          <Skeleton key={width} variant="none" style={{ width, height: 14, borderRadius: 7 }} />
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
 export const ChatMessageList = memo(function ChatMessageList({
   upload,
   outboxStatuses,
@@ -1316,10 +1388,20 @@ export const ChatMessageList = memo(function ChatMessageList({
     return () => cancelAnimationFrame(frame);
   }, [rowsShown, openingShown]);
   const startsAtEnd = motion.startsAtEnd;
+  // Build #101 smoother open: a zoom-opened chat renders only its opening rows while the open runs (the
+  // older rows and the list's draw-distance prewarm came mid-open and re-rasterised the open's texture);
+  // the rest come as a transition once it settled. Other chats are settled from the start (unchanged).
+  const settled = useLiveZoomSettled();
+  const [settledRows, setSettledRows] = useState(settled);
+  useEffect(() => {
+    if (settled && !settledRows) startTransition(() => setSettledRows(true));
+  }, [settled, settledRows]);
+  const allRows = rowsShown && settledRows;
   // The list renders only the rows in and near the view, so it gets every loaded message.
   const rows = useMemo(
-    () => (rowsShown ? visibleMessages : openingShown && startsAtEnd ? openingRows(visibleMessages) : NO_ROWS),
-    [rowsShown, openingShown, startsAtEnd, visibleMessages],
+    () =>
+      allRows ? visibleMessages : (rowsShown || openingShown) && startsAtEnd ? openingRows(visibleMessages) : NO_ROWS,
+    [allRows, rowsShown, openingShown, startsAtEnd, visibleMessages],
   );
   const tailIndex = rows.findLastIndex((message) => message.kind === "message" && message.author === "user");
   const focusIndex = focusMessageId ? chatRowIndex(rows, focusMessageId) : -1;
@@ -1327,7 +1409,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   useFoldScrollAnchor(motion.listRef);
   // The chat opens at the row of a message from search after the list has its rows in place.
   const placedFocus = useRef<string | null>(null);
-  const focusId = historyState === "ready" && rowsShown && focusIndex >= 0 ? (rows[focusIndex]?.id ?? null) : null;
+  const focusId = historyState === "ready" && allRows && focusIndex >= 0 ? (rows[focusIndex]?.id ?? null) : null;
   const focusHandlers = useRef({ openAt: motion.openAt, onFocusPlaced });
   focusHandlers.current = { openAt: motion.openAt, onFocusPlaced };
   useEffect(() => {
@@ -1518,7 +1600,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   const promptController = questionForm?.messageId ? questionForm : undefined;
   const responseIds = useMemo(() => new Set(rows.slice(tailIndex + 1).map((row) => row.id)), [rows, tailIndex]);
   // The opening rows do not start at the first message of the chat.
-  const firstUserId = rowsShown && tailIndex === 0 && !hasOlder ? (rows[0]?.id ?? null) : null;
+  const firstUserId = allRows && tailIndex === 0 && !hasOlder ? (rows[0]?.id ?? null) : null;
   // The line follows its row, or the row of the exchange group that holds it.
   const openBranchSource = useRef(onOpenBranchSource);
   openBranchSource.current = onOpenBranchSource;
