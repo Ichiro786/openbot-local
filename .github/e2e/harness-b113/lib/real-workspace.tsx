@@ -33,6 +33,8 @@ export const REAL_AGENT = {
   pinned: false,
 };
 export const LONG_AGENT = { ...REAL_AGENT, id: "e2e-long", name: "LORE", avatarSeed: "e2e-long-seed" };
+// Build #102: a short history that also catches up on open (Syed: every agent opened at older messages).
+export const SHORT_AGENT = { ...REAL_AGENT, id: "e2e-short", name: "SHORTY", avatarSeed: "e2e-short-seed" };
 const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
   const user = i % 2 === 0;
   const text = user
@@ -106,26 +108,47 @@ const conversation = {
 };
 const longKept = { ...base, agentId: "e2e-long", messages: LONG_MESSAGES.slice(0, LONG_COUNT - 6) };
 const longLatest = { ...base, agentId: "e2e-long", revision: 2, messages: LONG_MESSAGES };
+const SHORT_MESSAGES = [
+  "Hi, can you set up the team?",
+  ["## Team Setup", ...Array.from({ length: 6 }, (_, k) => `- **Role ${k + 1}:** grounded in the official standards, layout rendering and on-device checks.`)].join("\n"),
+  "Great thanks.",
+  "Anytime. Glad that's sorted out. LATEST-END-SHORT",
+].map((text, i) => ({
+  id: `e2e-short-${i}`,
+  turnId: `e2e-short-turn-${Math.floor(i / 2)}`,
+  author: i % 2 === 0 ? "user" : "assistant",
+  text,
+  createdAt: new Date(Date.UTC(2026, 10, 9, 10, i)).toISOString(),
+  status: "completed",
+}));
+const shortKept = { ...base, agentId: "e2e-short", messages: SHORT_MESSAGES.slice(0, 2) };
+const shortLatest = { ...base, agentId: "e2e-short", revision: 2, messages: SHORT_MESSAGES };
+let shortNow = shortKept;
+let shortUpToDate = false;
+const shortListeners = new Set<() => void>();
 let longNow = longKept;
 let longUpToDate = false;
-let longTimer: ReturnType<typeof setTimeout> | null = null;
 const longListeners = new Set<() => void>();
 // The home row resets the long chat before each open, so every open catches up again.
 (globalThis as any).__e2eLongReset = () => {
   longNow = longKept;
   longUpToDate = false;
+  shortNow = shortKept;
+  shortUpToDate = false;
 };
 const conversationStore = {
-  get: (agentId?: string) => (agentId === "e2e-long" ? longNow : conversation),
+  get: (agentId?: string) => (agentId === "e2e-long" ? longNow : agentId === "e2e-short" ? shortNow : conversation),
+  // Build #102 (invalid #101 test: the stand-in server had no state "online", so the chat never ran its
+  // own catch-up): the server is online now, and the chat itself reads the latest page (loadConversation,
+  // 700 ms) while it shows the kept one (catchingUp), as on the phone.
   subscribe: (agentId?: string, notify?: () => void) => {
-    if (agentId !== "e2e-long" || !notify) return () => undefined;
-    longListeners.add(notify);
-    // The stand-in server is not "online" (no state), so the chat never fetches: the latest page comes
-    // as a store update 900 ms after the chat subscribes (after the old fixed 600 ms follow, inside the open).
-    if (longNow === longKept && !longTimer) longTimer = setTimeout(() => { longTimer = null; void loadLong(); }, 200);
-    return () => longListeners.delete(notify);
+    if (!notify) return () => undefined;
+    const set = agentId === "e2e-long" ? longListeners : agentId === "e2e-short" ? shortListeners : null;
+    if (!set) return () => undefined;
+    set.add(notify);
+    return () => set.delete(notify);
   },
-  isUpToDate: (agentId?: string) => (agentId === "e2e-long" ? longUpToDate : true),
+  isUpToDate: (agentId?: string) => (agentId === "e2e-long" ? longUpToDate : agentId === "e2e-short" ? shortUpToDate : true),
   cachedPage: () => undefined,
 };
 const loadLong = () =>
@@ -137,7 +160,17 @@ const loadLong = () =>
       resolve(longLatest);
     }, 700),
   );
-const server = { id: "e2e-server", name: "E2E", status: "online", online: true, connected: true, initialConnectionPending: false };
+const loadShort = () =>
+  new Promise<typeof shortLatest>((resolve) =>
+    setTimeout(() => {
+      shortNow = shortLatest;
+      shortUpToDate = true;
+      for (const notify of shortListeners) notify();
+      resolve(shortLatest);
+    }, 700),
+  );
+const load = (agentId?: string) => (agentId === "e2e-long" ? loadLong() : agentId === "e2e-short" ? loadShort() : Promise.resolve(conversation));
+const server = { id: "e2e-server", name: "E2E", state: "online", status: "online", online: true, connected: true, initialConnectionPending: false };
 // Every live map the chat reads (use-live-workspace, use-live-activity), empty and stable.
 const liveSnapshot = {
   activityByServer: {},
@@ -150,14 +183,14 @@ const liveSnapshot = {
 };
 const live = { get: () => liveSnapshot, subscribe: () => () => undefined };
 const known: Record<string, unknown> = {
-  agents: [REAL_AGENT, LONG_AGENT],
+  agents: [REAL_AGENT, LONG_AGENT, SHORT_AGENT],
   servers: [server],
   activeServer: server,
   liveState: live,
   conversationStore,
-  loadConversation: async (agentId?: string) => (agentId === "e2e-long" ? loadLong() : conversation),
+  loadConversation: async (agentId?: string) => load(agentId),
   loadConversationAround: async () => true,
-  loadLatestMessages: async (agentId?: string) => (agentId === "e2e-long" ? loadLong() : conversation),
+  loadLatestMessages: async (agentId?: string) => load(agentId),
   loadOlderMessages: async () => undefined,
   markAgentRead: () => undefined,
   canUseTasks: () => true,
