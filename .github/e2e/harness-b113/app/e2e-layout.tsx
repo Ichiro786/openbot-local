@@ -25,7 +25,7 @@ function Controls() {
   function open(name: string) {
     const agentId = name.startsWith("short") ? "e2e-short" : name.startsWith("long") ? "e2e-long" : "e2e-layout-stress";
     if (!name.endsWith("warm")) globalThis.__e2eLongReset?.();
-    prepareLayoutFixture(name === "disconnected" ? name : "overlap", !name.endsWith("warm"), name === "tall");
+    prepareLayoutFixture(name, !name.endsWith("warm"), name === "tall");
     layoutEvent("open", { name, agentId, colorOS });
     const go = (y: number) => {
       globalThis.__e2eTap = Date.now();

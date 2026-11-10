@@ -57,6 +57,15 @@ const base = {
   detached: false,
 };
 let mode = "overlap";
+function fixtureMessages(start: number, end?: number) {
+  return messages
+    .slice(start, end)
+    .map((message) =>
+      mode === "tall" && message.author === "assistant" && Number(message.id.split("-").at(-1)) >= 135
+        ? { ...message, text: "Synthetic short reply before the pending question." }
+        : message,
+    );
+}
 let generation = 0;
 let upToDate = false;
 let current: typeof base & { messages: ((typeof messages)[number] | typeof question)[] } = {
@@ -77,7 +86,7 @@ export function prepareLayoutFixture(nextMode: string, fresh: boolean, tall: boo
   if (fresh) {
     generation += 1;
     upToDate = false;
-    current = { ...base, messages: messages.slice(0, mode === "disconnected" ? 80 : 138) };
+    current = { ...base, messages: fixtureMessages(0, mode === "disconnected" ? 80 : 138) };
   }
   if (tall) {
     const file = new File(Paths.cache, `e2e-layout-${generation}.txt`);
@@ -104,7 +113,7 @@ export async function loadStress() {
   current = {
     ...base,
     revision: 2,
-    messages: mode === "disconnected" ? messages.slice(118, 142) : messages.slice(0, 142),
+    messages: fixtureMessages(mode === "disconnected" ? 118 : 0, 142),
   };
   for (const notify of listeners) notify();
   layoutEvent("catch-up-page", { count: current.messages.length, generation });
@@ -113,7 +122,7 @@ export async function loadStress() {
   current = {
     ...base,
     revision: 3,
-    messages: [...(mode === "disconnected" ? messages.slice(118) : messages), question],
+    messages: [...fixtureMessages(mode === "disconnected" ? 118 : 0), question],
   };
   upToDate = true;
   for (const notify of listeners) notify();
