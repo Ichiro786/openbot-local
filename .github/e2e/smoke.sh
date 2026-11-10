@@ -957,6 +957,10 @@ PYH
 if [ -f .github/e2e/quick113 ]; then
   adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
+  log "== real chat layout baseline (20 cycles per case and toggle state)"
+  home
+  python3 .github/e2e/mobile-chat-layout-e2e.py --out "$OUT/chat-layout" --cycles 20 || FAIL=1
+  home
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
   if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
