@@ -67,7 +67,9 @@ const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
 const LONG_COUNT = 140;
 const LONG_MESSAGES = Array.from({ length: LONG_COUNT }, (_, i) => {
   const user = i % 2 === 0;
-  const long = !user && i % 6 === 1;
+  // Build #102: the last row must carry the marker (139 % 6 === 1 made it a Team Setup reply, so
+  // LATEST-END-LONG never existed and every #101/#102 LORE check read MISSING).
+  const long = !user && i % 6 === 1 && i !== LONG_COUNT - 1;
   const text = user
     ? i % 4 === 0
       ? `Great thanks (${i})`
