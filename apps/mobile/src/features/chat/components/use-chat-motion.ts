@@ -29,13 +29,6 @@ const FOCUS_GAP = 12;
 const ANDROID_PLACE_FRAMES = 2;
 /** The longest wait on Android before the chat takes the latest message, also without a measured row. */
 const ANDROID_PLACE_TIMEOUT_MS = 250;
-/**
- * Build #101: the opening chat keeps the latest message in view until its content has not changed for
- * this long, after it has its rows and its latest page (and, when zoom-opened, after the open settled).
- */
-const OPENING_FOLLOW_MS = 600;
-/** Build #101: the opening follow ends at the latest this long after it could first end. */
-const OPENING_FOLLOW_CAP_MS = 4000;
 
 /** Build 11.2: the longest a sent message's scroll waits for the keyboard to finish moving. */
 const KEYBOARD_SETTLE_MS = 450;
@@ -77,7 +70,7 @@ export function useChatMotion(
   /** The chat opens at a message from search: do not move to the latest message while it loads. */
   holdOpening = false,
   /** The chat shows the messages that the phone kept, and reads the latest page of the host. */
-  catchingUp = false,
+  _catchingUp = false,
   /** Build 11: opened by the ColorOS zoom. The chat's own open is the fade, so no inner fade. */
   zoomed = false,
 ) {
@@ -318,10 +311,16 @@ export function useChatMotion(
   current.current = { lastUserId };
 
   const finishFirstMessage = useCallback(() => setResponseVisible(true), []);
-  const updateAtLatest = useCallback((visible: boolean) => {
-    atLatestNow.current = visible;
-    setAtLatest(visible);
-  }, []);
+  const updateAtLatest = useCallback(
+    (visible: boolean) => {
+      atLatestNow.current = visible;
+      setAtLatest(visible);
+      // Build #102: a pinned chat that came to rest above the latest message takes the end again.
+      if (!visible && openingFollowNow.current && !scrolledUp.get())
+        void listRef.current?.scrollToEnd({ animated: false });
+    },
+    [scrolledUp],
+  );
   const reveal = useCallback(() => {
     if (shown.current) return;
     shown.current = true;
@@ -374,22 +373,10 @@ export function useChatMotion(
     });
     return () => cancelAnimationFrame(frame);
   }, [hasRows, placedWithRows, ready, holdOpening, zoomed]);
-  // Build #101 (chat opened at older messages): a fixed 600 ms from `ready` could end before the rows,
-  // the latest page or the anchored end space under the latest user message had their sizes, and Legend
-  // List's maintainScrollAtEnd follows only within 10% of the end, so a late jump left the chat higher up.
-  // The follow now ends once the content has been still for OPENING_FOLLOW_MS (cap OPENING_FOLLOW_CAP_MS).
-  useEffect(() => {
-    if (!openingFollow || !ready || catchingUp || (zoomed && !settled)) return;
-    const started = Date.now();
-    let timer: ReturnType<typeof setTimeout>;
-    const check = () => {
-      const quiet = Date.now() - contentChangedAt.current;
-      if (quiet >= OPENING_FOLLOW_MS || Date.now() - started >= OPENING_FOLLOW_CAP_MS) setOpeningFollow(false);
-      else timer = setTimeout(check, OPENING_FOLLOW_MS - quiet);
-    };
-    timer = setTimeout(check, OPENING_FOLLOW_MS);
-    return () => clearTimeout(timer);
-  }, [openingFollow, ready, catchingUp, zoomed, settled]);
+  // Build #102 (Syed's phone, every agent: opened at older messages, then jumped): #101's follow ended
+  // after 600 ms of still content, but on the phone the list could come to rest above the end (catch-up
+  // page, rows measured late) with nothing left to move it. The opening chat now stays pinned to the
+  // latest message until the reader drags, scrolls away or sends: no timer can end it early.
   useLayoutEffect(() => {
     if (requiredInputId !== lastRequiredInputId.current && requiredInputId && followLatest.current && shown.current) {
       // The question row renders in this commit; its size is known from the next frame.
@@ -421,18 +408,22 @@ export function useChatMotion(
       measurements.current.content = height;
       content.set(height);
       contentChangedAt.current = Date.now();
-      // Build #101: while the chat opens, any growth (rows measured, latest page, end space) keeps the end.
-      if (openingFollowNow.current) void listRef.current?.scrollToEnd({ animated: false });
+      // Build #101/#102: while the chat is pinned, any growth (rows measured, latest page, end space) keeps the end.
+      if (openingFollowNow.current && !scrolledUp.get()) void listRef.current?.scrollToEnd({ animated: false });
     },
-    [content],
+    [content, scrolledUp],
   );
   const onComposerLayout = useCallback(
     (event: Pick<LayoutChangeEvent, "nativeEvent">) => {
       const height = event.nativeEvent.layout.height + 20;
+      const grew = height !== measurements.current.composer;
       measurements.current.composer = height;
       composerHeight.set(height);
+      // Build #102 (typing a long message moved the chat): a pinned chat keeps the end as the composer grows.
+      if (grew && openingFollowNow.current && !scrolledUp.get())
+        requestAnimationFrame(() => void listRef.current?.scrollToEnd({ animated: false }));
     },
-    [composerHeight],
+    [composerHeight, scrolledUp],
   );
   /**
    * The rows from the latest user message to the end have their sizes, so the blank space under that
@@ -563,6 +554,8 @@ export function useChatMotion(
   }, [firstOffset, firstOpacity, responseOpacity]);
   /** The reader, not the chat, now chooses the position. */
   const leaveLatest = useCallback(() => {
+    openingFollowNow.current = false;
+    setOpeningFollow(false);
     setUserScrolled(true);
     followLatest.current = false;
     setKeyboardLiftBehavior("never");

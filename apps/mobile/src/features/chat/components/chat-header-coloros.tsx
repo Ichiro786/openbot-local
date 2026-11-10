@@ -5,8 +5,8 @@ import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
-import { type RefObject, useMemo, useState } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View, type ViewInstance, type ViewStyle } from "react-native";
+import { type RefObject, useMemo } from "react";
+import { Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
@@ -46,8 +46,8 @@ export const COLOROS_CHAT_HEADER_BOTTOM = ROW_TOP + ROW_HEIGHT;
 const SIDE_BOX = 64;
 const EDGE_PAD = 16;
 const MORE_WIDTH = 60;
-/** Build 11.3 (Syed): the header's frost ends this far ABOVE the name pill's top edge. */
-const BAND_GAP = 6;
+/** Build #102: how far below the header row the frost fades out. */
+const BAND_FADE = 24;
 /**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
  * the left, the agent's avatar over the top edge of a frosted name pill (name, the thread menu's
@@ -110,20 +110,7 @@ export function ColorOSChatHeader({
   const pillHandlers = useGlassPressHandlers(pillPress, PILL_HEIGHT, true, reduceMotion);
   const padLeft = insets.left + EDGE_PAD;
   const padRight = insets.right + EDGE_PAD;
-  // Build 11.3: the frosted band covers the status bar and fades out over the avatar, above the pill.
-  // Syed (15:16-15:18): it ends a little before the pill, with a long eased fade (no visible edge):
-  // full strength over the top part of the status bar, then easing out across the avatar.
-  const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
-  // Build 11.3 batch 1 (Syed: the name pill read see-through over scrolled text): the pill gets the same
-  // backing the Back and ••• glass have over the band (its frost and dim, then the same solid fill), cut
-  // from the band's one blur. Centred in the middle column, as the row lays it out.
-  const [pillWidth, setPillWidth] = useState(0);
-  const screenWidth = useWindowDimensions().width;
   const pillTop = topInset + ROW_TOP + AVATAR - OVERLAP;
-  const pillShape =
-    pillWidth > 0
-      ? [{ x: (screenWidth + padLeft - padRight - pillWidth) / 2, y: pillTop, width: pillWidth, height: PILL_HEIGHT }]
-      : undefined;
   // Not drawn any more (hotfix 11.1: name only); TalkBack still hears the role, or the description.
   const subtitle = useMobileWorkspaceSelector((current) => {
     if (target.kind === "channel") return "";
@@ -174,13 +161,14 @@ export function ColorOSChatHeader({
   );
   return (
     <>
+      {/* Build #102 (Syed's videos: message text and a row's "Try now" button read sharp behind Back,
+          the pill and •••): the frost is full strength down to the bottom of the header row and fades
+          out below it, so nothing scrolled under the header shows through at full contrast. */}
       <GlassBand
         target={frostTarget}
         shown={bandOn}
-        solid={(topInset * 0.5) / bandHeight}
-        fadeHeight={bandHeight}
-        shapes={pillShape}
-        style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT }]}
+        solid={(pillTop + PILL_HEIGHT) / (pillTop + PILL_HEIGHT + BAND_FADE)}
+        style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT + BAND_FADE }]}
       />
       <View
         pointerEvents="box-none"
@@ -203,11 +191,7 @@ export function ColorOSChatHeader({
           ) : null}
         </View>
         <View pointerEvents="box-none" style={styles.middle}>
-          <Animated.View
-            style={{ marginTop: AVATAR - OVERLAP }}
-            onLayout={(event) => setPillWidth(event.nativeEvent.layout.width)}
-            {...pillHandlers}
-          >
+          <Animated.View style={{ marginTop: AVATAR - OVERLAP }} {...pillHandlers}>
             <GlassFace press={pillPress} variant="pill" size={PILL_HEIGHT} material={material} contentPadding={0}>
               {threadMenu ? (
                 <MenuView
