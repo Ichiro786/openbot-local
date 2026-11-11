@@ -9,6 +9,7 @@
 #
 # Exit 0 when the control socket answered; prints the tail of /root/openbot.log either way.
 set -uo pipefail
+set +m
 ROOTFS=$(realpath "${1:?rootfs dir}")
 MODE=${2:-chroot}
 TIMEOUT=${SMOKE_TIMEOUT:-300}
@@ -20,9 +21,15 @@ mount -t overlay overlay -o "lowerdir=$ROOTFS,upperdir=$work/upper,workdir=$work
 M="$work/merged"
 mounted=("$M")
 cleanup() {
-  [ -n "${runner:-}" ] && kill -TERM "$runner" 2>/dev/null
-  sleep 3
-  pkill -KILL -f "$M" 2>/dev/null
+  if [ -n "${runner:-}" ]; then
+    kill -TERM -- "-$runner" 2>/dev/null
+    for _ in $(seq 1 50); do
+      kill -0 -- "-$runner" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -KILL -- "-$runner" 2>/dev/null
+    wait "$runner" 2>/dev/null
+  fi
   local i
   for ((i = ${#mounted[@]} - 1; i >= 0; i--)); do umount -l "${mounted[$i]}" 2>/dev/null; done
   rm -rf "$work"
@@ -36,7 +43,7 @@ envs=(HOME=/root PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=dumb
 if [ "$MODE" = chroot ]; then
   for d in proc sys dev dev/pts; do mount --bind "/$d" "$M/$d"; mounted+=("$M/$d"); done
   mkdir -p "$M/dev/shm"
-  chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/bash /root/openbot-start.sh &
+  setsid chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/bash /root/openbot-start.sh &
   runner=$!
 elif [ "$MODE" = proot ]; then
   command -v proot >/dev/null || { echo "proot is not installed" >&2; exit 2; }
@@ -46,7 +53,7 @@ elif [ "$MODE" = proot ]; then
   help=$(proot --help 2>&1 || true)
   grep -q -- '--kill-on-exit' <<<"$help" && extra+=(--kill-on-exit)
   grep -q -- '--link2symlink' <<<"$help" && extra+=(--link2symlink)
-  PROOT_NO_SECCOMP=${PROOT_NO_SECCOMP:-} proot "${extra[@]}" -0 -r "$M" -w /root \
+  PROOT_NO_SECCOMP=${PROOT_NO_SECCOMP:-} setsid proot "${extra[@]}" -0 -r "$M" -w /root \
     -b /dev -b /proc -b /sys -b "$M/tmp:/dev/shm" \
     /usr/bin/env -i "${envs[@]}" /bin/bash /root/openbot-start.sh &
   runner=$!
@@ -67,10 +74,12 @@ tail -n 120 "$M/root/openbot.log" 2>/dev/null
 if [ "$rc" = 0 ]; then
   echo "----- openbot-status.sh -----"
   if [ "$MODE" = chroot ]; then
-    chroot "$M" /usr/bin/env -i PATH=/usr/bin:/bin /root/openbot-status.sh
+    chroot "$M" /usr/bin/env -i PATH=/usr/bin:/bin /root/openbot-status.sh || rc=$?
   else
-    proot -0 -r "$M" -b /proc -b /dev /usr/bin/env -i PATH=/usr/bin:/bin /root/openbot-status.sh
+    proot -0 -r "$M" -b /proc -b /dev /usr/bin/env -i PATH=/usr/bin:/bin /root/openbot-status.sh || rc=$?
   fi
+fi
+if [ "$rc" = 0 ]; then
   echo "SMOKE TEST ($MODE): READY"
 else
   echo "SMOKE TEST ($MODE): NOT READY"

@@ -1,0 +1,449 @@
+diff --git a/src/backend/acp-client.ts b/src/backend/acp-client.ts
+index affd5796..ba95d5c3 100644
+--- a/src/backend/acp-client.ts
++++ b/src/backend/acp-client.ts
+@@ -507,6 +507,7 @@ export interface AcpProviderOptions {
+   readRateLimits?(
+     connection: ClientSideConnection,
+     model: string | null,
++    privatePrompt: (text: string) => Effect.Effect<string, ProviderClientOperationError>,
+   ): Effect.Effect<AccountRateLimitsReadResult, ProviderClientOperationError>;
+   /**
+    * Gives the running turn a message that the agent reads at its next step. ACP has no steer
+@@ -1121,7 +1122,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
+         {
+           const readRateLimits = this.options.readRateLimits;
+           const response = readRateLimits
+-            ? yield* readRateLimits(this.#requireConnection(), getString(params, "model")).pipe(
++            ? yield* readRateLimits(
++                this.#requireConnection(),
++                getString(params, "model"),
++                (text) =>
++                  this.readUsageText(getString(params, "model") ?? "", text).pipe(Effect.map((answer) => answer ?? "")),
++              ).pipe(
+                 Effect.timeoutOrElse({
+                   duration: timeoutMs ?? this.#requestTimeoutMs,
+                   orElse: () =>
+diff --git a/src/backend/acp-flavor-antigravity.ts b/src/backend/acp-flavor-antigravity.ts
+index 9b83ccb0..0651db9c 100644
+--- a/src/backend/acp-flavor-antigravity.ts
++++ b/src/backend/acp-flavor-antigravity.ts
+@@ -121,19 +121,6 @@ function geminiRequestFailure(error: unknown, detail: string): string {
+   return key ? sourceText(key, { detail: shownFailureDetail(reason) }) : detail;
+ }
+ 
+-/**
+- * OpenBot Local: Antigravity 1.4.5 builds a cold session's agent on `AGY_ACP_DEFAULT_MODEL`
+- * (`gemini-3.8-flash-high` when unset), and a model or effort set after that rebuilds the agent, its
+- * `localharness_external` and its MCP servers at the start of the first prompt
+- * (`_maybe_apply_model_switch`). The id is `<model>-<level>`; an id the account does not offer
+- * falls back to the account's default, as an unset one does.
+- */
+-function antigravityModelId(model: string | null, effort: string | null): string | null {
+-  if (!model || !/^[A-Za-z0-9._-]+$/u.test(model)) return null;
+-  if (/-(?:minimal|low|medium|high)$/u.test(model)) return model;
+-  return effort && /^(?:minimal|low|medium|high)$/u.test(effort) ? `${model}-${effort}` : null;
+-}
+-
+ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
+   // Antigravity 1.4 offered its Claude and GPT models only to a client named `zed`. The 1.5 CLI
+   // offers the same models to every client, so OpenBot sends its own name.
+@@ -197,6 +184,27 @@ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
+   // many seconds on a phone, so an idle session stays open for an hour, not ten minutes.
+   // `ACP_IDLE_SESSION_LIMIT` still closes the longest idle ones beyond two.
+   idleReleaseMs: 60 * 60_000,
++};
++
++/**
++ * OpenBot Local: Antigravity 1.4.5 builds a cold session's agent on `AGY_ACP_DEFAULT_MODEL`
++ * (`gemini-3.8-flash-high` when unset), and a model or effort set after that rebuilds the agent, its
++ * `localharness_external` and its MCP servers at the start of the first prompt
++ * (`_maybe_apply_model_switch`). The id is `<model>-<level>`; an id the account does not offer
++ * falls back to the account's default, as an unset one does.
++ */
++function antigravityModelId(model: string | null, effort: string | null): string | null {
++  if (!model || !/^[A-Za-z0-9._-]+$/u.test(model)) return null;
++  if (/-(?:minimal|low|medium|high)$/u.test(model)) return model;
++  return effort && /^(?:minimal|low|medium|high)$/u.test(effort) ? `${model}-${effort}` : null;
++}
++
++/** OpenBot Local: compatibility for the saved Python hybrid only. */
++export const LEGACY_ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
++  ...ANTIGRAVITY_ACP_FLAVOR,
++  clientInfo: { name: "zed", title: "OpenBot", version: "0.1.0" },
++  authRequiredSignsOut: false,
++  sessionProcesses: process.platform === "win32" ? undefined : true,
+   sessionProcessEnv: (model, effort): Record<string, string> => {
+     const id = antigravityModelId(model, effort);
+     return id ? { AGY_ACP_DEFAULT_MODEL: id } : {};
+diff --git a/src/backend/acp-sign-in.ts b/src/backend/acp-sign-in.ts
+index 7174061b..71058d70 100644
+--- a/src/backend/acp-sign-in.ts
++++ b/src/backend/acp-sign-in.ts
+@@ -7,7 +7,7 @@ import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-
+ import { sourceText } from "@openbot/i18n/source";
+ import { registerSecretValue } from "@openbot/logging";
+ import { Effect, Fiber } from "effect";
+-import { cliSpawnTarget } from "./cli";
++import { cliSpawnTarget, isLegacyAntigravityCli, LEGACY_ANTIGRAVITY_ARGV } from "./cli";
+ import {
+   type ProviderClientOperationError,
+   ProviderSignInError,
+@@ -109,6 +109,11 @@ export const startAcpAuthentication = Effect.fnUntraced(function* (options: {
+       new ProviderSignInError({ message: sourceText("error.provider.antigravityRemoteWindowsSignIn") }),
+     );
+   const env = { ...process.env, ...options.env };
++  const legacyAntigravity = isLegacyAntigravityCli(options.executable);
++  if (legacyAntigravity) {
++    delete env.WSL_DISTRO_NAME;
++    env.AGY_ACP_FORCE_FILE_STORAGE = "1";
++  }
+   const opener = options.openGoogleSignIn
+     ? yield* Effect.acquireRelease(
+         Effect.tryPromise({ try: () => makeOpenerFolder(), catch: providerFailure }),
+@@ -116,7 +121,10 @@ export const startAcpAuthentication = Effect.fnUntraced(function* (options: {
+       )
+     : null;
+   // Cursor's Windows launcher is a `.cmd` file, which starts only through `cmd.exe`.
+-  const target = cliSpawnTarget(options.executable, acpArgv(options.argv, env));
++  const target = cliSpawnTarget(
++    options.executable,
++    legacyAntigravity ? LEGACY_ANTIGRAVITY_ARGV : acpArgv(options.argv, env),
++  );
+   const child = yield* Effect.acquireRelease(
+     Effect.try({
+       try: () =>
+@@ -126,6 +134,9 @@ export const startAcpAuthentication = Effect.fnUntraced(function* (options: {
+             env: {
+               ...env,
+               ...(opener ? { PATH: [opener, env.PATH].filter(Boolean).join(delimiter) } : {}),
++              ...(legacyAntigravity && opener
++                ? { BROWSER: join(opener, process.platform === "darwin" ? "open" : "xdg-open") }
++                : {}),
+               ...tempEnv,
+             },
+             windowsVerbatimArguments: target.windowsVerbatimArguments,
+diff --git a/src/backend/antigravity-usage.ts b/src/backend/antigravity-usage.ts
+index a2f077ea..1815496c 100644
+--- a/src/backend/antigravity-usage.ts
++++ b/src/backend/antigravity-usage.ts
+@@ -209,3 +209,85 @@ function geminiGroup(groups: readonly QuotaGroup[]): QuotaGroup | undefined {
+ function bindingWindow(current: UsageWindow | null, next: UsageWindow): UsageWindow {
+   return current && current.usedPercent >= next.usedPercent ? current : next;
+ }
++
++/** The saved hybrid answers `/usage` as Markdown, without a model turn. */
++export const ANTIGRAVITY_USAGE_PROMPT = "/usage";
++
++const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
++
++const LEGACY_SECTION = /^#+\s*Quota Limits\s*$/iu;
++const LEGACY_GROUP = /^-\s+\*\*(.+?)\*\*\s*$/u;
++const LEGACY_GROUP_MODELS = /^\s+\*\(Models within this group:\s*(.+?)\)\*\s*$/iu;
++const LEGACY_BUCKET = /^\s+-\s+\*\*(.+?):\*\*\s+(\d+(?:\.\d+)?)% remaining(?:\s+\(resets ([^)]+)\))?\s*$/u;
++const LEGACY_RESET = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (\d{1,2}):(\d{2}) UTC$/u;
++
++/**
++ * The windows of the group that limits `model`. A five-hour bucket is the first window and a weekly
++ * one the second, as for Codex. Without a model, the dock's reading, it is the "Gemini Models" group.
++ * A model that no group lists has no reading: another group's room does not say that it can run.
++ * When Google lists no models at all, the Gemini group covers every model, as one group did before.
++ * `groups` holds every group that has a window.
++ */
++export function legacyAntigravityRateLimits(answer: string, model: string | null = null): AccountRateLimitsReadResult {
++  const groups = legacyQuotaGroups(answer);
++  const listed = groups.some((group) => group.models.length > 0);
++  const group = model && listed ? usageGroupForModel(groups, model) : geminiGroup(groups);
++  if (!group || (!group.primary && !group.secondary)) return NO_USAGE;
++  return {
++    rateLimits: { limitId: "antigravity", primary: group.primary, secondary: group.secondary },
++    rateLimitsByLimitId: null,
++    groups: groups.filter((candidate) => candidate.primary || candidate.secondary),
++  };
++}
++
++function legacyQuotaGroups(answer: string): QuotaGroup[] {
++  const groups: QuotaGroup[] = [];
++  let inSection = false;
++  for (const line of answer.split(/\r?\n/u)) {
++    if (/^#/u.test(line)) {
++      inSection = LEGACY_SECTION.test(line);
++      continue;
++    }
++    if (!inSection) continue;
++    const name = LEGACY_GROUP.exec(line)?.[1];
++    if (name) {
++      groups.push({ name, models: [], primary: null, secondary: null });
++      continue;
++    }
++    const group = groups.at(-1);
++    if (!group) continue;
++    const models = LEGACY_GROUP_MODELS.exec(line)?.[1];
++    if (models) {
++      group.models = models
++        .split(",")
++        .map((model) => model.trim())
++        .filter(Boolean);
++      continue;
++    }
++    const bucket = LEGACY_BUCKET.exec(line);
++    if (!bucket) continue;
++    const bucketName = bucket[1] ?? "";
++    const window: UsageWindow = {
++      usedPercent: Math.max(0, Math.min(100, 100 - Number(bucket[2]))),
++      windowDurationMins: /week/iu.test(bucketName)
++        ? WEEKLY_WINDOW_MINS
++        : /\b5\s*-?\s*h/iu.test(bucketName)
++          ? FIVE_HOUR_WINDOW_MINS
++          : null,
++      resetsAt: legacyResetSeconds(bucket[3]),
++    };
++    if (window.windowDurationMins === FIVE_HOUR_WINDOW_MINS) group.primary = bindingWindow(group.primary, window);
++    else group.secondary = bindingWindow(group.secondary, window);
++  }
++  return groups;
++}
++
++/** The server writes the reset as "Oct 29, 2026, 10:12 UTC". */
++function legacyResetSeconds(text: string | undefined): number | null {
++  const match = text ? LEGACY_RESET.exec(text.trim()) : null;
++  if (!match) return null;
++  const month = LEGACY_MONTHS.indexOf(match[1] ?? "");
++  if (month < 0) return null;
++  const milliseconds = Date.UTC(Number(match[3]), month, Number(match[2]), Number(match[4]), Number(match[5]));
++  return Number.isFinite(milliseconds) ? milliseconds / 1_000 : null;
++}
+diff --git a/src/backend/cli.ts b/src/backend/cli.ts
+index a245b381..85406c30 100644
+--- a/src/backend/cli.ts
++++ b/src/backend/cli.ts
+@@ -1,6 +1,6 @@
+ import { execFile, spawn } from "node:child_process";
+ import { constants } from "node:fs";
+-import { access, stat } from "node:fs/promises";
++import { access, readFile, stat } from "node:fs/promises";
+ import { homedir } from "node:os";
+ import { basename, delimiter, dirname, extname, isAbsolute, join, posix, resolve, win32 } from "node:path";
+ import { promisify, stripVTControlCharacters } from "node:util";
+@@ -324,6 +324,22 @@ export const resolveOpencodeCli: (input?: {
+   Effect.catchDefect((cause) => Effect.fail(providerFailure(cause))),
+ );
+ 
++/** The saved OpenBot Local hybrid runs the 1.4 ACP server, not the native 1.5 CLI. */
++export function isLegacyAntigravityCli(executable: string): boolean {
++  return basename(executable) === "agy_acp_server";
++}
++
++/** The arguments of Google's legacy Linux ACP server. */
++export const LEGACY_ANTIGRAVITY_ARGV: readonly string[] = process.platform === "linux" ? ["--uid="] : [];
++
++/** The saved hybrid has no `--version`; its manifest keeps its actual source version. */
++function parseLegacyAntigravityVersion(manifest: string): string {
++  const value: unknown = JSON.parse(manifest);
++  if (!isDynamicRecord(value) || typeof value.version !== "string" || !/^\d+\.\d+\.\d+$/u.test(value.version))
++    throw new CodexCliError(sourceText("error.provider.antigravityVersionUnreadable"), "invalid");
++  return value.version;
++}
++
+ /**
+  * The Antigravity CLI is never looked for on `PATH`: the Antigravity IDE installs an `antigravity`
+  * command that is an editor, not this CLI. Only the copy OpenBot downloaded, or the path in
+@@ -354,6 +370,17 @@ export const resolveAntigravityCli: (input?: {
+       found = true;
+       const attempt = yield* Effect.result(
+         Effect.gen(function* () {
++          if (isLegacyAntigravityCli(candidate.executable)) {
++            const manifest = join(dirname(dirname(candidate.executable)), "antigravity-package.json");
++            const version = parseLegacyAntigravityVersion(yield* providerCall(() => readFile(manifest, "utf8")));
++            const launchPath = yield* cliLaunchPath(candidate.executable, candidate.source);
++            return {
++              executable: candidate.executable,
++              version,
++              source: candidate.source,
++              ...(launchPath ? { launchPath } : {}),
++            };
++          }
+           const { stdout, launch } = yield* readCliVersion(candidate, "antigravity");
+           return {
+             executable: candidate.executable,
+@@ -738,6 +765,16 @@ export function claudeTakesPromptSnapshotFlag(version: string): boolean {
+   return isMinimumVersion(version, [2, 1, 263]);
+ }
+ 
++/** Legacy servers from 1.4 keep accounts in `GEMINI_HOME`. */
++export function legacyAntigravityReadsGeminiHome(version: string): boolean {
++  return isMinimumVersion(version, [1, 4, 0]);
++}
++
++/** Legacy servers from 1.4.1 answer `/usage` without a model turn. */
++export function legacyAntigravityAnswersUsage(version: string): boolean {
++  return isMinimumVersion(version, [1, 4, 1]);
++}
++
+ /**
+  * Whether this Antigravity CLI takes `--gemini-dir` and `--app-data-dir`, so that an account after
+  * the first can have a folder of its own, and keeps its token in a file there when it sees
+diff --git a/src/backend/provider-drivers.ts b/src/backend/provider-drivers.ts
+index 71068d52..361af3d3 100644
+--- a/src/backend/provider-drivers.ts
++++ b/src/backend/provider-drivers.ts
+@@ -13,7 +13,7 @@ import {
+ } from "@openbot/contracts/ipc";
+ import { sourceText } from "@openbot/i18n/source";
+ import { Effect } from "effect";
+-import { AcpAgentClient, type AcpHistoryPersistence } from "./acp-client";
++import { AcpAgentClient, type AcpHistoryPersistence, type AcpProviderOptions } from "./acp-client";
+ import {
+   CLINE_ACP_FLAVOR,
+   CURSOR_ACP_FLAVOR,
+@@ -24,7 +24,7 @@ import {
+   KIMI_ACP_FLAVOR,
+   MISTRAL_ACP_FLAVOR,
+ } from "./acp-flavor";
+-import { ANTIGRAVITY_ACP_FLAVOR } from "./acp-flavor-antigravity";
++import { ANTIGRAVITY_ACP_FLAVOR, LEGACY_ANTIGRAVITY_ACP_FLAVOR } from "./acp-flavor-antigravity";
+ import { OPENCODE_ACP_FLAVOR } from "./acp-flavor-opencode";
+ import type { AcpArgv, AcpExtensionMethod } from "./acp-sign-in";
+ import { readMuseAccount } from "./agent/muse-login";
+@@ -36,14 +36,18 @@ import {
+ } from "./agent/provider-models";
+ import type { AgentClient } from "./agent-client";
+ import { ANTIGRAVITY_TOKEN_FILE, importAntigravityToken } from "./antigravity-token-import";
+-import { readAntigravityQuota } from "./antigravity-usage";
++import { ANTIGRAVITY_USAGE_PROMPT, legacyAntigravityRateLimits, readAntigravityQuota } from "./antigravity-usage";
+ import { CodexAppServerClient } from "./app-server-client";
+ import { ClaudeAgentClient } from "./claude-client";
+ import {
+   type AgentCliInfo,
+   antigravityTakesStateFolders,
+   cliPathEnvironment,
++  isLegacyAntigravityCli,
+   kimiLoginArgs,
++  LEGACY_ANTIGRAVITY_ARGV,
++  legacyAntigravityAnswersUsage,
++  legacyAntigravityReadsGeminiHome,
+   resolveAntigravityCli,
+   resolveClaudeCli,
+   resolveClineCli,
+@@ -238,12 +242,13 @@ type ProviderCodeSignIn =
+  * The key belongs to the provider's own sign-in. An account after the first is a Google account in
+  * its own `GEMINI_HOME`, so its processes get that folder and never the key.
+  */
+-function antigravityKeyOptions(context: ProviderClientContext, agentEnvironment: boolean) {
++function antigravityKeyOptions(cli: AgentCliInfo, context: ProviderClientContext, agentEnvironment: boolean) {
+   const account = context.accountEnvironment;
+   const key = () => (account ? null : context.apiKey("antigravity"));
+   return {
+     extraEnv: () => {
+-      importAntigravityToken(antigravityAppDataDir({ ...process.env, ...account }));
++      if (!isLegacyAntigravityCli(cli.executable))
++        importAntigravityToken(antigravityAppDataDir({ ...process.env, ...account }));
+       const saved = key();
+       return {
+         ...(agentEnvironment ? context.agentEnvironment?.() : {}),
+@@ -308,6 +313,25 @@ function antigravityAccountStatePaths(context: ProviderClientContext) {
+   return state;
+ }
+ 
++/** The legacy hybrid must not open a browser while it serves turns. */
++function antigravityServingOptions(
++  cli: AgentCliInfo,
++  context: ProviderClientContext,
++): Pick<AcpProviderOptions, "flavor" | "argv" | "env" | "interactiveSignInPrompt"> {
++  return isLegacyAntigravityCli(cli.executable)
++    ? {
++        flavor: LEGACY_ANTIGRAVITY_ACP_FLAVOR,
++        argv: LEGACY_ANTIGRAVITY_ARGV,
++        env: { BROWSER: "true", AGY_ACP_FORCE_FILE_STORAGE: "1" },
++        interactiveSignInPrompt: /Open the following link to authenticate the ACP server: /u,
++      }
++    : {
++        flavor: ANTIGRAVITY_ACP_FLAVOR,
++        argv: antigravityArgv({ ...process.env, ...context.accountEnvironment }),
++        env: ANTIGRAVITY_ENV,
++      };
++}
++
+ const GEMINI_API_KEY_METHOD = "gemini-api-key";
+ 
+ /**
+@@ -1068,7 +1092,10 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
+     accounts: {
+       homeVariable: "GEMINI_HOME",
+       signIn: ANTIGRAVITY_SIGN_IN,
+-      supports: (cli) => antigravityTakesStateFolders(cli.version),
++      supports: (cli) =>
++        isLegacyAntigravityCli(cli.executable)
++          ? legacyAntigravityReadsGeminiHome(cli.version)
++          : antigravityTakesStateFolders(cli.version),
+       // The usage read needs an access token that has not expired, and only a running CLI refreshes it.
+       // A process started only to read usage would give no reading, so an idle account shows its last one.
+       usageLeavesSession: true,
+@@ -1083,15 +1110,13 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
+     createClient: (cli, timeout, context, confinement) =>
+       new AcpAgentClient(cli, timeout, {
+         provider: "antigravity",
+-        flavor: ANTIGRAVITY_ACP_FLAVOR,
+-        argv: antigravityArgv({ ...process.env, ...context.accountEnvironment }),
+-        env: ANTIGRAVITY_ENV,
++        ...antigravityServingOptions(cli, context),
+         discoveryCwd: () => discoveryFolder("antigravity"),
+         privateTemp: antigravityTemp(context),
+         ...(confinement
+           ? { confine: (target) => confineSpawnTarget(target, confinement, antigravityAccountStatePaths(context)) }
+           : {}),
+-        ...antigravityKeyOptions(context, true),
++        ...antigravityKeyOptions(cli, context, true),
+         signInMessage: sourceText("error.provider.antigravitySignIn"),
+         servesModel: context.servesModel,
+         mcpServers: context.mcpServers,
+@@ -1100,30 +1125,34 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
+         mcpEndpoint: context.mcpEndpoint,
+         history: context.history?.("antigravity"),
+         // A saved key has no plan quota.
+-        readRateLimits: (_connection, model) =>
+-          context.apiKey("antigravity") && !context.accountEnvironment
+-            ? Effect.succeed({ rateLimits: null, rateLimitsByLimitId: null })
+-            : readAntigravityQuota({
+-                tokenFile: join(
+-                  antigravityAppDataDir({ ...process.env, ...context.accountEnvironment }),
+-                  ANTIGRAVITY_TOKEN_FILE,
+-                ),
+-                version: cli.version,
+-                model,
+-              }),
++        readRateLimits: (_connection, model, privatePrompt) =>
++          isLegacyAntigravityCli(cli.executable)
++            ? legacyAntigravityAnswersUsage(cli.version)
++              ? privatePrompt(ANTIGRAVITY_USAGE_PROMPT).pipe(
++                  Effect.map((answer) => legacyAntigravityRateLimits(answer, model)),
++                )
++              : Effect.succeed({ rateLimits: null, rateLimitsByLimitId: null })
++            : context.apiKey("antigravity") && !context.accountEnvironment
++              ? Effect.succeed({ rateLimits: null, rateLimitsByLimitId: null })
++              : readAntigravityQuota({
++                  tokenFile: join(
++                    antigravityAppDataDir({ ...process.env, ...context.accountEnvironment }),
++                    ANTIGRAVITY_TOKEN_FILE,
++                  ),
++                  version: cli.version,
++                  model,
++                }),
+       }),
+     // A profile-generation client asks one question and must not act: no MCP servers, and every
+     // permission request is cancelled.
+     createProfileClient: (cli, timeout, context) =>
+       new AcpAgentClient(cli, timeout, {
+         provider: "antigravity",
+-        flavor: ANTIGRAVITY_ACP_FLAVOR,
+-        argv: antigravityArgv({ ...process.env, ...context.accountEnvironment }),
+-        env: ANTIGRAVITY_ENV,
++        ...antigravityServingOptions(cli, context),
+         profileGeneration: true,
+         discoveryCwd: () => discoveryFolder("antigravity"),
+         privateTemp: antigravityTemp(context),
+-        ...antigravityKeyOptions(context, false),
++        ...antigravityKeyOptions(cli, context, false),
+         signInMessage: sourceText("error.provider.antigravitySignIn"),
+         servesModel: context.servesModel,
+       }),

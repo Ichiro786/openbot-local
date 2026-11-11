@@ -1,0 +1,103 @@
+diff --git a/scripts/openbot-local-engine-upgrade-e2e.ts b/scripts/openbot-local-engine-upgrade-e2e.ts
+new file mode 100644
+index 00000000..1b39627a
+--- /dev/null
++++ b/scripts/openbot-local-engine-upgrade-e2e.ts
+@@ -0,0 +1,97 @@
++// Drives the real SQLite migration in separate processes. Uses synthetic data only.
++import assert from "node:assert/strict";
++import { execFileSync } from "node:child_process";
++import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
++import { join, resolve } from "node:path";
++import { DatabaseSync } from "node:sqlite";
++import { fileURLToPath } from "node:url";
++import { migrateOpenBotDatabase } from "../src/backend/openbot-database-schema";
++
++const tables = [
++  "orchestration_events",
++  "projection_threads",
++  "projection_provider_sessions",
++  "projection_turns",
++  "projection_thread_messages",
++  "projection_attachments",
++];
++const phase = process.argv[2];
++const directory = process.argv[3];
++if (phase === "--seed" || phase === "--upgrade" || phase === "--verify") {
++  assert(directory, "Missing disposable fixture directory");
++  const db = new DatabaseSync(join(directory, "openbot.db"));
++  try {
++    db.exec("PRAGMA foreign_keys=ON");
++    if (phase === "--seed") {
++      db.exec("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");
++      db.exec(`CREATE TEMP TRIGGER stop_at_55 BEFORE INSERT ON schema_migrations WHEN new.version > 55
++        BEGIN SELECT RAISE(ABORT, 'fixture stop'); END;`);
++      assert.throws(() => migrateOpenBotDatabase(db), /migration to version 56 failed/);
++      db.exec("DROP TRIGGER stop_at_55");
++      assert.equal(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()?.version, 55);
++      db.exec(`
++        INSERT INTO projection_threads VALUES ('fixture-thread', 'fixture-agent', 'Synthetic chat', NULL, '2026-11-01', '2026-11-01', 1);
++        INSERT INTO projection_provider_sessions VALUES ('fixture-session', 'fixture-thread', 'antigravity', 'synthetic-resume-id', 'synthetic-model', 'medium', 'inactive', '2026-11-01', '2026-11-01', 'synthetic-cursor', 1);
++        INSERT INTO projection_turns VALUES ('fixture-turn', 'fixture-thread', 'fixture-session', 'completed', '2026-11-01', '2026-11-01', 1);
++        INSERT INTO projection_thread_messages
++          (thread_id, message_id, turn_id, author, status, item_type, created_at, ordinal, message_json, last_event_sequence)
++          VALUES ('fixture-thread', 'fixture-message', 'fixture-turn', 'user', 'completed', 'message', '2026-11-01', 0, '{"text":"Synthetic chat with an attachment"}', 1);
++        INSERT INTO orchestration_events
++          (event_id, command_id, aggregate_type, aggregate_id, event_type, occurred_at, payload_json)
++          VALUES ('fixture-event', 'fixture-command', 'thread', 'fixture-thread', 'synthetic-data', '2026-11-01', '{"text":"Synthetic event"}');
++      `);
++      const attachment = join(directory, "attachment.txt");
++      writeFileSync(attachment, "Synthetic attachment bytes.\n");
++      db.prepare("INSERT INTO projection_attachments VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
++        "fixture-file",
++        "message",
++        "fixture-message",
++        "attachment.txt",
++        attachment,
++        "{}",
++        "2026-11-01",
++        1,
++      );
++      const before = Object.fromEntries(tables.map((table) => [table, db.prepare(`SELECT * FROM ${table}`).all()]));
++      writeFileSync(join(directory, "before.json"), JSON.stringify(before));
++    } else {
++      if (phase === "--upgrade") migrateOpenBotDatabase(db);
++      assert.equal(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()?.version, 60);
++      const after = Object.fromEntries(tables.map((table) => [table, db.prepare(`SELECT * FROM ${table}`).all()]));
++      assert.deepEqual(
++        JSON.parse(JSON.stringify(after)),
++        JSON.parse(readFileSync(join(directory, "before.json"), "utf8")),
++      );
++      assert.equal(readFileSync(join(directory, "attachment.txt"), "utf8"), "Synthetic attachment bytes.\n");
++      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
++      assert.equal(db.prepare("PRAGMA integrity_check").get()?.integrity_check, "ok");
++    }
++  } finally {
++    db.close();
++  }
++} else {
++  const out = resolve(phase ?? ".openbot-build/engine-upgrade");
++  mkdirSync(out, { recursive: true });
++  const fixture = mkdtempSync(join(out, "fixture-"));
++  const report: { sourceSchema: number; targetSchema: number; phases: string[]; status: string } = {
++    sourceSchema: 55,
++    targetSchema: 60,
++    phases: [],
++    status: "running",
++  };
++  try {
++    for (const step of ["--seed", "--upgrade", "--verify"]) {
++      execFileSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), step, fixture], {
++        stdio: "inherit",
++        timeout: 60_000,
++      });
++      report.phases.push(step);
++    }
++    report.status = "pass";
++  } catch (error) {
++    report.status = "fail";
++    throw error;
++  } finally {
++    writeFileSync(join(out, "engine-upgrade-report.json"), `${JSON.stringify(report, null, 2)}\n`);
++  }
++}

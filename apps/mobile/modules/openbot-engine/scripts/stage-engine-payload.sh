@@ -21,6 +21,7 @@ MODULE_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 DEST="$MODULE_DIR/android/src/main/assets/engine"
 REPO="${ENGINE_REPO:-${GITHUB_REPOSITORY:-Ichiro786/openbot-local}}"
 TAG="${1:-${ENGINE_TAG:-}}"
+ARTIFACT_DIR="${ENGINE_ARTIFACT_DIR:-}"
 API="${GITHUB_API_URL:-https://api.github.com}"
 ASSET=rootfs-arm64.tar.xz
 
@@ -37,7 +38,25 @@ api() {
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-if [ -n "$TAG" ]; then
+if [ -n "$ARTIFACT_DIR" ]; then
+  [[ ${ENGINE_GIT_SHA:-} =~ ^[0-9a-f]{40}$ ]] || fail "missing engine run source"
+  [[ ${ENGINE_SOURCE_SHA:-} =~ ^[0-9a-f]{40}$ ]] || fail "missing upstream source pin"
+  cp -- "$ARTIFACT_DIR/engine.json" "$WORK/engine.json"
+  jq -e --arg git "$ENGINE_GIT_SHA" --arg source "$ENGINE_SOURCE_SHA" '
+    .name == "openbot-local-engine" and .arch == "arm64"
+    and .asset == "rootfs-arm64.tar.xz" and .git == $git and .source_sha == $source
+    and .version == .openbot_version
+    and (.compressed_bytes | type == "number" and . > 0 and floor == .)
+    and (.installed_bytes | type == "number" and . > 0 and floor == .)
+  ' "$WORK/engine.json" >/dev/null || fail "engine artifact provenance differs"
+  artifact_tag=$(jq -er .tag "$WORK/engine.json")
+  [[ $artifact_tag =~ ^engine-([0-9]+\.[0-9]+\.[0-9]+)(-[1-9][0-9]*)?$ ]] || fail "invalid artifact tag"
+  [ "${BASH_REMATCH[1]}" = "$(jq -r .openbot_version "$WORK/engine.json")" ] || fail "artifact tag version differs"
+  [ "${ENGINE_ARTIFACT_NAME:-}" = "$artifact_tag-rootfs-arm64" ] || fail "artifact name differs"
+  [ -z "$TAG" ] || [ "$TAG" = "$artifact_tag" ] || fail "artifact tag differs from requested tag"
+  [ "$(stat -c %s "$ARTIFACT_DIR/$ASSET")" = "$(jq -r .compressed_bytes "$WORK/engine.json")" ] || fail "artifact size differs"
+  TAG=$artifact_tag
+elif [ -n "$TAG" ]; then
   if ! api -o "$WORK/release.json" "$API/repos/$REPO/releases/tags/$TAG"; then
     fail "release $TAG not found in $REPO (private repo without GITHUB_TOKEN?)"
   fi
@@ -57,10 +76,14 @@ else
     exit 3
   fi
 fi
-TAG=$(jq -r .tag_name "$WORK/release.json")
+[ -n "$ARTIFACT_DIR" ] || TAG=$(jq -r .tag_name "$WORK/release.json")
 echo "==> $REPO $TAG"
 
 download() { # asset-name dest
+  if [ -n "$ARTIFACT_DIR" ]; then
+    cp -- "$ARTIFACT_DIR/$1" "$2"
+    return
+  fi
   local id
   id=$(jq -r --arg n "$1" '.assets[] | select(.name == $n) | .id' "$WORK/release.json" | head -n1)
   [ -n "$id" ] || fail "$TAG has no asset $1"

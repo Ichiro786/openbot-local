@@ -46,6 +46,13 @@ if os.environ.get("AGY_HYBRID_TRACE") == "1":
 # 4. Same override the official entrypoint applies before loading generated code.
 import google.protobuf.runtime_version as _rv
 _rv.ValidateProtobufRuntimeVersion = lambda *a, **k: None
+#    Public protobuf >= 7.34 removed FieldDescriptor.label; Google's internal one still has it and
+#    acp_server/session_store.py reads it on every session resume. Restore it from is_repeated/is_required.
+from google.protobuf import descriptor_pb2 as _dpb
+_FD = type(_dpb.FileDescriptorProto.DESCRIPTOR.fields_by_name["name"])
+if not hasattr(_FD, "label"):
+    _FD.label = property(lambda f: _FD.LABEL_REPEATED if f.is_repeated
+                         else _FD.LABEL_REQUIRED if f.is_required else _FD.LABEL_OPTIONAL)
 
 # 5. Run the official entry module as __main__.
 if os.environ.get("AGY_HYBRID_IMPORT_ONLY") == "1":

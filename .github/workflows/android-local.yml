@@ -21,6 +21,10 @@ on:
         description: "Engine release to bundle, e.g. engine-0.57.0 (blank = newest)"
         required: false
         default: ""
+      engine_run_id:
+        description: "Successful Engine rootfs run to bundle (blank = engine release)"
+        required: false
+        default: ""
       skip_payload:
         description: "Compile-check only: build without the engine payload (APK cannot install the engine)"
         type: boolean
@@ -36,6 +40,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-local-${{ github.ref }}-${{ github.event_name }}
@@ -167,7 +172,37 @@ jobs:
           bash scripts/fetch-proot.sh
           cat scripts/proot.lock
 
-      # The rootfs payload goes into the APK assets (stored uncompressed). Fails when no release exists.
+      - name: Verify engine artifact run
+        id: engine_run
+        if: ${{ !inputs.skip_payload && inputs.engine_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENGINE_RUN_ID: ${{ inputs.engine_run_id }}
+        run: |
+          set -euo pipefail
+          [[ $ENGINE_RUN_ID =~ ^[1-9][0-9]*$ ]] || { echo "::error::Invalid engine run id"; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ENGINE_RUN_ID" > /tmp/engine-run.json
+          jq -e --arg repo "$GITHUB_REPOSITORY" '
+            .conclusion == "success" and .path == ".github/workflows/rootfs.yml"
+            and .repository.full_name == $repo
+          ' /tmp/engine-run.json > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ENGINE_RUN_ID/artifacts?per_page=100" > /tmp/engine-artifacts.json
+          name=$(jq -er '[.artifacts[] | select(.expired | not)
+            | select(.name | test("^engine-[0-9]+\\.[0-9]+\\.[0-9]+(-[1-9][0-9]*)?-rootfs-arm64$"))]
+            | if length == 1 then .[0].name else error("Expected one checked engine artifact") end' /tmp/engine-artifacts.json)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .head_sha /tmp/engine-run.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Download checked engine artifact
+        if: ${{ !inputs.skip_payload && inputs.engine_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.engine_run.outputs.name }}
+          run-id: ${{ inputs.engine_run_id }}
+          github-token: ${{ github.token }}
+          path: engine-payload
+
+      # The payload comes from a checked run or an existing pinned release.
       - name: Stage engine payload
         id: payload
         if: ${{ !inputs.skip_payload }}
@@ -176,7 +211,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           ENGINE_REPO: ${{ github.repository }}
           ENGINE_TAG: ${{ inputs.engine_tag }}
+          ENGINE_RUN_ID: ${{ inputs.engine_run_id }}
+          ENGINE_GIT_SHA: ${{ steps.engine_run.outputs.sha }}
+          ENGINE_ARTIFACT_NAME: ${{ steps.engine_run.outputs.name }}
         run: |
+          if [ -n "$ENGINE_RUN_ID" ]; then
+            export ENGINE_ARTIFACT_DIR="$GITHUB_WORKSPACE/engine-payload"
+            version=$(jq -er .openbot_version "$ENGINE_ARTIFACT_DIR/engine.json")
+            [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+            export ENGINE_SOURCE_SHA=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/engine/patches/$version/UPSTREAM_REF")
+          fi
           set +e
           bash scripts/stage-engine-payload.sh
           rc=$?

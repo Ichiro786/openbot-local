@@ -9,7 +9,7 @@ is the same server that upstream's Docker image runs.
 
 | Path in this tree | Goes to | Purpose |
 | --- | --- | --- |
-| `.github/workflows/rootfs.yml` | repo | Builds and publishes the payload. Runs weekly and on manual dispatch. |
+| `.github/workflows/rootfs.yml` | repo | Builds a checked test artifact. Runs weekly and on manual dispatch. |
 | `engine/build-rootfs.sh` | repo | Does the build: ubuntu-base, packages, AppImage, scripts, strip, pack. Runs as root on arm64. |
 | `engine/smoke-test.sh` | repo | Starts the built tree once in a chroot or in proot, on an overlay. |
 | `engine/openbot-start.sh` | `/root/openbot-start.sh` | Launcher (see below). |
@@ -280,7 +280,17 @@ Do not kill the proot process first. `--kill-on-exit` would SIGKILL OpenBot befo
 ## Not verified
 
 - The workflow and the scripts were written and syntax-checked only. Neither the workflow nor a start on a phone has been run.
-- The CI smoke tests (chroot, and the distro's proot on GitHub's kernel) do not reproduce Android's SELinux restrictions. Their result is recorded in the release notes, and they never block publishing.
+- The CI smoke tests (chroot, and the distro's proot on GitHub's kernel) do not reproduce Android's SELinux restrictions. Both checks must pass before the test payload artifact is uploaded. They do not prove behavior on the phone.
 - It is unknown whether OpenBot main itself refuses `--no-sandbox` or running as uid 0. Upstream's container entrypoint checks for user namespaces and refuses root, but that check is in the shell script this launcher replaces. If main also refuses, it will show as exit 15 with OpenBot's own message in the log.
 - If OpenBot main appends its own `--disable-features` or `--enable-features`, Chromium keeps only one of each switch, and ours may be overridden. Check the effective switches with `OPENBOT_VERBOSE=1`.
 - The size figures are estimates until the first build.
+
+## Test build safety
+
+On build11-5, rootfs.yml writes workflow artifacts only. It does not write releases, tags or engine-latest. Both engine smoke checks must pass. The patched source also runs the released-schema data fixtures. A failed check prevents the usable payload artifact. Check reports remain available.
+
+The APK workflow can use the exact successful engine_run_id. It checks run provenance, the source pin, the manifest and SHA-256 before staging the payload. Signing stays unchanged.
+
+An engine binary rollback does not undo a database migration. The installer moves the same /root data to the previous binaries. Do not use r.prev as a database backup.
+
+The upgrade E2E is a source patch. It runs under `scripts/` in the exact engine source checkout. CI checks its Node project there. The local desktop source has existing contract type errors and is not the engine build source.

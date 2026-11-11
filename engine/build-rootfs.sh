@@ -312,6 +312,10 @@ compressed=$(stat -c %s "$OUT_DIR/rootfs-arm64.tar.xz")
 uncompressed=$(xz --robot --list "$OUT_DIR/rootfs-arm64.tar.xz" | awk '$1 == "totals" {print $5}')
 installed=$(du -sb "$ROOTFS" | cut -f1)
 files=$(find "$ROOTFS" | wc -l)
+source_sha=""
+if [ -f "$SCRIPT_DIR/patches/$version/UPSTREAM_REF" ]; then
+  source_sha=$(tr -d '[:space:]' < "$SCRIPT_DIR/patches/$version/UPSTREAM_REF")
+fi
 cat >"$OUT_DIR/engine.json" <<EOF
 {
   "name": "openbot-local-engine",
@@ -330,7 +334,8 @@ cat >"$OUT_DIR/engine.json" <<EOF
   "status": "/root/openbot-status.sh",
   "ready_marker": "OPENBOT_LOCAL_READY",
   "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "git": "${GIT_SHA:-unknown}"
+  "git": "${GIT_SHA:-unknown}",
+  "source_sha": "$source_sha"
 }
 EOF
 echo "OPENBOT_VERSION=$version" >"$OUT_DIR/build.env"

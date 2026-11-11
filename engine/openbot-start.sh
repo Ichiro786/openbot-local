@@ -76,6 +76,7 @@ PROFILES=(minimal safe inprocess single)
 
 APP_PID=""
 DBUS_PID=""
+KEYRING_PID=""
 XVFB0_PID=""
 XVFB1_PID=""
 PROFILE=""
@@ -216,7 +217,7 @@ stop_pid() { # stop_pid <pid> <timeout seconds>
 
 cleanup() {
   if [ -n "$APP_PID" ]; then stop_pid "$APP_PID" "$STOP_TIMEOUT"; fi
-  pkill -u "$(id -u)" -x gnome-keyring-d >/dev/null 2>&1 || pkill -f gnome-keyring-daemon >/dev/null 2>&1
+  stop_pid "$KEYRING_PID" 5
   stop_pid "$XVFB1_PID" 5
   stop_pid "$XVFB0_PID" 5
   stop_pid "$DBUS_PID" 5
@@ -302,6 +303,10 @@ if [ -f "$AGY_CURRENT/.ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ]; the
   if [[ $agy_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf '{"version":"%s"}\n' "$agy_version" >"$AGY_CURRENT/antigravity-package.json.tmp" &&
       mv -f "$AGY_CURRENT/antigravity-package.json.tmp" "$AGY_CURRENT/antigravity-package.json"
+    # The runtime under /root outlives engine updates: keep its bootstrap in step with this engine's fixes.
+    cmp -s /opt/agy-hybrid/tools/agy_hybrid.py "$AGY_CURRENT/bin/agy_hybrid.py" ||
+      cp -f /opt/agy-hybrid/tools/agy_hybrid.py "$AGY_CURRENT/bin/agy_hybrid.py" ||
+      log "Antigravity (Gemini): could not refresh the hybrid bootstrap."
     export OPENBOT_ANTIGRAVITY_PATH="$AGY_CURRENT/bin/agy_acp_server"
     log "Antigravity (Gemini): hybrid runtime $agy_version at $OPENBOT_ANTIGRAVITY_PATH."
   else
@@ -374,15 +379,15 @@ if [ ! -s "$state/keyring-password" ]; then
 fi
 printf login >"$keyrings/default"
 if [ "$PASSWORD_STORE" = gnome-libsecret ]; then
-  unlocked=$(gnome-keyring-daemon --unlock --components=secrets <"$state/keyring-password" 2>>"$LOG") ||
-    die 14 "gnome-keyring-daemon --unlock failed."
-  eval "$unlocked"
-  started=$(gnome-keyring-daemon --start --components=secrets 2>>"$LOG") ||
-    die 14 "gnome-keyring-daemon --start failed."
-  eval "$started"
+  GNOME_KEYRING_CONTROL=$(mktemp -d "$XDG_RUNTIME_DIR/keyring.XXXXXX") ||
+    die 14 "Cannot make the private keyring directory."
   export GNOME_KEYRING_CONTROL
+  gnome-keyring-daemon --foreground --unlock --components=secrets \
+    --control-directory="$GNOME_KEYRING_CONTROL" <"$state/keyring-password" >>"$LOG" 2>&1 &
+  KEYRING_PID=$!
   ok=0
   for _ in $(seq 1 50); do
+    kill -0 "$KEYRING_PID" 2>/dev/null || die 14 "The keyring process stopped before it was ready."
     if dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
       org.freedesktop.DBus.Properties.Get string:org.freedesktop.Secret.Service string:Collections >/dev/null 2>&1; then
       ok=1
