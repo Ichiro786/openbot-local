@@ -147,3 +147,21 @@ The saved baseline run42888189190 completed. It recorded80 opens in ColorOS ON. 
 - [ ] Repair the test driver timeout/report path. Reuse the baseline APK when only the host-side driver changes. Run the missing old-code cases before their fixes. Run the same driver against the updated candidate.
 - [ ] Apply the original four chat fixes only with cause and old/new evidence. Keep phone-only limits explicit. Use narrow checks and enabled commit hooks.
 - [ ] Build the signed arm64 APK through android-local with the exact successful engine artifact. Report source commits, run links, artifact and device proof limits. No PR, main change, tag, release or engine-latest change.
+
+### Task 8: Repair the existing shared-contract skew
+
+The first Node check found119 diagnostic lines. The new engine E2E script had no diagnostic. The existing contracts match the newer mobile import, but the desktop core is older. Account, Link, Live Voice, WhatsApp, palettes, provider and attachment owners are absent or incomplete. This is a required check fault before this task's source edits.
+
+- Import the real owner groups from the same upstream pin. Include their assembly, preload decoders and preview consumers. Keep the fork's mobile features and engine patches.
+- Review the direct desktop diff. Do not use the mobile import base for desktop merges. Do not invent empty endpoint handlers or bypass types.
+- Update the required shared workspaces together. Preserve the local contract additions and all frozen protocol meanings. Do not add new unit tests outside the protected areas.
+- Keep native dependency versions aligned. Keep fork blur and ColorOS resources, identity and disabled upstream OTA.
+- Run the Node check again only after these sources are coherent. Check each project alone. Keep required hooks enabled.
+
+### Resume status
+
+Engine preparation commit:82aea4c4. The required hook passed. Ten payload staging E2E cases pass. All five source patches apply to the exact source pin. Runtime engine checks remain pending CI. GitHub rejected the normal push because the login lacks workflow scope. The user was asked to add that scope. No remote ref changed.
+
+### Stable source update — 2026-11-12
+
+The latest stable release is nowv0.68.0 at64c7f653d4cf516b5c019e85b5f73ef0cc94b4dc. Mobile stays1.4.9. The0.67→0.68delta changes four mobile source files. Keep the fork behavior in those merges. Align their shared/core consumers from the same pin. The database schema and history stay60. Rebase the capability-list and ACP-session patch overlaps by hand. Keep required upgrade checks enabled for the new version. The old engine CI failed before the build because its host package mirror did not resolve. No runtime evidence came from that run.

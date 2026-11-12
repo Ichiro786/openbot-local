@@ -47,9 +47,7 @@ done
 
 # --ignore-scripts: the postinstall downloads Electron and git hooks, which a bundle build does not need.
 (cd "$WORK/src" && ELECTRON_SKIP_BINARY_DOWNLOAD=1 "$BUN" install --frozen-lockfile --ignore-scripts)
-if [ "$VERSION" = "0.67.1" ]; then
-  bash "$SCRIPT_DIR/check-upgrade.sh" "$WORK/src"
-fi
+bash "$SCRIPT_DIR/check-upgrade.sh" "$WORK/src"
 (cd "$WORK/src" && "$BUN" x electron-vite build)
 [ -f "$WORK/src/out/main/index.js" ] || { echo "::error::electron-vite produced no out/main/index.js" >&2; exit 1; }
 
