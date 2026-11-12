@@ -947,11 +947,6 @@ header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (
   home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
   wait_for "E2E LIST OPEN" 10 "$1-1" >/dev/null || { log "  header shot: list did not open"; home; return; }
   sleep 1.5; adb shell input swipe 540 900 540 1250 400; sleep 1.5; shot "header-$1"
-  python3 - "$OUT/header-$1.png" "$OUT/header-$1-top.png" <<'PYH' || true
-import sys
-from PIL import Image
-im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.argv[2])
-PYH
   adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
 }
 if [ -f .github/e2e/quick113 ]; then
@@ -959,7 +954,13 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== real chat layout baseline (20 cycles per case and toggle state)"
   home
-  python3 .github/e2e/mobile-chat-layout-e2e.py --out "$OUT/chat-layout" --cycles 20 || FAIL=1
+  layout_status=0
+  python3 .github/e2e/mobile-chat-layout-e2e.py --out "$OUT/chat-layout" --cycles 20 || layout_status=$?
+  if [ "$layout_status" -eq 2 ]; then
+    log "Stop: a host command timed out. Remote cleanup is unverified."
+    exit "$layout_status"
+  fi
+  [ "$layout_status" -eq 0 ] || FAIL=1
   home
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q

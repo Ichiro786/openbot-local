@@ -29,14 +29,65 @@ class Driver:
         self.events = []
         self.visit = None
         self.back = None
-        self.log = (out / "events.jsonl").open("w", encoding="utf8")
+        self.host_timeout = False
+        self.reader = None
+        self.log = None
+        self.report = {
+            "hardware": "Android emulator; phone behavior is unverified",
+            "completion": "events; deadlines fail only",
+            "results": [],
+            "diagnostics": [],
+            "status": "running",
+        }
+        self.save_report()
+
+    def save_report(self):
+        temporary = self.out / "report.json.tmp"
+        temporary.write_text(json.dumps(self.report, indent=2) + "\n", encoding="utf8")
+        temporary.replace(self.out / "report.json")
+
+    def diagnostic(self, operation, action, result=None):
+        try:
+            return action()
+        except Exception as error:
+            if isinstance(error, subprocess.TimeoutExpired):
+                self.host_timeout = True
+            target = self.report if result is None else result
+            target.setdefault("diagnostics", []).append({"operation": operation, "reason": str(error)})
+            if result is not None and result.get("status") == "pass":
+                result.update(status="harness-error", reason=operation + ": " + str(error))
+            return None
+
+    def start(self):
+        self.log = (self.out / "events.jsonl").open("w", encoding="utf8")
         self.reader = subprocess.Popen(
             ["adb", "logcat", "-v", "raw", "-s", "ReactNativeJS:I", "*:S"],
             stdout=subprocess.PIPE, text=True, encoding="utf8", errors="replace")
         threading.Thread(target=self.read_events, daemon=True).start()
 
+    def stop_process(self, process):
+        # Only signal the local child that this driver started.
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    def close(self):
+        if self.reader is not None:
+            self.diagnostic("stop logcat", lambda: self.stop_process(self.reader))
+        if self.log is not None:
+            self.diagnostic("close event log", self.log.close)
+
     def adb(self, *args, binary=False):
-        return subprocess.check_output(["adb", *args], timeout=25, text=not binary)
+        try:
+            return subprocess.check_output(["adb", *args], timeout=25, text=not binary)
+        except subprocess.TimeoutExpired:
+            # The remote operation can still run. Do not start another dump or recovery command.
+            self.host_timeout = True
+            raise
 
     def read_events(self):
         for line in self.reader.stdout:
@@ -160,7 +211,12 @@ class Driver:
                 raise BehaviorFailure("Back did not return to the controls") from None
             raise
 
-    def expect_following(self, label, fence=0, signal=None):
+    def behavior_failure(self, result, reason):
+        self.behavior_failures.append(reason)
+        result.update(status="behavior-failure", reason="; ".join(self.behavior_failures))
+        self.save_report()
+
+    def expect_following(self, result, label, fence=0, signal=None):
         def after_action():
             if signal is None:
                 return self.following(fence)
@@ -168,19 +224,21 @@ class Driver:
             return signal_index is not None and self.following(fence)
         try:
             self.wait(after_action, label, behavior=True)
+            return True
         except BehaviorFailure as error:
-            self.behavior_failures.append(str(error))
+            self.behavior_failure(result, str(error))
         except WaitDeadline:
             if not self.latest("motion") or not self.latest("view") or not self.find(editor=True):
                 raise
             fresh = self.events[fence:]
             proof = any(event["event"] in ("native-end", "native-inset") for event in fresh)
             if not proof:
-                self.behavior_failures.append(label + ": unverified; no fresh native proof (effective inset may be unchanged)")
+                self.behavior_failure(result, label + ": unverified; no fresh native proof (effective inset may be unchanged)")
             else:
-                self.behavior_failures.append(label + ": deadline with a usable composer and live telemetry")
+                self.behavior_failure(result, label + ": deadline with a usable composer and live telemetry")
+        return False
 
-    def cycle(self, case, name, visual):
+    def cycle(self, case, name, visual, result):
         self.behavior_failures = []
         if case in ("fast", "back-opening", "mid-animation"):
             # These are input schedules, not layout-settled conditions. All are sent in
@@ -205,14 +263,15 @@ class Driver:
                     raise AssertionError("Reveal deadline: no usable composer; app or harness is unavailable") from None
                 if not self.latest("motion") or not self.latest("view"):
                     raise AssertionError("Reveal instrumentation is absent despite a usable composer") from None
-                self.behavior_failures.append("Reveal deadline with a usable composer")
+                self.behavior_failure(result, "Reveal deadline with a usable composer")
             first = next((e for e in self.events if e["event"] == "motion" and e.get("revealed")), {})
+            if first and not first.get("latestVisible"):
+                self.behavior_failure(result, "First visible rows do not include the latest row")
             if visual:
                 self.shot(name + ("-first" if first else "-unrevealed"))
-            self.back = self.node("Back")
-            if first and not first.get("latestVisible"):
-                self.behavior_failures.append("First visible rows do not include the latest row")
-            self.expect_following("latest measured row and native end")
+            following = self.expect_following(result, "latest measured row and native end")
+            if following and self.back is None:
+                self.back = self.node("Back")
             if case == "tall":
                 self.wait(lambda: bool(self.find("e2e-layout.txt")), "synthetic attachment loaded")
                 editor = self.node(editor=True)
@@ -220,7 +279,7 @@ class Driver:
                 self.tap(editor)
                 shown = lambda event: event["event"] == "keyboard" and event.get("phase") == "onEnd" and event.get("height", 0) > 0
                 self.wait(lambda: any(shown(event) for event in self.events[previous:]), "keyboard show")
-                self.expect_following("tall composer follows end", previous, shown)
+                self.expect_following(result, "tall composer follows end", previous, shown)
                 if visual:
                     self.shot(name + "-keyboard")
                 previous = self.fence()
@@ -230,12 +289,12 @@ class Driver:
                 shrank = lambda event: event["event"] == "composer" and event.get("height", old_height) < old_height
                 self.adb("shell", "input keycombination 113 29; input keyevent 67")
                 self.wait(lambda: any(shrank(event) for event in self.events[previous:]), "composer shrink")
-                self.expect_following("short composer follows end", previous, shrank)
+                self.expect_following(result, "short composer follows end", previous, shrank)
                 previous = self.fence()
                 self.adb("shell", "input", "keyevent", "111")
                 self.wait(lambda: any(e["event"] == "keyboard" and e.get("phase") == "onEnd"
                                      and e.get("height") == 0 for e in self.events[previous:]), "keyboard hide")
-                self.expect_following("keyboard hidden follows end", previous,
+                self.expect_following(result, "keyboard hidden follows end", previous,
                                       lambda event: event["event"] == "keyboard" and event.get("phase") == "onEnd" and event.get("height") == 0)
                 self.tap(self.node("e2e-layout.txt"))
                 self.tap(self.node("Remove"))
@@ -246,63 +305,106 @@ class Driver:
         if self.behavior_failures:
             raise BehaviorFailure("; ".join(self.behavior_failures))
 
+    def stop_incomplete(self, reason):
+        self.report["incompleteReason"] = reason
+        self.save_report()
+        print("Stop: " + reason, flush=True)
+        return 1
+
+    def recover(self):
+        for _ in range(3):
+            if self.find("E2E LAYOUT READY"):
+                return True
+            self.adb("shell", "input", "keyevent", "4")
+        return self.find("E2E LAYOUT READY") is not None
+
     def run(self, cycles, cases):
-        results = []
+        results = self.report["results"]
+        self.report["requested"] = {"cycles": cycles, "cases": cases, "colorOS": ["ON", "OFF"]}
+        self.save_report()
         started = time.monotonic()
+        previous_failure = None
+        consecutive_failures = 0
         self.tap(self.node("E2E Layout"))
         for state in ("ON", "OFF"):
             if self.find("E2E LAYOUT READY colorOS=" + state) is None:
                 self.tap(self.node("Layout toggle"))
                 self.node("E2E LAYOUT READY colorOS=" + state)
             self.color_os = state == "ON"
+            self.back = None
             for case in cases:
-                harness_errors = {}
                 for index in range(cycles):
                     if time.monotonic() - started >= 3300:
-                        report = {"results": results, "incompleteReason": "55 minute driver budget reached; remaining cycles are unverified"}
-                        (self.out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-                        return 1
+                        return self.stop_incomplete("55 minute driver budget reached; remaining cycles are unverified")
                     name = f"{state}-{case}-{index + 1:02}"
-                    result = {"case": case, "colorOS": state, "cycle": index + 1}
+                    result = {"case": case, "colorOS": state, "cycle": index + 1, "status": "running"}
+                    results.append(result)
+                    self.save_report()
                     recording = None
                     recording_pid = None
-                    if index == 0:
-                        recording = subprocess.Popen(["adb", "shell", "echo $$; exec screenrecord --time-limit 30 /sdcard/e2e-layout.mp4"],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-                        recording_pid = recording.stdout.readline().strip()
+                    recording_path = "/sdcard/e2e-layout-" + name + ".mp4"
                     try:
-                        self.cycle(case, name, index == 0)
+                        if index == 0:
+                            recording = subprocess.Popen(
+                                ["adb", "shell", "echo $$; exec screenrecord --time-limit 30 " + recording_path],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                            process_id = queue.Queue()
+                            threading.Thread(target=lambda: process_id.put(recording.stdout.readline()), daemon=True).start()
+                            try:
+                                recording_pid = process_id.get(timeout=5).strip()
+                            except queue.Empty:
+                                self.host_timeout = True
+                                raise WaitDeadline("screenrecord process ID") from None
+                            if not recording_pid.isdigit():
+                                raise AssertionError("screenrecord process ID is absent")
+                        self.cycle(case, name, index == 0, result)
                         result["status"] = "pass"
-                    except (AssertionError, subprocess.SubprocessError, ET.ParseError) as error:
-                        kind = "behavior-failure" if isinstance(error, BehaviorFailure) else "harness-error"
-                        result.update(status=kind, reason=str(error))
-                        if kind == "harness-error":
-                            harness_errors[str(error)] = harness_errors.get(str(error), 0) + 1
-                        self.shot(name + "-failure")
-                        # Keep the original failure and return to the controls for the next cycle.
-                        for _ in range(3):
-                            if self.find("E2E LAYOUT READY"):
-                                break
-                            self.adb("shell", "input", "keyevent", "4")
-                    if recording:
-                        if recording_pid.isdigit() and recording.poll() is None:
-                            self.adb("shell", "kill", "-2", recording_pid)
-                        recording.wait(timeout=5)
-                        self.adb("pull", "/sdcard/e2e-layout.mp4", str(self.out / (name + ".mp4")))
-                    result["events"] = len(self.events)
-                    result["visit"] = self.visit
-                    result["firstVisible"] = next((e for e in self.events if e["event"] == "motion" and e.get("revealed")), None)
-                    result["lastState"] = next((e for e in reversed(self.events) if "tailMeasured" in e), None)
-                    result["durationZeroKeyboardEvents"] = sum(e["event"] == "keyboard" and e.get("duration") == 0 for e in self.events)
-                    result["scrolledUpObserved"] = any(e.get("scrolledUp") is True for e in self.events)
-                    results.append(result)
-                    report = {"hardware": "Android emulator; phone behavior is unverified",
-                              "completion": "events; deadlines fail only", "results": results}
-                    (self.out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-                    print(json.dumps(result), flush=True)
-                    if any(count >= 2 for count in harness_errors.values()):
-                        print(f"Stop {state}/{case}: the same harness error occurred twice", flush=True)
-                        break
+                    except (AssertionError, subprocess.SubprocessError, ET.ParseError, OSError) as error:
+                        if result["status"] != "behavior-failure":
+                            kind = "behavior-failure" if isinstance(error, BehaviorFailure) else "harness-error"
+                            result.update(status=kind, reason=str(error))
+                        elif not isinstance(error, BehaviorFailure) or str(error) != result["reason"]:
+                            result.setdefault("diagnostics", []).append({"operation": "cycle continuation", "reason": str(error)})
+                    finally:
+                        if result["status"] == "running":
+                            result.update(status="interrupted", reason="The cycle stopped before a result")
+                        self.diagnostic("drain cycle events", self.drain, result)
+                        result["events"] = len(self.events)
+                        result["visit"] = self.visit
+                        result["firstVisible"] = next((e for e in self.events if e["event"] == "motion" and e.get("revealed")), None)
+                        result["lastState"] = next((e for e in reversed(self.events) if "tailMeasured" in e), None)
+                        result["durationZeroKeyboardEvents"] = sum(e["event"] == "keyboard" and e.get("duration") == 0 for e in self.events)
+                        result["scrolledUpObserved"] = any(e.get("scrolledUp") is True for e in self.events)
+                        # Save the first error before a screenshot or recorder cleanup can fail.
+                        self.save_report()
+                        if result["status"] != "pass" and not self.host_timeout:
+                            self.diagnostic("failure screenshot", lambda: self.shot(name + "-failure"), result)
+                        if recording is not None:
+                            if recording_pid and recording_pid.isdigit() and recording.poll() is None and not self.host_timeout:
+                                self.diagnostic("stop owned screenrecord", lambda: self.adb("shell", "kill", "-2", recording_pid), result)
+                            self.diagnostic("wait for screenrecord", lambda: recording.wait(timeout=5), result)
+                            self.diagnostic("stop screenrecord adb", lambda: self.stop_process(recording), result)
+                            if not self.host_timeout and recording_pid and recording_pid.isdigit():
+                                self.diagnostic("pull screenrecord", lambda: self.adb("pull", recording_path, str(self.out / (name + ".mp4"))), result)
+                        self.save_report()
+                        print(json.dumps(result), flush=True)
+                    if self.host_timeout:
+                        return self.stop_incomplete("A host command timed out; remote operation cleanup is unverified")
+                    if result["status"] != "pass":
+                        failure = (result["status"], result.get("reason"))
+                        consecutive_failures = consecutive_failures + 1 if failure == previous_failure else 1
+                        previous_failure = failure
+                        if consecutive_failures >= 2:
+                            return self.stop_incomplete("The same failure occurred twice in a row; remaining cycles are unverified")
+                        recovered = self.diagnostic("return to layout controls", self.recover, result)
+                        self.save_report()
+                        if not recovered:
+                            return self.stop_incomplete("Recovery did not confirm the controls; remaining cycles are unverified")
+                    else:
+                        previous_failure = None
+                        consecutive_failures = 0
+        self.report["completed"] = True
+        self.save_report()
         return 1 if any(r["status"] != "pass" for r in results) else 0
 
 
@@ -317,12 +419,22 @@ def main():
     if args.cycles < 20:
         parser.error("At least 20 cycles are required")
     driver = Driver(args.out, args.deadline)
+    exit_code = 1
     try:
-        return driver.run(args.cycles, args.cases)
+        driver.start()
+        exit_code = driver.run(args.cycles, args.cases)
+    except BaseException as error:
+        driver.report["incompleteReason"] = "Driver setup or execution stopped: " + type(error).__name__ + ": " + str(error)
+        driver.report["diagnostics"].append({"operation": "driver", "reason": repr(error)})
     finally:
-        driver.reader.terminate()
-        driver.reader.wait(timeout=5)
-        driver.log.close()
+        try:
+            driver.close()
+        finally:
+            if driver.report["diagnostics"] or driver.report.get("incompleteReason"):
+                exit_code = 1
+            driver.report["status"] = "complete" if exit_code == 0 else "failed"
+            driver.save_report()
+    return 2 if driver.host_timeout else exit_code
 
 
 if __name__ == "__main__":
