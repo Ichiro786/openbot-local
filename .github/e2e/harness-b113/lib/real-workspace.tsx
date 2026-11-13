@@ -36,6 +36,8 @@ export const REAL_AGENT = {
 export const LONG_AGENT = { ...REAL_AGENT, id: "e2e-long", name: "LORE", avatarSeed: "e2e-long-seed" };
 // Build #102: a short history that also catches up on open (Syed: every agent opened at older messages).
 export const SHORT_AGENT = { ...REAL_AGENT, id: "e2e-short", name: "SHORTY", avatarSeed: "e2e-short-seed" };
+// Build 15: a reply with `openbot-ui` blocks (generative UI v1), for a screenshot of the native rendering.
+export const UI_AGENT = { ...REAL_AGENT, id: "e2e-ui", name: "UIBOT", avatarSeed: "e2e-ui-seed" };
 const REAL_MESSAGES = Array.from({ length: 28 }, (_, i) => {
   const user = i % 2 === 0;
   const text = user
@@ -124,6 +126,23 @@ const SHORT_MESSAGES = [
   createdAt: new Date(Date.UTC(2026, 10, 9, 10, i)).toISOString(),
   status: "completed",
 }));
+const UI_REPLY = [
+  "Here is how the three plans compare:",
+  "```openbot-ui",
+  '{"type":"stats","items":[{"label":"Cheapest","value":"Basic","delta":"₹199/mo","tone":"positive"},{"label":"Most storage","value":"Pro","delta":"2 TB"}]}',
+  '{"type":"chart","kind":"bar","title":"Price per month (₹)","labels":["Basic","Plus","Pro"],"series":[{"name":"Price","values":[199,449,899]}]}',
+  '{"type":"actions","style":"chips","items":[{"id":"plan","label":"Basic","value":"basic"},{"id":"plan","label":"Plus","value":"plus"},{"id":"plan","label":"Pro","value":"pro","style":"primary"}]}',
+  "```",
+  "Pick one and I'll set it up. GENUI-END",
+].join("\n");
+const uiConversation = {
+  ...base,
+  agentId: "e2e-ui",
+  messages: [
+    { id: "e2e-ui-0", turnId: "e2e-ui-turn-0", author: "user", text: "Compare the plans for me", createdAt: new Date(Date.UTC(2026, 10, 10, 10, 0)).toISOString(), status: "completed" },
+    { id: "e2e-ui-1", turnId: "e2e-ui-turn-0", author: "assistant", text: UI_REPLY, createdAt: new Date(Date.UTC(2026, 10, 10, 10, 1)).toISOString(), status: "completed" },
+  ],
+};
 const shortKept = { ...base, agentId: "e2e-short", messages: SHORT_MESSAGES.slice(0, 2) };
 const shortLatest = { ...base, agentId: "e2e-short", revision: 2, messages: SHORT_MESSAGES };
 let shortNow = shortKept;
@@ -140,7 +159,8 @@ const longListeners = new Set<() => void>();
   shortUpToDate = false;
 };
 const conversationStore = {
-  get: (agentId?: string) => (agentId === "e2e-long" ? longNow : agentId === "e2e-short" ? shortNow : conversation),
+  get: (agentId?: string) =>
+    agentId === "e2e-long" ? longNow : agentId === "e2e-short" ? shortNow : agentId === "e2e-ui" ? uiConversation : conversation,
   // Build #102 (invalid #101 test: the stand-in server had no state "online", so the chat never ran its
   // own catch-up): the server is online now, and the chat itself reads the latest page (loadConversation,
   // 700 ms) while it shows the kept one (catchingUp), as on the phone.
@@ -172,12 +192,13 @@ const loadShort = () =>
       resolve(shortLatest);
     }, 700),
   );
-const load = (agentId?: string) => (agentId === "e2e-long" ? loadLong() : agentId === "e2e-short" ? loadShort() : Promise.resolve(conversation));
+const load = (agentId?: string) =>
+  agentId === "e2e-long" ? loadLong() : agentId === "e2e-short" ? loadShort() : Promise.resolve(agentId === "e2e-ui" ? uiConversation : conversation);
 const server = { id: "e2e-server", name: "E2E", state: "online", status: "online", online: true, connected: true, initialConnectionPending: false };
 // Every live map the chat reads: the app's own empty store, so maps upstream adds (1.4.9: firstUnreadMessageIds, threadWaitsByServer) exist.
 const live = new LiveWorkspaceStore();
 const known: Record<string, unknown> = {
-  agents: [REAL_AGENT, LONG_AGENT, SHORT_AGENT],
+  agents: [REAL_AGENT, LONG_AGENT, SHORT_AGENT, UI_AGENT],
   servers: [server],
   activeServer: server,
   liveState: live,

@@ -943,6 +943,19 @@ open_latest() {
   done
   log "  open at latest $mark: $(grep -c "^openend $mark .* ok$" "$OUT/open-latest.txt") ok of $((n * 2)) checks"
 }
+genui_shot() { # build 15: an agent reply with openbot-ui blocks (stats, bar chart, chips) drawn natively
+  local xy
+  log "== genui: E2E UI chat"
+  home; xy=$(wait_for "E2E UI chat" 6 "gu-row") || { adb shell input swipe 540 1600 540 900 300; sleep 1; xy=$(wait_for "E2E UI chat" 6 "gu-row"); } || { log "  genui: no E2E UI chat row (not checked)"; return 0; }
+  adb shell input tap $xy; sleep 3.5; check "genui-open" || { ensure_running genui; home; return 0; }
+  dump genui; shot genui
+  if grep -q "This interface could not be shown" "$OUT/genui.xml"; then log "FAIL genui: block fell back to code"; FAIL=1
+  elif grep -q "Cheapest" "$OUT/genui.xml" && grep -q "GENUI-END" "$OUT/genui.xml"; then log "ok: genui block rendered (stats text + summary line on screen)"
+  else log "note genui: stats text not in the dump (see genui.png)"; fi
+  echo "genui chips: $(grep -c 'text="Basic"\|text="Plus"\|text="Pro"' "$OUT/genui.xml")" | tee -a "$OUT/steps.txt"
+  adb shell input swipe 540 900 540 1500 300; sleep 1.2; shot genui-up
+  [ -n "${BACKXY:-}" ] && real_tap $BACKXY; sleep 2; on_home gu-h || home
+}
 header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (real ChatHeader + list), dark
   log "== header frost shot ($1)"
   home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
@@ -960,7 +973,7 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
-  if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
+  if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; genui_shot; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   # Build 14: send after a long reply, ColorOS ON and OFF (jank + scroll direction changes).
   if [ -f .github/e2e/sendlane ]; then list_scn q-send ON; list_scn q-send2 ON; fi

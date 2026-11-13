@@ -409,6 +409,9 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
         </Pressable>
         <Pressable ref={__shortRow} accessibilityRole="button" accessibilityLabel="E2E Short chat" onPress={__openShort} style={{ marginHorizontal: 12, marginTop: 8, height: 56, borderRadius: 12, backgroundColor: "#3b7a5b", justifyContent: "center", paddingHorizontal: 16 }}>
           <Text style={{ color: "#fff", fontSize: 17 }}>E2E Short chat</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="E2E UI chat" onPress={() => router.push({ pathname: "/e2e-real", params: { agentId: "e2e-ui" } })} style={{ marginHorizontal: 12, marginTop: 8, height: 40, borderRadius: 12, backgroundColor: "#7a3b5b", justifyContent: "center", paddingHorizontal: 16 }}>
+          <Text style={{ color: "#fff", fontSize: 15 }}>E2E UI chat</Text>
         </Pressable>`);
   const toggle = "<Text style={{ color: \"#fff\" }}>Toggle ColorOS</Text>\n        </Pressable>";
   f = must(f, toggle, `${toggle}\n        <Pressable accessibilityRole="button" accessibilityLabel="E2E Picker" onPress={() => router.push("/e2e-picker")} style={{ marginHorizontal: 24, marginTop: 8, padding: 10, backgroundColor: "#7a5b3b", borderRadius: 12 }}><Text style={{ color: "#fff" }}>Picker</Text></Pressable>`);
