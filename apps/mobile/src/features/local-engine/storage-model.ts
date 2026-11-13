@@ -45,20 +45,6 @@ export function storageSegments(scan: StorageScan): StorageSegment[] {
   });
 }
 
-/** Each segment's [start, end) on 0..1, with a gap between neighbours (none for a single segment). */
-export function segmentArcs(segments: readonly StorageSegment[], gap: number): { start: number; end: number }[] {
-  if (segments.length === 0) return [];
-  if (segments.length === 1) return [{ start: 0, end: 1 }];
-  const usable = Math.max(0, 1 - gap * segments.length);
-  let at = 0;
-  return segments.map((segment) => {
-    const length = segment.share * usable;
-    const arc = { start: at + gap / 2, end: at + gap / 2 + length };
-    at += length + gap;
-    return arc;
-  });
-}
-
 export type FindingKind =
   | "previousEngine"
   | "interruptedInstall"

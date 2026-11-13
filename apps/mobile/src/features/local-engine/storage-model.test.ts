@@ -5,7 +5,6 @@ import {
   CACHE_FINDING_BYTES,
   LOG_FINDING_BYTES,
   reclaimableBytes,
-  segmentArcs,
   storageFindings,
   storageSegments,
 } from "./storage-model";
@@ -48,26 +47,6 @@ describe("storageSegments", () => {
 
   it("is empty for an empty scan", () => {
     expect(storageSegments(scan())).toEqual([]);
-  });
-});
-
-describe("segmentArcs", () => {
-  it("fills the ring with one segment", () => {
-    expect(segmentArcs([{ category: "other", bytes: 1, share: 1 }], 0.01)).toEqual([{ start: 0, end: 1 }]);
-  });
-
-  it("leaves equal gaps and never passes 1", () => {
-    const arcs = segmentArcs(
-      [
-        { category: "engineSystem", bytes: 1, share: 0.5 },
-        { category: "workspaces", bytes: 1, share: 0.5 },
-      ],
-      0.02,
-    );
-    expect(arcs[0]?.start).toBeCloseTo(0.01);
-    expect(arcs[0]?.end).toBeCloseTo(0.49);
-    expect(arcs[1]?.start).toBeCloseTo(0.51);
-    expect(arcs[1]?.end).toBeCloseTo(0.99);
   });
 });
 

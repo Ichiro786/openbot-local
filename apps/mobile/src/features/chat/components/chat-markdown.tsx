@@ -61,6 +61,8 @@ import {
   StreamingTailText,
   StreamRevealProvider,
 } from "@/features/chat/components/streaming-tail-text";
+import { OpenbotUiBlock } from "@/features/chat/openbot-ui/openbot-ui-block";
+import { fenceClosed } from "@/features/chat/openbot-ui/openbot-ui-schema";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useFontScale } from "@/shared/lib/font-scale";
 import { graphemes } from "@/shared/lib/graphemes";
@@ -1164,6 +1166,27 @@ const MarkdownBlock = memo(function MarkdownBlock({
           }
         />
       </StreamingBlock>
+    );
+  }
+  if (tokenIs(token, "code") && token.lang?.trim().toLowerCase() === "openbot-ui") {
+    // OpenBot Local: an agent's declarative UI (docs/openbot-ui.md), drawn natively.
+    return (
+      <OpenbotUiBlock
+        text={token.text}
+        complete={presentation.finished || !presentation.streaming || fenceClosed(token.raw)}
+        renderBody={(body) => (
+          <ChatMarkdown body={body} color={presentation.style.color} finished selectable={presentation.selectable} />
+        )}
+        fallback={
+          <ChatCodeBlock
+            selectable={presentation.selectable}
+            text={token.text}
+            language="json"
+            finished={presentation.finished}
+            tone={presentation.tone}
+          />
+        }
+      />
     );
   }
   if (tokenIs(token, "code")) {

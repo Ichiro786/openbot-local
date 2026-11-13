@@ -44,6 +44,7 @@ import {
   presentChatMessages,
 } from "@/features/chat/model/chat-messages";
 import { finishedTurnSummaries, type TurnStepsSummary } from "@/features/chat/model/turn-thinking";
+import { OpenbotUiActionsContext } from "@/features/chat/openbot-ui/openbot-ui-block";
 import { liveVoiceWebRtc } from "@/features/voice/model/live-voice-webrtc";
 import { replyVoiceReady } from "@/features/voice/model/reply-voice";
 import { useVoiceSettings } from "@/features/voice/model/voice-settings";
@@ -1041,6 +1042,8 @@ export function ChatView({
   const latestSend = useRef(sendMessage);
   latestSend.current = sendMessage;
   const send = useCallback((value: string) => latestSend.current(value), []);
+  // OpenBot Local: an `openbot-ui` action or form in a reply sends a normal message to this chat.
+  const uiAction = canSend && !readOnly ? send : undefined;
   const cancelReply = useCallback(() => setReplyTarget(null), []);
   const respondToApproval = useCallback(
     (approval: PendingApproval, decision: ApprovalDecision) =>
@@ -1132,77 +1135,79 @@ export function ChatView({
               frostTarget={frostChat && colorOSMotion ? frostTarget : undefined}
             />
             <ChatFrostTarget enabled={frostChat} target={frostTarget}>
-              <ChatMessageList
-                agents={serverAgents}
-                rowsShown={rowsShown}
-                target={target}
-                motion={motion}
-                sending={Boolean(sendingMessage)}
-                awaitingTurn={awaitingTurn}
-                keyboardOffset={keyboardOffset}
-                canSend={serverOnline && canSend}
-                online={serverOnline}
-                activity={activity}
-                activities={activities}
-                historyState={
-                  ready
-                    ? "ready"
-                    : server?.initialConnectionPending
-                      ? "connecting"
-                      : !serverOnline
-                        ? "waiting"
-                        : historyLoadFailed
-                          ? "error"
-                          : "loading"
-                }
-                catchingUp={catchingUp}
-                appActive={appActive}
-                activeTurnId={activeTurnId}
-                turnSummaries={turnSummaries}
-                onOpenTurn={thinkingAgentId ? openTurn : undefined}
-                // The form is a new object on each render. Without a question the list does not read it,
-                // so it is left out and does not draw the list again.
-                questionForm={questionForm?.messageId ? questionForm : undefined}
-                onSelectQuestion={readOnly ? undefined : onSelectQuestion}
-                activityAccessory={activityAccessory}
-                approvals={readOnly ? undefined : approvals}
-                browserRequests={chatBrowserRequests}
-                serverName={server?.name ?? ""}
-                onRespondApproval={respondToApproval}
-                foreground={foreground}
-                messages={messages}
-                messageAliases={messageAliases}
-                referenceMessages={referenceMessages}
-                hasOlder={hasOlder}
-                olderLoading={olderLoading}
-                olderError={olderError}
-                onLoadOlder={loadOlder}
-                onReply={readOnly ? undefined : replyToMessage}
-                onBranch={onBranch && !readOnly ? branchMessage : undefined}
-                branchPoints={branchPoints}
-                onReact={canReact && !readOnly ? react : undefined}
-                onDeleteMessage={deleteMessage && !readOnly ? deleteListMessage : undefined}
-                deletesAnyMessage={deletesAnyMessage}
-                onMarkUnread={markUnread ? markListMessageUnread : undefined}
-                markUnreadMessageIds={markUnreadMessageIds}
-                unreadLineMessageIds={unreadLineMessageIds}
-                sendChannels={sendToChannel?.channels}
-                onSendToChannel={sendToChannel && !readOnly ? sendMessageToChannel : undefined}
-                selectingMessageId={selection?.message.id ?? null}
-                onSelectText={selectText}
-                onSelectionChange={changeSelection}
-                onDismissSelection={dismissSelection}
-                muted={muted}
-                showStarter={
-                  showStarter && serverOnline && canSend && ready && !activity && projectedMessages.length === 0
-                }
-                topInset={insets.top}
-                onRetryHistory={fetchHistory}
-                focusMessageId={focusMessageId}
-                onFocusPlaced={onFocusPlaced}
-                upload={listUpload}
-                outboxStatuses={outboxStatuses}
-              />
+              <OpenbotUiActionsContext value={uiAction}>
+                <ChatMessageList
+                  agents={serverAgents}
+                  rowsShown={rowsShown}
+                  target={target}
+                  motion={motion}
+                  sending={Boolean(sendingMessage)}
+                  awaitingTurn={awaitingTurn}
+                  keyboardOffset={keyboardOffset}
+                  canSend={serverOnline && canSend}
+                  online={serverOnline}
+                  activity={activity}
+                  activities={activities}
+                  historyState={
+                    ready
+                      ? "ready"
+                      : server?.initialConnectionPending
+                        ? "connecting"
+                        : !serverOnline
+                          ? "waiting"
+                          : historyLoadFailed
+                            ? "error"
+                            : "loading"
+                  }
+                  catchingUp={catchingUp}
+                  appActive={appActive}
+                  activeTurnId={activeTurnId}
+                  turnSummaries={turnSummaries}
+                  onOpenTurn={thinkingAgentId ? openTurn : undefined}
+                  // The form is a new object on each render. Without a question the list does not read it,
+                  // so it is left out and does not draw the list again.
+                  questionForm={questionForm?.messageId ? questionForm : undefined}
+                  onSelectQuestion={readOnly ? undefined : onSelectQuestion}
+                  activityAccessory={activityAccessory}
+                  approvals={readOnly ? undefined : approvals}
+                  browserRequests={chatBrowserRequests}
+                  serverName={server?.name ?? ""}
+                  onRespondApproval={respondToApproval}
+                  foreground={foreground}
+                  messages={messages}
+                  messageAliases={messageAliases}
+                  referenceMessages={referenceMessages}
+                  hasOlder={hasOlder}
+                  olderLoading={olderLoading}
+                  olderError={olderError}
+                  onLoadOlder={loadOlder}
+                  onReply={readOnly ? undefined : replyToMessage}
+                  onBranch={onBranch && !readOnly ? branchMessage : undefined}
+                  branchPoints={branchPoints}
+                  onReact={canReact && !readOnly ? react : undefined}
+                  onDeleteMessage={deleteMessage && !readOnly ? deleteListMessage : undefined}
+                  deletesAnyMessage={deletesAnyMessage}
+                  onMarkUnread={markUnread ? markListMessageUnread : undefined}
+                  markUnreadMessageIds={markUnreadMessageIds}
+                  unreadLineMessageIds={unreadLineMessageIds}
+                  sendChannels={sendToChannel?.channels}
+                  onSendToChannel={sendToChannel && !readOnly ? sendMessageToChannel : undefined}
+                  selectingMessageId={selection?.message.id ?? null}
+                  onSelectText={selectText}
+                  onSelectionChange={changeSelection}
+                  onDismissSelection={dismissSelection}
+                  muted={muted}
+                  showStarter={
+                    showStarter && serverOnline && canSend && ready && !activity && projectedMessages.length === 0
+                  }
+                  topInset={insets.top}
+                  onRetryHistory={fetchHistory}
+                  focusMessageId={focusMessageId}
+                  onFocusPlaced={onFocusPlaced}
+                  upload={listUpload}
+                  outboxStatuses={outboxStatuses}
+                />
+              </OpenbotUiActionsContext>
               {/* Build #101: placeholder bubbles until the rows show (ColorOS ON only; OFF is as #82), while the
                   history loads or is ready; an error or offline takes it away, and it hides itself. */}
               {colorOSHeaderOn &&

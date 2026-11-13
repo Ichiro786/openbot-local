@@ -503,4 +503,12 @@ export const messages = defineMessages("mobile.chat", {
   "mobile.chat.vaultRequest.skipped": "Not added to Vault",
   "mobile.chat.vaultRequest.gone": "This request is no longer open.",
   "mobile.chat.vaultRequest.notAllowed": "Only the server owner or an admin can add an item to the Vault.",
+  "mobile.chat.ui.loading": "Preparing the interface…",
+  "mobile.chat.ui.invalid": "This interface could not be shown, so here is its code.",
+  "mobile.chat.ui.submit": "Send",
+  "mobile.chat.ui.formSent": "Sent the form",
+  "mobile.chat.ui.required": "Fill in the required fields first.",
+  "mobile.chat.ui.yes": "yes",
+  "mobile.chat.ui.no": "no",
+  "mobile.chat.ui.chosen": "Sent",
 });

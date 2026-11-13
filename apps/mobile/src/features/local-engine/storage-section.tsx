@@ -5,54 +5,23 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  LinearTransition,
-  ReduceMotion,
-  type SharedValue,
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
-import Svg, { Circle, G } from "react-native-svg";
-import { useCSSVariable } from "uniwind";
+import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion } from "react-native-reanimated";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { Button } from "@/shared/components/button";
+import { type DonutArc, DonutChart, donutArcs } from "@/shared/components/donut-chart";
 import { haptics } from "@/shared/lib/haptics";
-import { useReducedMotion } from "@/shared/lib/motion";
 import { useText } from "@/shared/lib/text";
 
-import {
-  type StorageCategory,
-  type StorageCleanable,
-  type StorageScan,
-  storageClean,
-  storageScan,
-} from "../../../modules/openbot-engine";
+import { type StorageCategory, type StorageScan, storageClean, storageScan } from "../../../modules/openbot-engine";
 import {
   androidDataBytes,
   type FindingKind,
   reclaimableBytes,
   STORAGE_ORDER,
   type StorageFinding,
-  segmentArcs,
   storageFindings,
   storageSegments,
 } from "./storage-model";
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-const SIZE = 168;
-const STROKE = 18;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-/** Gap between segments, as a share of the ring. */
-const GAP = 0.006;
-const FILL_MS = 720;
-const MORPH_MS = 420;
-const EASE = Easing.bezier(0.2, 0, 0, 1);
 
 const layout = LinearTransition.duration(220).reduceMotion(ReduceMotion.System);
 const enter = FadeIn.duration(180).reduceMotion(ReduceMotion.System);
@@ -132,119 +101,11 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * One category's arc. Every category always has one (an empty category is a zero-length arc at
- * its place), so a rescan morphs each arc from its old place to its new one, and a cleaned
- * category shrinks away instead of vanishing. `reveal` sweeps the ring in on the first scan.
- */
-function Arc({
-  color,
-  start,
-  end,
-  reveal,
-  reduced,
-}: {
-  color: string;
-  start: number;
-  end: number;
-  reveal: SharedValue<number>;
-  reduced: boolean;
-}) {
-  const from = useSharedValue(start);
-  const to = useSharedValue(end);
-  useEffect(() => {
-    if (reduced) {
-      from.set(start);
-      to.set(end);
-      return;
-    }
-    from.set(withTiming(start, { duration: MORPH_MS, easing: EASE }));
-    to.set(withTiming(end, { duration: MORPH_MS, easing: EASE }));
-  }, [start, end, reduced, from, to]);
-  const props = useAnimatedProps(() => {
-    const shown = reveal.get();
-    const a = Math.min(from.get(), shown);
-    const b = Math.min(to.get(), shown);
-    const length = Math.max(0, b - a) * CIRCUMFERENCE;
-    return {
-      strokeDasharray: [length, CIRCUMFERENCE],
-      strokeDashoffset: -a * CIRCUMFERENCE,
-      strokeOpacity: length > 0.5 ? 1 : 0,
-    };
-  });
-  return (
-    <AnimatedCircle
-      cx={SIZE / 2}
-      cy={SIZE / 2}
-      r={RADIUS}
-      stroke={color}
-      strokeWidth={STROKE}
-      strokeLinecap="butt"
-      fill="none"
-      animatedProps={props}
-    />
+/** Arcs for every category in legend order: an empty one keeps a zero-length arc at its place. */
+function allArcs(scan: StorageScan | null): DonutArc[] {
+  return donutArcs(
+    STORAGE_ORDER.map((category) => ({ key: category, color: COLOR[category], value: scan?.sizes[category] ?? 0 })),
   );
-}
-
-export function StorageDonut({
-  arcs,
-  totalLabel,
-  caption,
-}: {
-  arcs: { category: StorageCategory; start: number; end: number }[];
-  totalLabel: string;
-  caption: string;
-}) {
-  const reduced = useReducedMotion();
-  const track = String(useCSSVariable("--openbot-border-grouped") ?? "#88888833");
-  const reveal = useSharedValue(reduced ? 1 : 0);
-  const hasData = arcs.some((arc) => arc.end > arc.start);
-  useEffect(() => {
-    if (!hasData) return;
-    if (reduced) reveal.set(1);
-    else if (reveal.get() < 1) reveal.set(withTiming(1, { duration: FILL_MS, easing: EASE }));
-  }, [hasData, reduced, reveal]);
-  return (
-    <View style={{ width: SIZE, height: SIZE }} className="items-center justify-center self-center">
-      <Svg width={SIZE} height={SIZE} style={{ position: "absolute" }}>
-        <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke={track} strokeWidth={STROKE} fill="none" />
-        <G rotation={-90} origin={`${SIZE / 2}, ${SIZE / 2}`}>
-          {arcs.map((arc) => (
-            <Arc
-              key={arc.category}
-              color={COLOR[arc.category]}
-              start={arc.start}
-              end={arc.end}
-              reveal={reveal}
-              reduced={reduced}
-            />
-          ))}
-        </G>
-      </Svg>
-      <Typography type="h4" className="text-foreground" numberOfLines={1}>
-        {totalLabel}
-      </Typography>
-      <Typography type="body-xs" className="max-w-28 text-center text-grouped-secondary" numberOfLines={2}>
-        {caption}
-      </Typography>
-    </View>
-  );
-}
-
-/** Arcs for every category: empty ones sit at zero length where they would start. */
-function allArcs(scan: StorageScan | null): { category: StorageCategory; start: number; end: number }[] {
-  const segments = scan ? storageSegments(scan) : [];
-  const arcs = segmentArcs(segments, GAP);
-  const byCategory = new Map(segments.map((segment, index) => [segment.category, arcs[index]]));
-  let at = 0;
-  return STORAGE_ORDER.map((category) => {
-    const arc = byCategory.get(category);
-    if (arc) {
-      at = arc.end;
-      return { category, start: arc.start, end: arc.end };
-    }
-    return { category, start: at, end: at };
-  });
 }
 
 type Confirm = { findings: StorageFinding[] };
@@ -325,7 +186,7 @@ export function StorageSection({ installing }: { installing: boolean }) {
     let failure: string | null = null;
     for (const item of items) {
       try {
-        freed += await storageClean(item.category as StorageCleanable);
+        freed += await storageClean(item.category);
       } catch (cause) {
         failure = t("mobile.settings.storage.cleanFailed", {
           name: t(FINDING_TITLE[item.kind]),
@@ -354,7 +215,7 @@ export function StorageSection({ installing }: { installing: boolean }) {
       <Animated.View layout={layout}>
         <SettingsSection title={t("mobile.settings.storage.title")} footer={footer || undefined}>
           <View className="items-center px-4 pt-5 pb-4" testID="storage-card">
-            <StorageDonut arcs={arcs} totalLabel={totalLabel} caption={caption} />
+            <DonutChart arcs={arcs} totalLabel={totalLabel} caption={caption} />
           </View>
           {segments.map((segment) => (
             <SettingsRow
