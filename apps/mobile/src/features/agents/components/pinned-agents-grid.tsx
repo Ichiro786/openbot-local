@@ -35,6 +35,7 @@ import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-
 import { isAndroid, longPressDelay } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
@@ -127,6 +128,8 @@ const PinnedAgentItem = memo(function PinnedAgentItem({ agent }: { agent: Mobile
   const unreadCount = useAgentListUnreadCount(agent.id);
   const unreadThreads = useAgentListUnreadThreads(agent.id);
   const waitReason = useAgentListWaitReason(agent.id);
+  // Build 14 (ColorOS on): a long name shrinks a little before it is cut ("Socials M…" beside "REA").
+  const fitName = useColorOSMotion().enabled;
 
   const openLabel = agent.title.trim()
     ? t("mobile.agent.list.openPinnedWithTitle", { name: agent.name, title: agent.title.trim() })
@@ -180,6 +183,8 @@ const PinnedAgentItem = memo(function PinnedAgentItem({ agent }: { agent: Mobile
           align="center"
           className="w-full text-text-secondary"
           numberOfLines={1}
+          adjustsFontSizeToFit={fitName}
+          minimumFontScale={fitName ? 0.8 : undefined}
           style={typeScale.small}
         >
           {agent.name}
