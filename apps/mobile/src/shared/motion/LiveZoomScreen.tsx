@@ -83,8 +83,12 @@ const MIN_START_SCALE = 0.3;
 const MAX_START_SCALE = 0.92;
 /** The card's corner on screen at the start, in dp (none once open: the chat fills the screen). */
 const START_RADIUS = 24;
-/** The predictive gesture: how far it shrinks the chat more, its corner, and how far it shifts it toward the finger. */
-const GESTURE_SCALE = 0.1;
+/**
+ * The predictive gesture: how far it shrinks the chat more (at the full swipe, eased so a short swipe
+ * already shows home around the card: build 12 video 97 kept it at ~0.99 for the whole drag), its corner,
+ * and how far it shifts it toward the finger.
+ */
+const GESTURE_SCALE = 0.14;
 const GESTURE_RADIUS = 28;
 const GESTURE_SHIFT = 0.06;
 /** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
@@ -92,6 +96,12 @@ const SHELL_FADE_MS = 160;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
 const SPRING_BACK = { damping: 22, stiffness: 260 };
+/**
+ * Build 14 (video 97 frames 370-379: the drag stepped at 60 Hz at its start): each progress event (they
+ * reach JS at most once a frame, fewer when it is busy) is followed on the UI thread over this long, so
+ * the card moves on every 120 Hz frame.
+ */
+const FOLLOW_MS = 24;
 /**
  * The longest any Back leaves a zoomed chat on top: its pop goes out when the close animation ends,
  * and in any case by then.
@@ -365,7 +375,7 @@ function useLiveZoomMotion(
         gesture.set(progress);
       }),
       module.addListener("onBackProgress", ({ progress }) => {
-        if (st.gestureOn) gesture.set(progress);
+        if (st.gestureOn) gesture.set(withTiming(progress, { duration: FOLLOW_MS, easing: Easing.linear }));
       }),
       module.addListener("onBackCancel", () => {
         gestureCancelledAt = Date.now();
@@ -453,7 +463,7 @@ function LiveZoomFrame({
   const card = useDerivedValue(() => {
     const clock = visible.get();
     const open = closing.get() > 0 ? 1 - crit(1 - clock) : crit(clock);
-    const drag = gesture.get();
+    const drag = 1 - (1 - gesture.get()) ** 3;
     const startScale = Math.min(MAX_START_SCALE, Math.max(MIN_START_SCALE, originW.get() / width));
     const scale = startScale + (1 - startScale) * open;
     const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
