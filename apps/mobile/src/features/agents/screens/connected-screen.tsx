@@ -1,5 +1,4 @@
 import type { ChannelSummary, SidebarLayoutSnapshot } from "@openbot/contracts/ipc";
-import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { type Href, router, Stack } from "expo-router";
 import { Typography } from "heroui-native";
@@ -10,17 +9,7 @@ import Layers3 from "lucide-react-native/icons/layers";
 import MessagesSquare from "lucide-react-native/icons/messages-square";
 import PanelLeft from "lucide-react-native/icons/panel-left";
 import WifiOff from "lucide-react-native/icons/wifi-off";
-import {
-  memo,
-  type ReactNode,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type FlatList, Pressable, StyleSheet, View, type ViewInstance, type ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -78,6 +67,7 @@ import { PlanLimitsHeaderButton } from "@/features/servers/components/plan-limit
 import { usePlanLimits } from "@/features/servers/model/plan-limits";
 import { ConnectionHeaderStatus } from "@/features/workspace/components/connection-header-status";
 import { useWaitingAgentIds } from "@/features/workspace/components/use-agent-activity";
+import { useHomeThreadState } from "@/features/workspace/components/use-home-thread-state";
 import { useUnreadAgentIds, useUnreadCounts } from "@/features/workspace/components/use-live-workspace";
 import {
   type MobileAgent,
@@ -94,6 +84,7 @@ import {
   mobileWaitingItems,
 } from "@/features/workspace/model/sidebar-layout";
 import { SplitPaneLayers, useSplitLayout } from "@/shared/components/adaptive-split";
+import { AndroidBlurTarget } from "@/shared/components/android-header-blur";
 import { useAppLoadingOverlay, useScreenLoadingLabel } from "@/shared/components/app-loading-overlay";
 import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
@@ -292,19 +283,6 @@ const HEADER_RIPPLE = { borderless: true, radius: 20 } as const;
 const PANE_BAR_HEIGHT = NATIVE_BAR_HEIGHT;
 
 /**
- * On Android, the content under the search field, which the field blurs: Android blurs only the
- * content of a `BlurTargetView`. iOS blurs with its glass and needs no target.
- */
-function SearchBlurTarget({ target, children }: { target: RefObject<ViewInstance | null>; children: ReactNode }) {
-  if (!isAndroid) return children;
-  return (
-    <BlurTargetView ref={target} style={{ flex: 1 }}>
-      <View className="flex-1 bg-background">{children}</View>
-    </BlurTargetView>
-  );
-}
-
-/**
  * The glass behind a header button that the screen draws. Android has the solid glass of the design.
  * On iOS, the chat list pane draws its own bar, so its buttons take Liquid Glass as the native bar does.
  */
@@ -426,8 +404,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   const serverDirectoryError = useMobileWorkspaceSelector((current) => current.serverDirectoryError);
   const serverDirectoryState = useMobileWorkspaceSelector((current) => current.serverDirectoryState);
   const servers = useMobileWorkspaceSelector((current) => current.servers);
-  const [collapsedByServer, setCollapsedByServer] = useState<Record<string, ReadonlySet<string>>>({});
-  const collapsedSectionIds = collapsedByServer[activeServer.id];
+  const collapsedSectionIds = useMobileWorkspaceSelector((current) => current.collapsedSectionIds);
   const channels = useChannels(activeServer.id);
   // OpenBot Local (audit M-2): `agents` gets a new identity on every delivered message. Keep the map
   // when its contents are the same agent objects, so channel rows (which depend on it) do not all
@@ -614,9 +591,9 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
     for (const item of items) {
       if (item.kind === "waiting") sectionCollapsed = false;
       else if (item.kind === "section") {
-        const hidden = item.ancestorIds.some((ancestorId) => collapsedSectionIds?.has(ancestorId));
+        const hidden = item.ancestorIds.some((ancestorId) => collapsedSectionIds.has(ancestorId));
         if (hidden) ids.add(item.id);
-        sectionCollapsed = hidden || (collapsedSectionIds?.has(item.id) ?? false);
+        sectionCollapsed = hidden || collapsedSectionIds.has(item.id);
       } else if (sectionCollapsed) ids.add(item.id);
     }
     return ids;
@@ -625,8 +602,12 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   // The read state changes on each message, so the counts become a string first: the map, and with it
   // `renderItem`, change only when the count of a closed folder changes.
   const unreadCounts = useUnreadCounts();
+  // Loads the read marks of the agents' side threads for their badges. As on the desktop, those
+  // threads add no number to the count of a folder.
+  const activeAgentIds = useMemo(() => activeAgents.map((agent) => agent.id), [activeAgents]);
+  useHomeThreadState(activeServer.id, activeAgentIds);
   const folderUnreadKey = useMemo(() => {
-    if (!collapsedSectionIds?.size) return "[]";
+    if (!collapsedSectionIds.size) return "[]";
     const unread = new Set(unreadAgentIds);
     const counts = new Map<string, number>();
     let folderIds: readonly string[] = [];
@@ -652,14 +633,9 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
   const toggleSection = useCallback(
     (sectionId: string) => {
       setCollapseLayout(sidebarLayout);
-      setCollapsedByServer((current) => {
-        const next = new Set(current[serverId]);
-        if (next.has(sectionId)) next.delete(sectionId);
-        else next.add(sectionId);
-        return { ...current, [serverId]: next };
-      });
+      workspace().toggleSectionCollapsed(serverId, sectionId, sidebarLayout?.order ?? []);
     },
-    [serverId, sidebarLayout],
+    [serverId, sidebarLayout, workspace],
   );
   // Rows are memoized, so a new message for one agent renders only that agent's row.
   const rowOffset = hasPins ? 1 : 0;
@@ -683,7 +659,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
                 empty={item.empty}
                 unread={folderUnread.get(item.id) ?? 0}
                 visibleSectionIds={visibleSectionIds}
-                collapsed={collapsedSectionIds?.has(item.id) ?? false}
+                collapsed={collapsedSectionIds.has(item.id)}
                 onToggle={toggleSection}
               />
             </SectionDropTarget>
@@ -897,7 +873,8 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
 
   const listTree = (
     <View className="flex-1 bg-background">
-      <SearchBlurTarget target={searchBlurTarget}>
+      {/* The search field and the bar blur the home content. */}
+      <AndroidBlurTarget target={searchBlurTarget} surface="canvas">
         <HomeSearchList search={search} barHeight={searchBarOffset}>
           {onboarding.active ? null : sceneShows ? (
             // The scene has the insets of the welcome, so the characters stand in the same places on
@@ -1062,7 +1039,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
             </ChatDragProvider>
           ) : null}
         </HomeSearchList>
-      </SearchBlurTarget>
+      </AndroidBlurTarget>
 
       {/* The list scrolls under the transparent header, which gets the blur of the chat header. iOS 27
           shows no native scroll edge effect here. The native top edge is hidden to avoid two effects. */}
@@ -1070,6 +1047,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
         <LargeTitleBar
           scroll={scroll}
           title={activeServer.name}
+          blurTarget={searchBlurTarget}
           // The connection state takes the place of the title in the bar.
           hidden={!searchShows || statusShows || search.open}
         >

@@ -73,7 +73,7 @@ export function ChatLinkPressable({
         };
         const go = () => {
           if (pane) openChatFromPane(pane, chatId, navigate);
-          else if (gate && route.name === "connected") gate.request(navigate, navigation.isFocused);
+          else if (gate && colorOS && route.name === "connected") gate.request(navigate, navigation.isFocused);
           else navigate();
         };
         if (!zoom) {

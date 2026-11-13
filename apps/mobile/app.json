@@ -3,7 +3,7 @@
     "name": "OpenBot Local",
     "slug": "openbot",
     "platforms": ["ios", "android"],
-    "version": "1.4.6",
+    "version": "1.4.9",
     "orientation": "portrait",
     "icon": "./assets/icons/app-icon.png",
     "scheme": "openbotlocal",
@@ -34,7 +34,8 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "plugins": [
@@ -117,7 +118,8 @@
           "android": {
             "usesCleartextTraffic": true,
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-dontwarn org.webrtc.Dav1dDecoder$Natives"
           }
         }
       ],
@@ -132,12 +134,13 @@
               "supportsText": true,
               "supportsWebUrlWithMaxCount": 1,
               "supportsImageWithMaxCount": 10,
+              "supportsMovieWithMaxCount": 10,
               "supportsFileWithMaxCount": 10
             }
           },
           "android": {
             "enabled": true,
-            "singleShareMimeTypes": ["text/*", "image/*", "application/*"],
+            "singleShareMimeTypes": ["*/*"],
             "multipleShareMimeTypes": ["*/*"]
           }
         }
@@ -204,6 +207,13 @@
         {
           "microphonePermission": "Allow OpenBot to use the microphone to dictate messages.",
           "speechRecognitionPermission": "Allow OpenBot to turn your speech into message text."
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow OpenBot to use your camera to scan QR codes.",
+          "microphonePermission": "Allow OpenBot to use the microphone to dictate messages."
         }
       ],
       [
