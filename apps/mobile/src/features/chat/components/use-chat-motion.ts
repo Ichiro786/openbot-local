@@ -453,9 +453,17 @@ export function useChatMotion(
         // aimed at an end that kept moving under it, and the two fought. The scroll waits for the
         // keyboard to settle (at most KEYBOARD_SETTLE_MS), then glides once.
         const started = Date.now();
+        // Build 14 (Syed: the scroll to a sent message stuttered after a long reply): the glide is ONE
+        // scroll to the end the list will have. It also waits (same bound) for a frame where the
+        // composer (its text cleared) and the list's content (the new row, its end space) kept their
+        // size, so the end does not move under the glide and nothing has to correct it after.
+        let lastSizes = "";
         const step = () => {
+          const sizes = `${content.get()}:${composerHeight.get()}`;
+          const moving = sizes !== lastSizes;
+          lastSizes = sizes;
           // ColorOS motion only (the fallback's switch): OFF scrolls as build 11 did.
-          if (fallback.get() && keyboardMoving.get() && Date.now() - started < KEYBOARD_SETTLE_MS) {
+          if (fallback.get() && (keyboardMoving.get() || moving) && Date.now() - started < KEYBOARD_SETTLE_MS) {
             sendScrollFrame.current = requestAnimationFrame(step);
             return;
           }
@@ -485,6 +493,8 @@ export function useChatMotion(
       );
     },
     [
+      composerHeight,
+      content,
       finishFirstMessage,
       firstOffset,
       firstOpacity,
