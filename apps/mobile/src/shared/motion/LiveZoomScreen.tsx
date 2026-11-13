@@ -1,7 +1,16 @@
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useThemeColor } from "heroui-native/hooks";
-import { type ComponentType, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ComponentType,
+  type ReactNode,
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { BackHandler, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
   type AnimationCallback,
@@ -30,7 +39,7 @@ const OPEN_MS = 360;
 const CLOSE_MS = 300;
 const EASE = Easing.bezierFn(0.2, 0, 0, 1);
 /** The chat fades in over this share of the open's time (and out over the close's last share). */
-const FADE_SHARE = 0.55;
+const FADE_SHARE = 0.4;
 /**
  * The open clock advances at most this much per drawn frame: a slow frame (the chat's mount, a busy
  * render thread) never skips the open, so its first drawn frame is the start and every frame moves.
@@ -39,12 +48,14 @@ const MAX_STEP_MS = 25;
 /** The open settles by this at the latest (its deferred work then starts anyway). */
 const SETTLE_BOUND_MS = 1200;
 /** The chat's scale when closed (around the tapped row), and how far the predictive gesture shrinks it more. */
-const CLOSED_SCALE = 0.88;
+const CLOSED_SCALE = 0.86;
 const GESTURE_SCALE = 0.1;
 /** How far the gesture shifts the chat toward the finger, as a share of the width. */
 const GESTURE_SHIFT = 0.06;
 /** When closed, the chat's centre sits this share of the way from the screen's centre to the row. */
-const ROW_PULL = 0.2;
+const ROW_PULL = 0.3;
+/** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
+const SHELL_FADE_MS = 160;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
 const SPRING_BACK = { damping: 22, stiffness: 260 };
@@ -316,7 +327,23 @@ function useLiveZoomMotion(
   }, [api, edge, gesture, navigation, predictive, st, zoom]);
 }
 
-function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey: string; children: ReactNode }) {
+function LiveZoomFrame({
+  zoom,
+  routeKey,
+  shell,
+  children,
+}: {
+  zoom: LiveZoom;
+  routeKey: string;
+  /**
+   * Build 13 (Syed: "it takes time to open"): the chat's skeleton at its final layout. With it, the
+   * route's first commit is only this light shell, so the zoom starts on the tap's next frames; the chat
+   * itself mounts right after that first frame (its JS and first commit were what held the open back,
+   * ~0.4 s on the phone) under the shell, which dissolves once the chat has laid out.
+   */
+  shell?: ReactNode;
+  children: ReactNode;
+}) {
   const background = String(useThemeColor("background") ?? "#000");
   const { width, height } = useWindowDimensions();
   const pull = (Math.max(0, zoom.originY) - height / 2) * ROW_PULL;
@@ -326,6 +353,23 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
   // One commit, after the open: the chat's frosts and deferred content start then.
   const [settled, setSettled] = useState(false);
   useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge);
+  const [chatShown, setChatShown] = useState(!shell);
+  const [shellGone, setShellGone] = useState(!shell);
+  const shellOpacity = useSharedValue(1);
+  useEffect(() => {
+    if (chatShown) return;
+    // After the shell's first frame: the chat's mount never delays the open's start.
+    const frame = requestAnimationFrame(() => startTransition(() => setChatShown(true)));
+    return () => cancelAnimationFrame(frame);
+  }, [chatShown]);
+  const chatLaidOut = useCallback(() => {
+    shellOpacity.set(
+      withTiming(0, { duration: SHELL_FADE_MS, easing: Easing.linear }, (finished) => {
+        if (finished) scheduleOnRN(setShellGone, true);
+      }),
+    );
+  }, [shellOpacity]);
+  const shellStyle = useAnimatedStyle(() => ({ opacity: shellOpacity.get() }));
   const frameStyle = useAnimatedStyle(() => {
     const clock = visible.get();
     const open = EASE(clock);
@@ -355,7 +399,22 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
           frameStyle,
         ]}
       >
-        <LiveZoomSettledContext.Provider value={settled}>{children}</LiveZoomSettledContext.Provider>
+        <LiveZoomSettledContext.Provider value={settled}>
+          {chatShown ? (
+            shell ? (
+              <View style={styles.fill} onLayout={chatLaidOut}>
+                {children}
+              </View>
+            ) : (
+              children
+            )
+          ) : null}
+        </LiveZoomSettledContext.Provider>
+        {shellGone ? null : (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shellStyle]}>
+            {shell}
+          </Animated.View>
+        )}
       </Animated.View>
     </View>
   );
@@ -365,13 +424,30 @@ function LiveZoomFrame({ zoom, routeKey, children }: { zoom: LiveZoom; routeKey:
  * The chat-like route's screen. A route the ColorOS zoom opened (decided by its options before it
  * mounts) draws inside the live zoom frame; any other route renders exactly as before.
  */
-export function withLiveZoom<P extends object>(Screen: ComponentType<P>) {
+export function withLiveZoom<P extends object>(
+  Screen: ComponentType<P>,
+  /** Build 13: the skeleton a zoom open draws first (route params give the chat's id). */
+  Shell?: ComponentType<{ chatId?: string }>,
+) {
   function LiveZoomScreen(props: P) {
-    const routeKey = useRoute().key;
+    const route = useRoute();
+    const routeKey = route.key;
     const [zoom] = useState(() => liveZoomOf(routeKey));
     if (!zoom) return <Screen {...props} />;
+    const { params } = route;
+    const id = !params
+      ? undefined
+      : "agentId" in params
+        ? params.agentId
+        : "channelId" in params
+          ? params.channelId
+          : undefined;
     return (
-      <LiveZoomFrame zoom={zoom} routeKey={routeKey}>
+      <LiveZoomFrame
+        zoom={zoom}
+        routeKey={routeKey}
+        shell={Shell ? <Shell chatId={typeof id === "string" ? id : undefined} /> : undefined}
+      >
         <Screen {...props} />
       </LiveZoomFrame>
     );

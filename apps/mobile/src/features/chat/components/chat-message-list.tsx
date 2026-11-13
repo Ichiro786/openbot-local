@@ -6,7 +6,7 @@ import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references"
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
 import { markdownInlinePlainText, markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import { useIsFocused } from "expo-router";
-import { Skeleton, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
 import CircleX from "lucide-react-native/icons/circle-x";
 import CornerUpRight from "lucide-react-native/icons/corner-up-right";
 import GitFork from "lucide-react-native/icons/git-fork";
@@ -56,6 +56,7 @@ import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/componen
 import { type ApprovalDecision, approvalTitle, ChatApprovalCard } from "@/features/chat/components/chat-approval-card";
 import { ChatExchangeGroup, ChatExchangeMarker } from "@/features/chat/components/chat-exchange-marker";
 import { ChatMarkdown, chatMarkdownHasTable } from "@/features/chat/components/chat-markdown";
+import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
 import { ChatPlan } from "@/features/chat/components/chat-plan";
 import { ChatQuestionPrompt } from "@/features/chat/components/chat-question-prompt";
 import {
@@ -1313,18 +1314,15 @@ const NO_CHANNELS: readonly { id: string; name: string }[] = [];
 const SKELETON_FADE_MS = 180;
 /** Build #101: the skeleton never stays longer than this, whatever the history does. */
 const SKELETON_MAX_MS = 6000;
-const SKELETON_LINES = ["92%", "84%", "88%", "52%"] as const;
 
 /**
- * Build #101 (ColorOS motion): static placeholder bubbles where the latest exchange lands (the latest
- * user message under the header, the reply under it) until the list shows its rows, then a fade into
- * them. Plain views, no shimmer. During a zoom open it is swapped for the rows in one frame (a fade there
- * would redraw the open's texture every frame). It unmounts after its fade, on error or offline (the
- * caller stops rendering it), and after SKELETON_MAX_MS at the latest.
+ * Build #101 (ColorOS motion): placeholder bubbles where the latest exchange lands (the latest user
+ * message under the header, the reply under it) until the list shows its rows, then a fade into them
+ * while the rows rise in (use-chat-motion). Build 13: the same bubbles as the zoom-open shell
+ * (SkeletonBubbles, soft shimmer), so the shell hands over to them without a seam. It unmounts after its
+ * fade, on error or offline (the caller stops rendering it), and after SKELETON_MAX_MS at the latest.
  */
 export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<boolean>; top: number }) {
-  const insets = useSafeAreaInsets();
-  const settled = useLiveZoomSettled();
   const [done, setDone] = useState(false);
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -1335,18 +1333,12 @@ export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<b
     () => revealed.get(),
     (shown) => {
       if (!shown) return;
-      if (!settled) {
-        opacity.set(0);
-        scheduleOnRN(setDone, true);
-        return;
-      }
       opacity.set(
         withTiming(0, { duration: SKELETON_FADE_MS, reduceMotion: ReduceMotion.System }, () => {
           scheduleOnRN(setDone, true);
         }),
       );
     },
-    [settled],
   );
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   if (done) return null;
@@ -1355,23 +1347,9 @@ export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<b
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      style={[
-        {
-          position: "absolute",
-          top: top + 8,
-          left: insets.left + LIST_PADDING,
-          right: insets.right + LIST_PADDING,
-          gap: 10,
-        },
-        style,
-      ]}
+      style={[StyleSheet.absoluteFill, style]}
     >
-      <Skeleton variant="none" style={{ alignSelf: "flex-end", width: "58%", height: 44, borderRadius: 22 }} />
-      <View style={{ gap: 10, paddingTop: 6 }}>
-        {SKELETON_LINES.map((width) => (
-          <Skeleton key={width} variant="none" style={{ width, height: 14, borderRadius: 7 }} />
-        ))}
-      </View>
+      <SkeletonBubbles top={top + 8} />
     </Animated.View>
   );
 }

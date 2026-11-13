@@ -32,6 +32,10 @@ const ANDROID_PLACE_TIMEOUT_MS = 250;
 
 /** Build 11.2: the longest a sent message's scroll waits for the keyboard to finish moving. */
 const KEYBOARD_SETTLE_MS = 450;
+/** Build 13: a zoom-opened chat's rows come in over this long, rising this far, on the ColorOS curve. */
+const REVEAL_MS = 240;
+const REVEAL_RISE = 14;
+const REVEAL_EASE = Easing.bezier(0.2, 0, 0, 1);
 /** Build 10 keyboard fallback: how long a settled keyboard change takes to animate. */
 const FALLBACK_KEYBOARD_MS = 240;
 /** Build 10 keyboard fallback: the anticipated lift on focus, about an IME's own rise. */
@@ -515,13 +519,29 @@ export function useChatMotion(
       scheduleOnRN(setUserScrolled, true);
     },
   );
-  const historyStyle = useAnimatedStyle(() => ({
-    opacity: zoomed
-      ? revealed.get()
-        ? 1
-        : 0
-      : withTiming(revealed.get() ? 1 : 0, { duration: 150, reduceMotion: ReduceMotion.System }),
-  }));
+  // Build 13 (Syed: "when it loads, the chat animates beautifully after the skeletal loading"): a
+  // zoom-opened chat's rows fade in and rise into place over the skeleton's fade, already at the latest
+  // message (the list is placed before it reveals, so nothing scrolls). Other chats keep the 150 ms fade.
+  const historyStyle = useAnimatedStyle(() =>
+    zoomed
+      ? {
+          opacity: withTiming(revealed.get() ? 1 : 0, {
+            duration: revealed.get() ? REVEAL_MS : 0,
+            easing: REVEAL_EASE,
+            reduceMotion: ReduceMotion.System,
+          }),
+          transform: [
+            {
+              translateY: withTiming(revealed.get() ? 0 : REVEAL_RISE, {
+                duration: revealed.get() ? REVEAL_MS : 0,
+                easing: REVEAL_EASE,
+                reduceMotion: ReduceMotion.System,
+              }),
+            },
+          ],
+        }
+      : { opacity: withTiming(revealed.get() ? 1 : 0, { duration: 150, reduceMotion: ReduceMotion.System }) },
+  );
   const firstMessageStyle = useAnimatedStyle(() => ({
     opacity: firstOpacity.get(),
     transform: [{ translateY: firstOffset.get() }],

@@ -50,6 +50,40 @@ const MORE_WIDTH = 60;
 const BAND_GAP = 6;
 /** The Back / ••• glass inside its 48 dp box (ChatGlassButton's 4 dp inset). */
 const GLASS_INSET = 4;
+const GLASS_SIZE = 48 - GLASS_INSET * 2;
+/**
+ * Build 13: the header's geometry for the zoom-open skeleton (ChatShellSkeleton), from the constants
+ * above, so it draws the shapes where this header puts them. Offsets are from the top of the safe area
+ * and from the screen's left and right edges (add the insets).
+ */
+export const COLOROS_CHAT_HEADER_GEOMETRY = {
+  rowTop: ROW_TOP,
+  avatar: AVATAR,
+  overlap: OVERLAP,
+  pillHeight: PILL_HEIGHT,
+  pillMinWidth: AVATAR + 16,
+  pillMaxWidth: 220,
+  back: { left: EDGE_PAD + GLASS_INSET, top: ROW_TOP + SIDE_TOP + GLASS_INSET, size: GLASS_SIZE },
+  more: {
+    right: EDGE_PAD + GLASS_INSET,
+    top: ROW_TOP + SIDE_TOP + GLASS_INSET,
+    width: MORE_WIDTH - GLASS_INSET * 2,
+    height: GLASS_SIZE,
+  },
+} as const;
+/** The name pill's last measured width per chat (it hugs the name), for the skeleton's pill. */
+const pillWidths = new Map<string, number>();
+const MAX_PILL_WIDTHS = 200;
+export function headerPillWidthOf(chatId: string): number | undefined {
+  return pillWidths.get(chatId);
+}
+function rememberPillWidth(chatId: string, width: number): void {
+  if (!pillWidths.has(chatId) && pillWidths.size >= MAX_PILL_WIDTHS) {
+    const oldest = pillWidths.keys().next().value;
+    if (oldest !== undefined) pillWidths.delete(oldest);
+  }
+  pillWidths.set(chatId, width);
+}
 /**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
  * the left, the agent's avatar over the top edge of a frosted name pill (name, the thread menu's
@@ -124,7 +158,7 @@ export function ColorOSChatHeader({
   const [pillWidth, setPillWidth] = useState(0);
   const screenWidth = useWindowDimensions().width;
   const glassTop = topInset + ROW_TOP + SIDE_TOP + GLASS_INSET;
-  const glassSize = 48 - GLASS_INSET * 2;
+  const glassSize = GLASS_SIZE;
   const cutOuts = [
     ...(showBack ? [{ x: padLeft + GLASS_INSET, y: glassTop, width: glassSize, height: glassSize }] : []),
     {
@@ -218,7 +252,10 @@ export function ColorOSChatHeader({
         <View pointerEvents="box-none" style={styles.middle}>
           <Animated.View
             style={{ marginTop: AVATAR - OVERLAP }}
-            onLayout={(event) => setPillWidth(event.nativeEvent.layout.width)}
+            onLayout={(event) => {
+              setPillWidth(event.nativeEvent.layout.width);
+              rememberPillWidth(target.id, event.nativeEvent.layout.width);
+            }}
             {...pillHandlers}
           >
             <GlassFace press={pillPress} variant="pill" size={PILL_HEIGHT} material={material} contentPadding={0}>
