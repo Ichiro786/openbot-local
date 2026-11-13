@@ -6,6 +6,7 @@
 import type { PropsWithChildren } from "react";
 import { OutboxProvider } from "@/features/chat/context/outbox-context";
 import { QueuedMessagesProvider } from "@/features/chat/context/queued-messages-context";
+import { LiveWorkspaceStore } from "@/features/workspace/model/live-workspace-store";
 import { WorkspaceContexts } from "@/features/workspace/context/workspace-store";
 
 const anything: any = new Proxy(function () {}, {
@@ -173,17 +174,8 @@ const loadShort = () =>
   );
 const load = (agentId?: string) => (agentId === "e2e-long" ? loadLong() : agentId === "e2e-short" ? loadShort() : Promise.resolve(conversation));
 const server = { id: "e2e-server", name: "E2E", state: "online", status: "online", online: true, connected: true, initialConnectionPending: false };
-// Every live map the chat reads (use-live-workspace, use-live-activity), empty and stable.
-const liveSnapshot = {
-  activityByServer: {},
-  approvalRequests: {},
-  browserRequests: {},
-  browserTabs: {},
-  turnLinesByServer: {},
-  unreadAgentIds: [],
-  unreadCounts: {},
-};
-const live = { get: () => liveSnapshot, subscribe: () => () => undefined };
+// Every live map the chat reads: the app's own empty store, so maps upstream adds (1.4.9: firstUnreadMessageIds, threadWaitsByServer) exist.
+const live = new LiveWorkspaceStore();
 const known: Record<string, unknown> = {
   agents: [REAL_AGENT, LONG_AGENT, SHORT_AGENT],
   servers: [server],
