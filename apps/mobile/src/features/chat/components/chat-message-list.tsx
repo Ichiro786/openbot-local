@@ -16,7 +16,6 @@ import {
   memo,
   type PropsWithChildren,
   type ReactNode,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -100,7 +99,6 @@ import { springs, timings } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { END_X, lineDirectionStyle, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
-import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { type BubbleTone, bubbleTone } from "../model/bubble-tone";
 import { chatDayLabels } from "../model/chat-day-markers";
@@ -1550,15 +1548,12 @@ export const ChatMessageList = memo(function ChatMessageList({
     return () => cancelAnimationFrame(frame);
   }, [rowsShown, openingShown]);
   const startsAtEnd = motion.startsAtEnd;
-  // Build #101 smoother open: a zoom-opened chat renders only its opening rows while the open runs (the
-  // older rows and the list's draw-distance prewarm came mid-open and re-rasterised the open's texture);
-  // the rest come as a transition once it settled. Other chats are settled from the start (unchanged).
-  const settled = useLiveZoomSettled();
-  const [settledRows, setSettledRows] = useState(settled);
-  useEffect(() => {
-    if (settled && !settledRows) startTransition(() => setSettledRows(true));
-  }, [settled, settledRows]);
-  const allRows = rowsShown && settledRows;
+  // Build 14 (Syed's phone, build 12 video 97 frames 133-147: the opened chat jumped 50 dp down, then
+  // back 116 ms later): a zoom-opened chat gets every row in its first rows commit. Build #101 gave it
+  // only its opening rows until the open settled, and the older rows then came in above the visible ones
+  // (the latest user message's end space and the pinned scroll re-placed the list twice). The list
+  // starts at the end (initialScrollAtEnd) and renders only the rows near the view either way.
+  const allRows = rowsShown;
   // The list renders only the rows in and near the view, so it gets every loaded message.
   const rows = useMemo(
     () =>

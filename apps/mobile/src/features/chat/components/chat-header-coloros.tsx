@@ -213,8 +213,12 @@ export function ColorOSChatHeader({
         </Typography.Paragraph>
         {/* Build 11.2: the › says "opens the agent page"; a thread menu opens a menu instead, so no ›. */}
         {threadMenu ? null : <ChevronRight color={iconColor} size={16} strokeWidth={2.75} style={styles.chevron} />}
-        {threadMenu && threadMenu.attention > 0 ? (
-          <View style={[styles.badge, { backgroundColor: threadMenu.color }]} />
+        {/* Build 14 (Syed's phone, build 12 video 98: the dot came in mid-open with the read state and
+            moved the name 5 dp): the dot's place is kept whenever the pill opens the thread menu. */}
+        {threadMenu ? (
+          <View
+            style={[styles.badge, { backgroundColor: threadMenu.color, opacity: threadMenu.attention > 0 ? 1 : 0 }]}
+          />
         ) : null}
       </View>
     </View>

@@ -17,7 +17,6 @@ import { scheduleOnRN } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid } from "@/shared/lib/platform";
-import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatContentIsVisible } from "../model/chat-layout";
 
@@ -32,6 +31,13 @@ const ANDROID_PLACE_TIMEOUT_MS = 250;
 
 /** Build 11.2: the longest a sent message's scroll waits for the keyboard to finish moving. */
 const KEYBOARD_SETTLE_MS = 450;
+/**
+ * Build 14 (Syed's phone, build 12 video 98 frame 140: a routine row that came with the latest page
+ * shoved the opening chat up 48 dp mid-zoom): a zoom-opened chat that shows kept messages while its
+ * latest page loads keeps its rows hidden under the skeleton until the page is in, this long at most
+ * from the chat's mount. A page that is later still adds its rows at the end, as before.
+ */
+const CATCH_UP_HOLD_MS = 450;
 /** Build 13: a zoom-opened chat's rows come in over this long, rising this far, on the ColorOS curve. */
 const REVEAL_MS = 240;
 const REVEAL_RISE = 14;
@@ -74,7 +80,7 @@ export function useChatMotion(
   /** The chat opens at a message from search: do not move to the latest message while it loads. */
   holdOpening = false,
   /** The chat shows the messages that the phone kept, and reads the latest page of the host. */
-  _catchingUp = false,
+  catchingUp = false,
   /** Build 11: opened by the ColorOS zoom. The chat's own open is the fade, so no inner fade. */
   zoomed = false,
 ) {
@@ -293,16 +299,14 @@ export function useChatMotion(
   // list has no position to wait for, and Legend List calls `onReady` only after it lays out a row.
   const listPlaced = !hasRows || placedWithRows === true;
   const shown = useRef(false);
-  /** Build 11.3 simple zoom: the zoom open has settled; a reveal before that shows its history after it. */
-  const settled = useLiveZoomSettled();
-  const settledNow = useRef(settled);
-  settledNow.current = settled;
-  const historyPending = useRef(false);
+  // Build 14: a zoom open waits for a catch-up page (bounded), so its rows show once, complete.
+  const [catchUpWaited, setCatchUpWaited] = useState(!zoomed);
   useEffect(() => {
-    if (!settled || !historyPending.current) return;
-    historyPending.current = false;
-    startTransition(() => setHistoryVisible(true));
-  }, [settled]);
+    if (catchUpWaited) return;
+    const timer = setTimeout(() => setCatchUpWaited(true), CATCH_UP_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [catchUpWaited]);
+  const catchUpHold = zoomed && catchingUp && !catchUpWaited;
   // While the chat opens, the list keeps the latest message in view: older rows come above the
   // first rows and get their sizes, and the latest page can add messages after the kept ones.
   const [openingFollow, setOpeningFollow] = useState(!holdOpening);
@@ -329,12 +333,12 @@ export function useChatMotion(
     if (shown.current) return;
     shown.current = true;
     revealed.set(true);
-    // Build 11.3 council A5 + simple zoom: for zoom-opened chats, every row's deferred content (web views,
-    // actions, media) comes as a transition after the UI-thread reveal, and never during the open.
-    if (zoomed) {
-      if (settledNow.current) startTransition(() => setHistoryVisible(true));
-      else historyPending.current = true;
-    } else setHistoryVisible(true);
+    // Build 11.3 council A5: for zoom-opened chats, every row's deferred content (web views, actions,
+    // media) comes as a transition right after the UI-thread reveal. Build 14 (Syed's phone: Copy and Read
+    // aloud popped in ~400 ms after the open started): no longer after the open settles; the icons land
+    // while the rows fade in (their buttons always kept their size, so nothing moves).
+    if (zoomed) startTransition(() => setHistoryVisible(true));
+    else setHistoryVisible(true);
   }, [revealed, zoomed]);
   /** The list finished the first position of its rows. */
   const onListReady = useCallback((withRows: boolean) => setPlacedWithRows(withRows), []);
@@ -343,13 +347,13 @@ export function useChatMotion(
   useLayoutEffect(() => {
     // The hold stays recorded until the list shows: it can end while the history still loads.
     if (holdOpening) heldOpening.current = true;
-    if (shown.current || !listPlaced || !ready || holdOpening) return;
+    if (shown.current || !listPlaced || !ready || holdOpening || catchUpHold) return;
     const held = heldOpening.current;
     heldOpening.current = false;
     // The message from search did not open the chat, and the list did not take the end while it waited.
     if (held) void (listRef.current?.scrollToEnd({ animated: false }) ?? Promise.resolve()).then(reveal, reveal);
     else reveal();
-  }, [listPlaced, ready, holdOpening, reveal]);
+  }, [listPlaced, ready, holdOpening, catchUpHold, reveal]);
   // Android moves the list to the latest message with a native scroll, and Legend List can wait for
   // seconds for that scroll to report before it calls `onReady`. Once the last row has its size,
   // the chat takes the end itself: this ends the wait, and the list calls `onReady`. iOS places the
