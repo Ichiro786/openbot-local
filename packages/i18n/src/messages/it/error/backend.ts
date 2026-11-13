@@ -60,6 +60,8 @@ export const messages = {
   "error.backend.channelLeadModelUnavailable": "Il modello del responsabile del canale non è disponibile.",
   "error.backend.contextCompactionIneffective":
     "La compattazione non riduce questa chat: dopo due compattazioni usa ancora il {percent}% della finestra di contesto del modello, quindi OpenBot smette di compattarla. Strumenti e istruzioni usano la maggior parte della finestra. Disattiva i server MCP o l'uso del computer che questo agente non usa, oppure scegli un modello con una finestra più grande. Poi avvia una nuova chat.",
+  "error.backend.contextCompactionStopped":
+    "Due compattazioni di fila di questa chat non sono riuscite, quindi OpenBot smette di compattarla automaticamente. Ogni tentativo invia l'intera chat al modello e consuma il limite del tuo piano. Seleziona «Compatta ora» per riprovare, oppure avvia una nuova chat.",
   "error.backend.providerRetrying":
     "Il provider non è riuscito a completare questa richiesta {attempts} volte e riprova. Se l'agente non continua, interrompi il turno.",
   "error.backend.providerRetryingLargeContext":
@@ -70,6 +72,15 @@ export const messages = {
     "Il canale ha un avvio di assegnazione non confermato. Controlla il risultato prima di eliminarlo.",
   "error.backend.channelNotFound": "Canale non trovato.",
   "error.backend.channelMemberUnavailable": "Un membro del canale non è disponibile.",
+  "error.backend.channelInstructionsTooLong":
+    "Riduci le istruzioni a 2.000 caratteri. Le istruzioni più lunghe non vengono salvate.",
+  "error.backend.channelWaitBeforeNewConversation":
+    "Attendi che il lavoro in questo canale finisca, poi avvia una nuova conversazione.",
+  "error.backend.channelWaitBeforeCompact": "Attendi che il lavoro in questo canale finisca, poi compattalo.",
+  "error.backend.channelWaitBeforeDeleteHistory":
+    "Attendi che il lavoro in questo canale finisca, poi elimina la sua cronologia.",
+  "error.backend.channelCompactUnavailable":
+    "Nessun membro di questo canale può compattare il contesto ora. Un membro deve prima rispondere nel canale e il suo provider deve supportare la compattazione.",
   "error.backend.channelArchived": "Ripristina questo canale prima di inviare messaggi o modificare le attività.",
   "error.backend.channelReferenceUnavailable": "Il messaggio del canale a cui si fa riferimento non è disponibile.",
   "error.backend.channelTaskNotFound": "Attività del canale non trovata.",
@@ -207,8 +218,6 @@ export const messages = {
   "error.backend.agentWaitRoutineGone": "Questo agente non ha una routine con questo id.",
   "error.backend.agentWaitNoRoutine":
     "Solo un'esecuzione di una delle tue routine risveglia un'attesa, e non hai routine. Creane una con openbot.create_routine, poi apri l'attesa.",
-  "error.backend.agentWaitRemoteUnsupported":
-    "Le attese aperte sono disponibili solo per gli agenti su questo computer.",
   "error.backend.markUnreadRemoteUnsupported":
     "Segnare un messaggio come non letto è disponibile solo per gli agenti su questo computer.",
   "error.backend.messageDeleteUnsupported": "Questo server non supporta l’eliminazione dei messaggi.",
@@ -242,9 +251,15 @@ export const messages = {
   "error.backend.mcpSignInResponseTimedOut": "La risposta dell'accesso non è arrivata in tempo.",
   "error.backend.mcpSignInMetadataUnreadable":
     "OpenBot non ha potuto leggere le informazioni di accesso di questo server. Controlla l’indirizzo del server e riprova.",
+  "error.backend.mcpSignInAnswerUnreadable":
+    "Il server di accesso ha inviato una risposta che OpenBot non può leggere. Se il servizio ti fornisce una chiave API o un token, aggiungilo nelle impostazioni di questo server, poi verifica di nuovo la connessione.",
   "error.backend.mcpServerExited":
     "Il server si è fermato prima di rispondere. Esegui il comando in un terminale per vedere l'errore.",
   "error.backend.mcpServerFailedToStart": "Il server non si è avviato: {reason}",
+  "error.backend.mcpServerSignInForProvider":
+    "{provider} non è riuscito a usare il server MCP {name} perché il server chiede l’accesso. Apri le impostazioni MCP e scegli Accedi.",
+  "error.backend.mcpServerFailedForProvider":
+    "{provider} non è riuscito ad avviare il server MCP {name}. Apri le impostazioni MCP e scegli Prova la connessione per vedere la causa.",
   "error.backend.mcpOAuthProxyUnavailable":
     "OpenBot non è riuscito ad avviare la connessione di accesso locale per questo server. Riavvia OpenBot e riprova.",
   "error.backend.mcpOAuthSignInNeeded":
@@ -317,6 +332,20 @@ export const messages = {
   "error.backend.browserProfileNameTaken": "Esiste già un profilo browser con questo nome.",
   "error.backend.browserSessionInUse": "Una scheda usa ancora questa sessione del browser. Riprova.",
   "error.backend.browserProfileLimit": "Puoi avere fino a {limit} profili browser.",
+  "error.backend.browserProxyNotFound": "Questo proxy non esiste più.",
+  "error.backend.browserProxyAddressInvalid":
+    "Inserisci un indirizzo proxy come socks5://host:1080 o http://user:password@host:3128.",
+  "error.backend.browserProxyLimit": "Puoi avere fino a {limit} proxy.",
+  "error.backend.browserProxyTaken": "Esiste già un proxy con questo indirizzo.",
+  "error.backend.browserProxyChanged":
+    "Questo proxy è cambiato dopo che l'hai aperto. Controllalo di nuovo, poi riprova.",
+  "error.backend.browserProxyUnreachable": "Il proxy {name} non risponde, quindi la pagina non si è aperta.",
+  "error.backend.browserProxySignInRefused":
+    "Il proxy {name} ha rifiutato l’accesso, quindi la pagina non si è aperta.",
+  "error.backend.browserProxyComputerUnreachable":
+    "Il computer di questo profilo non risponde, quindi la pagina non si è aperta.",
+  "error.backend.browserCertificateUntrusted":
+    "Il certificato di sicurezza di questo sito non è attendibile, quindi la pagina non si è aperta.",
   "error.backend.browserLowMemory":
     "Su questo server la memoria è quasi esaurita, quindi il browser non può aprire un'altra scheda. Chiudi una scheda o attendi che gli altri agenti finiscano.",
   "error.backend.browserOpenFailed": "Impossibile aprire {url}: {reason}",

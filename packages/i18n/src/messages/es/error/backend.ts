@@ -61,6 +61,8 @@ export const messages = {
   "error.backend.channelLeadModelUnavailable": "El modelo del coordinador del canal no está disponible.",
   "error.backend.contextCompactionIneffective":
     "La compactación no reduce este chat: tras dos compactaciones aún usa el {percent}% de la ventana de contexto del modelo, así que OpenBot deja de compactarlo. Las herramientas y las instrucciones usan la mayor parte de la ventana. Desactiva los servidores MCP o el uso del ordenador que este agente no necesita, o elige un modelo con una ventana mayor. Después, inicia un chat nuevo.",
+  "error.backend.contextCompactionStopped":
+    "Dos compactaciones seguidas de este chat fallaron, así que OpenBot deja de compactarlo automáticamente. Cada intento envía todo el chat al modelo y consume el límite de tu plan. Selecciona «Compactar ahora» para intentarlo de nuevo o inicia un chat nuevo.",
   "error.backend.providerRetrying":
     "El proveedor falló esta solicitud {attempts} veces y lo vuelve a intentar. Si el agente no continúa, detén el turno.",
   "error.backend.providerRetryingLargeContext":
@@ -71,6 +73,15 @@ export const messages = {
     "El canal tiene un inicio de tarea sin confirmar. Comprueba el resultado antes de eliminarlo.",
   "error.backend.channelNotFound": "No se encontró el canal.",
   "error.backend.channelMemberUnavailable": "Un miembro del canal no está disponible.",
+  "error.backend.channelInstructionsTooLong":
+    "Acorta las instrucciones a 2000 caracteres. Las instrucciones más largas no se guardan.",
+  "error.backend.channelWaitBeforeNewConversation":
+    "Espera a que termine el trabajo en este canal y luego inicia una nueva conversación.",
+  "error.backend.channelWaitBeforeCompact": "Espera a que termine el trabajo en este canal y luego compáctalo.",
+  "error.backend.channelWaitBeforeDeleteHistory":
+    "Espera a que termine el trabajo en este canal y luego elimina su historial.",
+  "error.backend.channelCompactUnavailable":
+    "Ningún miembro de este canal puede compactar su contexto ahora. Un miembro debe responder primero en el canal y su proveedor debe admitir la compactación.",
   "error.backend.channelArchived": "Restaura este canal antes de enviar mensajes o cambiar tareas.",
   "error.backend.channelReferenceUnavailable": "El mensaje del canal al que se hace referencia no está disponible.",
   "error.backend.channelTaskNotFound": "No se encontró la tarea del canal.",
@@ -205,8 +216,6 @@ export const messages = {
   "error.backend.agentWaitRoutineGone": "Este agente no tiene ninguna rutina con este id.",
   "error.backend.agentWaitNoRoutine":
     "Solo una ejecución de una de tus rutinas despierta una espera, y no tienes ninguna rutina. Crea una con openbot.create_routine y luego abre la espera.",
-  "error.backend.agentWaitRemoteUnsupported":
-    "Las esperas abiertas solo están disponibles para agentes en este equipo.",
   "error.backend.markUnreadRemoteUnsupported":
     "Marcar un mensaje como no leído solo está disponible para agentes en este equipo.",
   "error.backend.messageDeleteUnsupported": "Este servidor no permite eliminar mensajes.",
@@ -241,9 +250,15 @@ export const messages = {
   "error.backend.mcpSignInResponseTimedOut": "La respuesta del inicio de sesión no llegó a tiempo.",
   "error.backend.mcpSignInMetadataUnreadable":
     "OpenBot no pudo leer la información de inicio de sesión de este servidor. Revisa la dirección del servidor y vuelve a intentarlo.",
+  "error.backend.mcpSignInAnswerUnreadable":
+    "El servidor de inicio de sesión envió una respuesta que OpenBot no puede leer. Si el servicio te da una clave de API o un token, añádelo en la configuración de este servidor y vuelve a probar la conexión.",
   "error.backend.mcpServerExited":
     "El servidor se detuvo antes de responder. Ejecuta el comando en una terminal para ver su error.",
   "error.backend.mcpServerFailedToStart": "El servidor no se inició: {reason}",
+  "error.backend.mcpServerSignInForProvider":
+    "{provider} no pudo usar el servidor MCP {name} porque el servidor pide iniciar sesión. Abre los ajustes de MCP y elige Iniciar sesión.",
+  "error.backend.mcpServerFailedForProvider":
+    "{provider} no pudo iniciar el servidor MCP {name}. Abre los ajustes de MCP y elige Probar conexión para ver la causa.",
   "error.backend.mcpOAuthProxyUnavailable":
     "OpenBot no pudo iniciar su conexión local de inicio de sesión para este servidor. Reinicia OpenBot y vuelve a intentarlo.",
   "error.backend.mcpOAuthSignInNeeded":
@@ -316,6 +331,20 @@ export const messages = {
   "error.backend.browserProfileNameTaken": "Ya existe un perfil de navegador con este nombre.",
   "error.backend.browserSessionInUse": "Una pestaña todavía usa esta sesión del navegador. Inténtalo de nuevo.",
   "error.backend.browserProfileLimit": "Puedes tener hasta {limit} perfiles de navegador.",
+  "error.backend.browserProxyNotFound": "Este proxy ya no existe.",
+  "error.backend.browserProxyAddressInvalid":
+    "Escribe una dirección de proxy, como socks5://host:1080 o http://user:password@host:3128.",
+  "error.backend.browserProxyLimit": "Puedes tener hasta {limit} proxies.",
+  "error.backend.browserProxyTaken": "Ya existe un proxy con esta dirección.",
+  "error.backend.browserProxyChanged":
+    "Este proxy cambió después de que lo abrieras. Revísalo de nuevo y vuelve a intentarlo.",
+  "error.backend.browserProxyUnreachable": "El proxy {name} no responde, así que la página no se abrió.",
+  "error.backend.browserProxySignInRefused":
+    "El proxy {name} rechazó el inicio de sesión, así que la página no se abrió.",
+  "error.backend.browserProxyComputerUnreachable":
+    "El ordenador que usa este perfil no responde, así que la página no se abrió.",
+  "error.backend.browserCertificateUntrusted":
+    "El certificado de seguridad de este sitio no es de confianza, así que la página no se abrió.",
   "error.backend.browserLowMemory":
     "Este servidor tiene poca memoria disponible, por lo que el navegador no puede abrir otra pestaña. Cierra una pestaña o espera a que terminen otros agentes.",
   "error.backend.browserOpenFailed": "No se pudo abrir {url}: {reason}",
