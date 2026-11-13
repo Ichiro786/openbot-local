@@ -2,17 +2,55 @@
 // reads /root/.openbot-local/dm-context.json inside the rootfs on every channel turn; a missing file
 // means ON. Saving writes that file through the engine's command runner, so the next channel turn
 // picks it up without a restart. Engines older than 0.59.0-2 ignore the file.
+// Build 15: "Rich UI in replies" is the same kind of switch over openbot-ui.json (engine-0.70.0-2,
+// patch 0004: the openbot-ui guide in every agent's instructions; docs/openbot-ui.md).
+import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useCallback, useEffect, useState } from "react";
 import { useUniwind } from "uniwind";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { haptics } from "@/shared/lib/haptics";
+import { useText } from "@/shared/lib/text";
 import { runCommand } from "../../../modules/openbot-engine";
 
 const DIR = "/root/.openbot-local";
-const FILE = `${DIR}/dm-context.json`;
+
+interface SwitchCopy {
+  title: MobileTextKey;
+  label: MobileTextKey;
+  footer: MobileTextKey;
+}
+
+const DM_CONTEXT_COPY = {
+  title: "mobile.settings.dmContext.title",
+  label: "mobile.settings.dmContext.label",
+  footer: "mobile.settings.dmContext.footer",
+} as const satisfies SwitchCopy;
+
+const OPENBOT_UI_COPY = {
+  title: "mobile.settings.openbotUi.title",
+  label: "mobile.settings.openbotUi.label",
+  footer: "mobile.settings.openbotUi.footer",
+} as const satisfies SwitchCopy;
 
 export function DmContextSection({ engineInstalled }: { engineInstalled: boolean }) {
+  return <EngineJsonSwitch engineInstalled={engineInstalled} file={`${DIR}/dm-context.json`} copy={DM_CONTEXT_COPY} />;
+}
+
+export function OpenbotUiSection({ engineInstalled }: { engineInstalled: boolean }) {
+  return <EngineJsonSwitch engineInstalled={engineInstalled} file={`${DIR}/openbot-ui.json`} copy={OPENBOT_UI_COPY} />;
+}
+
+function EngineJsonSwitch({
+  engineInstalled,
+  file,
+  copy,
+}: {
+  engineInstalled: boolean;
+  file: string;
+  copy: SwitchCopy;
+}) {
+  const { t } = useText();
   const { theme } = useUniwind();
   const [enabled, setEnabled] = useState(true);
   const [ready, setReady] = useState(false);
@@ -21,14 +59,14 @@ export function DmContextSection({ engineInstalled }: { engineInstalled: boolean
 
   const load = useCallback(async () => {
     try {
-      const result = await runCommand(`cat ${FILE} 2>/dev/null || true`, { timeoutMs: 15_000 });
+      const result = await runCommand(`cat ${file} 2>/dev/null || true`, { timeoutMs: 15_000 });
       // Default ON: only an explicit {"enabled": false} turns it off, as in the engine.
       setEnabled(!/"enabled"\s*:\s*false/.test(result.output));
       setReady(true);
     } catch {
       setReady(true);
     }
-  }, []);
+  }, [file]);
 
   useEffect(() => {
     if (engineInstalled) void load();
@@ -41,14 +79,14 @@ export function DmContextSection({ engineInstalled }: { engineInstalled: boolean
     void haptics.selection();
     try {
       await runCommand(
-        `mkdir -p ${DIR} && printf '{"version":1,"enabled":%s}\\n' ${next} > ${FILE}.tmp && mv ${FILE}.tmp ${FILE}`,
+        `mkdir -p ${DIR} && printf '{"version":1,"enabled":%s}\\n' ${next} > ${file}.tmp && mv ${file}.tmp ${file}`,
         {
           timeoutMs: 15_000,
         },
       );
     } catch {
       setEnabled(!next);
-      setError("Could not save. Start the engine and try again.");
+      setError(t("mobile.settings.engineSwitch.saveFailed"));
       void haptics.notification("error");
     } finally {
       setSaving(false);
@@ -56,18 +94,12 @@ export function DmContextSection({ engineInstalled }: { engineInstalled: boolean
   };
 
   return (
-    <SettingsSection
-      title="Group chats"
-      footer={
-        error ??
-        "Agents bring a short summary of your DM with them (up to 1.5 KB) and the memories that fit the request into group chats on this phone's engine. Before an agent's first group-chat turn it reviews your DM into its memories. People who can read the group chat may see what the agent repeats."
-      }
-    >
+    <SettingsSection title={t(copy.title)} footer={error ?? t(copy.footer)}>
       <SettingsRow>
         <SettingsSwitch
           value={enabled}
           disabled={!engineInstalled || !ready || saving}
-          label="Share DM context in group chats"
+          label={t(copy.label)}
           dark={theme === "dark"}
           onValueChange={(next) => void save(next)}
         />

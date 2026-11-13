@@ -45,7 +45,7 @@ import {
   useOpenBotEngine,
 } from "../../../modules/openbot-engine";
 import { AntigravityRuntimeSection } from "./antigravity-runtime-section";
-import { DmContextSection } from "./dm-context-section";
+import { DmContextSection, OpenbotUiSection } from "./dm-context-section";
 import { StorageSection } from "./storage-section";
 
 /** "412 MB" for a release asset; null when the size is unknown. */
@@ -536,6 +536,8 @@ function LocalEngineScreenInner() {
       />
 
       <DmContextSection engineInstalled={status.installedVersion != null && status.phase !== "installing"} />
+
+      <OpenbotUiSection engineInstalled={status.installedVersion != null && status.phase !== "installing"} />
 
       <StorageSection installing={status.phase === "installing"} />
 

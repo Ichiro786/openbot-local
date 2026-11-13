@@ -490,4 +490,13 @@ export const messages = defineMessages("mobile.settings", {
     "Your agents' workspaces, chats, sign-in and the running engine are not touched.",
   "mobile.settings.storage.cleaned": "Freed {size}.",
   "mobile.settings.storage.cleanFailed": "Could not clean up {name}: {error}",
+  "mobile.settings.engineSwitch.saveFailed": "Could not save. Start the engine and try again.",
+  "mobile.settings.dmContext.title": "Group chats",
+  "mobile.settings.dmContext.label": "Share DM context in group chats",
+  "mobile.settings.dmContext.footer":
+    "Agents bring a short summary of your DM with them (up to 1.5 KB) and the memories that fit the request into group chats on this phone's engine. Before an agent's first group-chat turn it reviews your DM into its memories. People who can read the group chat may see what the agent repeats.",
+  "mobile.settings.openbotUi.title": "Replies",
+  "mobile.settings.openbotUi.label": "Rich UI in replies",
+  "mobile.settings.openbotUi.footer":
+    "Agents may answer with tables, charts, buttons and forms that this app draws natively, when that is clearer than text. Off: agents are no longer told about them and write plain text. Needs engine 0.70.0-2 or later.",
 });
