@@ -962,6 +962,7 @@ if [ -f .github/e2e/quick113 ]; then
   if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
+  if [ -f .github/e2e/shots ]; then log "== build 12 key-screen shots"; home; chat_scn s-chat ON; blur_max s-after-chat; retry_infra whatsapp_scn s-wa; blur_max s-after-wa; fi
   log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"
   adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
   if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
