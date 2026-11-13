@@ -42,7 +42,7 @@ class OpenBotEngineModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OpenBotEngine")
 
-    Events("onStatusChange", "onCommandOutput", "onCommandExit")
+    Events("onStatusChange", "onCommandOutput", "onCommandExit", "onStorageProgress")
 
     OnCreate {
       val ctx = appContext.reactContext?.applicationContext
@@ -177,6 +177,21 @@ class OpenBotEngineModule : Module() {
 
     AsyncFunction("logout") Coroutine { ->
       control("POST", "/v1/logout", emptyMap())
+    }
+
+    /**
+     * Settings › Local engine › Storage: sizes in bytes per category, Android's own figures and the
+     * guards the cleanups use. Runs off the main thread; progress arrives as `onStorageProgress`.
+     */
+    AsyncFunction("storageScan") Coroutine { ->
+      EngineStorage.scan(context) { files, bytes ->
+        sendEvent("onStorageProgress", mapOf("files" to files.toDouble(), "bytes" to bytes.toDouble()))
+      }
+    }
+
+    /** Cleans one category (previous, partial, downloads, logs, packageCaches, appCache); resolves with the bytes freed. */
+    AsyncFunction("storageClean") Coroutine { category: String ->
+      EngineStorage.clean(context, category)
     }
 
     AsyncFunction("getConfig") {

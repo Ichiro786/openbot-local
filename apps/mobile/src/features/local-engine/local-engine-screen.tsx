@@ -46,6 +46,7 @@ import {
 } from "../../../modules/openbot-engine";
 import { AntigravityRuntimeSection } from "./antigravity-runtime-section";
 import { DmContextSection } from "./dm-context-section";
+import { StorageSection } from "./storage-section";
 
 /** "412 MB" for a release asset; null when the size is unknown. */
 function formatBytes(bytes: number | null | undefined): string | null {
@@ -535,6 +536,8 @@ function LocalEngineScreenInner() {
       />
 
       <DmContextSection engineInstalled={status.installedVersion != null && status.phase !== "installing"} />
+
+      <StorageSection installing={status.phase === "installing"} />
 
       <Animated.View layout={layout} className="gap-3">
         <SettingsSection

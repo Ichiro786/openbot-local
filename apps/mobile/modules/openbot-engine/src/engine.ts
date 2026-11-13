@@ -6,6 +6,9 @@ import type {
   EngineConfigInput,
   EngineStatus,
   NotificationPermission,
+  StorageCleanable,
+  StorageProgressEvent,
+  StorageScan,
   UpdateCheck,
 } from "./OpenBotEngine.types";
 import { native } from "./OpenBotEngineModule";
@@ -162,6 +165,22 @@ export function getDynamicColors(): Record<string, string> | null {
   } catch {
     return null;
   }
+}
+
+/** Measures the app's private storage by category (Settings › Local engine › Storage). */
+export async function storageScan(onProgress?: (event: StorageProgressEvent) => void): Promise<StorageScan> {
+  const engine = requireNative();
+  const subscription = onProgress ? engine.addListener("onStorageProgress", onProgress) : null;
+  try {
+    return await engine.storageScan();
+  } finally {
+    subscription?.remove();
+  }
+}
+
+/** Cleans one category; resolves with the bytes freed. Rejects when its guard refuses (install running, …). */
+export function storageClean(category: StorageCleanable): Promise<number> {
+  return requireNative().storageClean(category);
 }
 
 export function addStatusListener(listener: (status: EngineStatus) => void): () => void {

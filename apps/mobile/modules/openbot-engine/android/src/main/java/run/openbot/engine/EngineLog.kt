@@ -65,6 +65,12 @@ class EngineLog private constructor(
     written = 0
   }
 
+  /** Deletes the rotated files (engine.log.1 ..), keeps the live log and the ring. */
+  @Synchronized
+  fun deleteRotated() {
+    (1..keep).forEach { File(dir, "engine.log.$it").delete() }
+  }
+
   private fun open(): FileWriter {
     dir.mkdirs()
     written = current.length()

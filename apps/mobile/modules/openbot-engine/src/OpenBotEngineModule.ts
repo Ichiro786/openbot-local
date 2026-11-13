@@ -7,6 +7,8 @@ import type {
   EngineStatus,
   NotificationPermission,
   OpenBotEngineEvents,
+  StorageCleanable,
+  StorageScan,
   UpdateCheck,
 } from "./OpenBotEngine.types";
 
@@ -43,6 +45,8 @@ declare class OpenBotEngineNative extends NativeModule<OpenBotEngineEvents> {
   getSdkInt(): number;
   getDynamicColors(): Record<string, string> | null;
   installCrashHandler(): void;
+  storageScan(): Promise<StorageScan>;
+  storageClean(category: StorageCleanable): Promise<number>;
 }
 
 /** `modules/openbot-engine`. Null on iOS, web and Expo Go, which have no local engine. */

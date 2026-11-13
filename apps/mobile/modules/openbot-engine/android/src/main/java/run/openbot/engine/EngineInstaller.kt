@@ -8,6 +8,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -309,7 +310,9 @@ class EngineInstaller(
   // ---------------------------------------------------------------------------------------------
 
   /** Installs [release]. The engine must be stopped first (the service does that). */
-  suspend fun install(release: EngineRelease) = withContext(Dispatchers.IO) {
+  suspend fun install(release: EngineRelease) = EngineStorage.diskLock.withLock { installLocked(release) }
+
+  private suspend fun installLocked(release: EngineRelease) = withContext(Dispatchers.IO) {
     paths.ensureDirs()
     log.system("Installing engine ${release.tag} (${release.source})")
     checkFreeSpace(release)

@@ -409,4 +409,85 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.voice.elevenLabs.model.v3": "Expressive · slow",
   "mobile.settings.voice.elevenLabs.model.v4Turbo": "90+ languages · fast",
   "mobile.settings.voice.elevenLabs.model.v4": "Best quality · 90+ languages · slow",
+  "mobile.settings.storage.title": "Storage",
+  "mobile.settings.storage.scanning": "Measuring…",
+  "mobile.settings.storage.scanningProgress": "Measuring… {size} so far",
+  "mobile.settings.storage.totalLabel": "Engine and app data",
+  "mobile.settings.storage.android": "Android Settings counts {data} of data, plus {app} for the app itself.",
+  "mobile.settings.storage.free": "{size} free on this phone.",
+  "mobile.settings.storage.incomplete":
+    "The scan stopped early on a very large folder, so these sizes are a lower bound.",
+  "mobile.settings.storage.rescan": "Scan again",
+  "mobile.settings.storage.scanFailed": "Could not measure storage: {error}",
+  "mobile.settings.storage.nodeModules": "{size} of this is node_modules folders.",
+  "mobile.settings.storage.category.engineSystem": "Engine system",
+  "mobile.settings.storage.category.engineSystem.explain":
+    "The Ubuntu files the engine runs on. Needed while the engine is installed.",
+  "mobile.settings.storage.category.workspaces": "Agent workspaces",
+  "mobile.settings.storage.category.workspaces.explain":
+    "Files your agents made and work in (~/OpenBot). Never cleaned here.",
+  "mobile.settings.storage.category.openbotData": "OpenBot data",
+  "mobile.settings.storage.category.openbotData.explain":
+    "The engine's database, sign-in, provider tools and browser data. Never cleaned here.",
+  "mobile.settings.storage.category.antigravity": "Antigravity (Gemini)",
+  "mobile.settings.storage.category.antigravity.explain":
+    "The Gemini runtime set up on this phone. Remove it from its own section if you no longer use Gemini.",
+  "mobile.settings.storage.category.otherUserData": "Other engine data",
+  "mobile.settings.storage.category.otherUserData.explain":
+    "Everything else in the engine's home folder: settings, keyring, tools you installed.",
+  "mobile.settings.storage.category.packageCaches": "Package caches",
+  "mobile.settings.storage.category.packageCaches.explain":
+    "Copies npm, pip and yarn keep of downloaded packages. Safe to clear; they download again when needed.",
+  "mobile.settings.storage.category.toolCaches": "Tool caches",
+  "mobile.settings.storage.category.toolCaches.explain":
+    "Tools agents run with npx or bunx. Kept, because a running tool may use them.",
+  "mobile.settings.storage.category.otherCaches": "Other caches",
+  "mobile.settings.storage.category.otherCaches.explain":
+    "Other programs' caches in the engine, such as browsers and models. Kept.",
+  "mobile.settings.storage.category.previous": "Previous engine",
+  "mobile.settings.storage.category.previous.explain":
+    "The engine an update replaced, kept so a failed update can go back to it.",
+  "mobile.settings.storage.category.partial": "Unfinished install",
+  "mobile.settings.storage.category.partial.explain":
+    "Files an install or update left behind when it stopped part way.",
+  "mobile.settings.storage.category.downloads": "Engine downloads",
+  "mobile.settings.storage.category.downloads.explain": "Downloaded engine archives and partial downloads.",
+  "mobile.settings.storage.category.logs": "Logs",
+  "mobile.settings.storage.category.logs.explain": "The engine's logs, for troubleshooting.",
+  "mobile.settings.storage.category.appCache": "App cache",
+  "mobile.settings.storage.category.appCache.explain": "Pictures and media the app keeps to show them faster.",
+  "mobile.settings.storage.category.other": "Other app data",
+  "mobile.settings.storage.category.other.explain": "Chats cached on this phone, settings and the app's own files.",
+  "mobile.settings.storage.findings.title": "Recommendations",
+  "mobile.settings.storage.findings.empty": "Nothing is stuck or unneeded right now.",
+  "mobile.settings.storage.findings.installing":
+    "An engine install is running. Recommendations come back when it is done.",
+  "mobile.settings.storage.finding.previousEngine": "Leftover previous engine",
+  "mobile.settings.storage.finding.previousEngine.body":
+    "The current engine started fine, so the old one is no longer needed for a rollback.",
+  "mobile.settings.storage.finding.interruptedInstall": "Interrupted install files",
+  "mobile.settings.storage.finding.interruptedInstall.body":
+    "An install or update stopped part way and left these behind.",
+  "mobile.settings.storage.finding.oldDownloads": "Old engine downloads",
+  "mobile.settings.storage.finding.oldDownloads.body":
+    "Engine archives that are already installed or were never finished.",
+  "mobile.settings.storage.finding.bigCaches": "Big package caches",
+  "mobile.settings.storage.finding.bigCaches.body":
+    "npm, pip and yarn download caches. Packages download again when needed.",
+  "mobile.settings.storage.finding.bigLogs": "Oversized logs",
+  "mobile.settings.storage.finding.bigLogs.body": "Old log files go; the newest part of the live log is kept.",
+  "mobile.settings.storage.finding.appCache": "Big app cache",
+  "mobile.settings.storage.finding.appCache.body": "Cached pictures and media. They load again when you open them.",
+  "mobile.settings.storage.cleanUp": "Clean up",
+  "mobile.settings.storage.cleanAll": "Clean up all safe items",
+  "mobile.settings.storage.cleaning": "Cleaning up…",
+  "mobile.settings.storage.cancel": "Cancel",
+  "mobile.settings.storage.confirm.title": "Clean up {name}?",
+  "mobile.settings.storage.confirm.allTitle": "Clean up all safe items?",
+  "mobile.settings.storage.confirm.removes": "Removes: {items}.",
+  "mobile.settings.storage.confirm.frees": "Frees about {size}.",
+  "mobile.settings.storage.confirm.keeps":
+    "Your agents' workspaces, chats, sign-in and the running engine are not touched.",
+  "mobile.settings.storage.cleaned": "Freed {size}.",
+  "mobile.settings.storage.cleanFailed": "Could not clean up {name}: {error}",
 });

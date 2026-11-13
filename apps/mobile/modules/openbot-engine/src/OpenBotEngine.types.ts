@@ -122,8 +122,59 @@ export interface NotificationPermission {
   canAskAgain: boolean;
 }
 
+/** Storage categories the native scan measures, in bytes. */
+export type StorageCategory =
+  | "engineSystem"
+  | "workspaces"
+  | "openbotData"
+  | "antigravity"
+  | "packageCaches"
+  | "toolCaches"
+  | "otherCaches"
+  | "otherUserData"
+  | "previous"
+  | "partial"
+  | "downloads"
+  | "logs"
+  | "appCache"
+  | "other";
+
+/** Categories with a native cleanup. Each re-checks its own guard natively. */
+export type StorageCleanable = "previous" | "partial" | "downloads" | "logs" | "packageCaches" | "appCache";
+
+export interface StorageScan {
+  /** Bytes per category, plus `nodeModules` (inside workspaces, informational). */
+  sizes: Partial<Record<StorageCategory | "nodeModules", number>>;
+  /** Sum of the categories (not nodeModules). */
+  total: number;
+  /** Android Settings' App / Data / Cache for this app; null below Android 8 or when refused. */
+  android: { appBytes: number; dataBytes: number; cacheBytes: number } | null;
+  deviceFree: number;
+  deviceTotal: number;
+  /** False when the scan hit its time budget; the sizes are then a lower bound. */
+  complete: boolean;
+  files: number;
+  durationMs: number;
+  scannedAtMs: number;
+  /** An engine install or update holds the disk; partial/downloads cleanups are refused. */
+  installing: boolean;
+  engineInstalled: boolean;
+  engineRunning: boolean;
+  updatePendingConfirm: boolean;
+  /** r.prev can go: the current engine is up and confirmed, or r.prev has no rollback record. */
+  previousRemovable: boolean;
+  previousOrphan: boolean;
+  downloadFiles: number;
+}
+
+export interface StorageProgressEvent {
+  files: number;
+  bytes: number;
+}
+
 export type OpenBotEngineEvents = {
   onStatusChange: (status: EngineStatus) => void;
   onCommandOutput: (event: CommandOutputEvent) => void;
   onCommandExit: (event: CommandResult) => void;
+  onStorageProgress: (event: StorageProgressEvent) => void;
 };
