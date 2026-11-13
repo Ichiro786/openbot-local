@@ -62,9 +62,15 @@ jobs:
             tag="$base-$n"
           fi
           size=$(( $(stat -c %s "$apk") / 1048576 ))
+          # The in-app updater offers a release only by this line (app-update/model/local-releases.ts).
+          app=$(gh api "repos/$GITHUB_REPOSITORY/contents/apps/mobile/app.json?ref=$SHA" --jq .content | base64 -d)
+          vname=$(jq -r .expo.version <<<"$app")
+          vcode=$(jq -r '.expo.android.versionCode // empty' <<<"$app")
+          [ -n "$vcode" ] || { echo "::error::apps/mobile/app.json has no expo.android.versionCode at $SHA"; exit 1; }
           cat >notes.md <<EOF
           OpenBot Local (run.openbot.local), arm64-v8a, signed with the Expo debug keystore (sideload only).
 
+          - Version ${vname} (versionCode ${vcode})
           - \`$(basename "$apk")\`: ${size} MiB, engine payload bundled
           - Built from ${SHA} by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}
 
