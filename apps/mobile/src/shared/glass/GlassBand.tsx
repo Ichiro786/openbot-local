@@ -1,7 +1,8 @@
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
-import { type RefObject, useId, useState } from "react";
+import { type RefObject, useEffect, useId, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
@@ -18,6 +19,14 @@ const REDUCTION = 4;
 const DIM_DARK = 0.32;
 const DIM_LIGHT = 0.12;
 const STEPS = 24;
+/**
+ * Build 14 (Syed's phone, build 12 videos: the frost snapped on ~400 ms after the chat opened): while the
+ * blur is not running yet, a static scrim of the band's shape stands in for it (no live blur under the
+ * moving chat), and the blur fades in over it.
+ */
+const SCRIM_DARK = 0.86;
+const SCRIM_LIGHT = 0.8;
+const CROSSFADE_MS = 120;
 
 /**
  * Opaque from 0 to `solid`, then a long smootherstep down to 0 at the bottom edge (Syed: no visible
@@ -49,6 +58,7 @@ export function GlassBand({
   style,
   fadeHeight,
   shapes,
+  scrim = false,
 }: {
   target: RefObject<ViewInstance | null> | undefined;
   shown: boolean;
@@ -62,6 +72,8 @@ export function GlassBand({
    * that get the band's full frost and dim from the same one blur, as the buttons over the band have.
    */
   shapes?: readonly { x: number; y: number; width: number; height: number }[];
+  /** Build 14: while the blur is not live, the static scrim stands in for it (a zoom open, a close). */
+  scrim?: boolean;
 }) {
   const dark = useUniwind().theme === "dark";
   const id = useId().replaceAll(":", "");
@@ -69,6 +81,14 @@ export function GlassBand({
   const running = ready && shown && ANDROID_BLUR && Boolean(target?.current);
   const live = useBlurLive(running);
   useBlurBudget(live, "glass-band");
+  // The blur fades in from 0 (never a one-frame snap, nor the blur's first unblurred frame) and goes at
+  // once when it stops; the scrim fades out under it, and back at once.
+  const blurShown = useSharedValue(0);
+  useEffect(() => {
+    blurShown.set(live ? withTiming(1, { duration: CROSSFADE_MS, easing: Easing.out(Easing.quad) }) : 0);
+  }, [live, blurShown]);
+  const blurStyle = useAnimatedStyle(() => ({ opacity: blurShown.get() }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim ? 1 - blurShown.get() : 0 }));
   if (!ANDROID_BLUR || !target) return null;
   const ramp = stops(solid);
   return (
@@ -99,18 +119,48 @@ export function GlassBand({
         }
       >
         {target.current ? (
-          <BlurView
-            blurTarget={target}
-            blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
-            intensity={INTENSITY}
-            blurReductionFactor={REDUCTION}
-            // Council D12: blur only the band's part of the list (plus the blur's reach), not the whole list.
-            blurRegion
-            tint={dark ? "dark" : "light"}
-            style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
-          />
+          <Animated.View style={[StyleSheet.absoluteFill, blurStyle]}>
+            <BlurView
+              blurTarget={target}
+              blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
+              intensity={INTENSITY}
+              blurReductionFactor={REDUCTION}
+              // Council D12: blur only the band's part of the list (plus the blur's reach), not the whole list.
+              blurRegion
+              tint={dark ? "dark" : "light"}
+              style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
+            />
+          </Animated.View>
         ) : null}
       </MaskedView>
+      {scrim ? (
+        <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
+          <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+            <Defs>
+              <LinearGradient id={`band-scrim-${id}`} x1="0" x2="0" y1="0" y2="1">
+                {ramp.map(({ offset, opacity }) => (
+                  <Stop
+                    key={offset}
+                    offset={offset}
+                    stopColor={dark ? "#000000" : "#ffffff"}
+                    stopOpacity={opacity * (dark ? SCRIM_DARK : SCRIM_LIGHT)}
+                  />
+                ))}
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height={fadeHeight ?? "100%"} fill={`url(#band-scrim-${id})`} />
+            {shapes?.map((shape) => (
+              <Rect
+                key={`${shape.x}:${shape.y}`}
+                {...shape}
+                rx={shape.height / 2}
+                fill={dark ? "#000000" : "#ffffff"}
+                fillOpacity={dark ? SCRIM_DARK : SCRIM_LIGHT}
+              />
+            ))}
+          </Svg>
+        </Animated.View>
+      ) : null}
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <LinearGradient id={`band-dim-${id}`} x1="0" x2="0" y1="0" y2="1">
