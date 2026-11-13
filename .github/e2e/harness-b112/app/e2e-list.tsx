@@ -48,6 +48,15 @@ const OLD: ChatMessage[] = Array.from({ length: 8 }, (_, i) => ({
   streaming: false,
   status: "completed",
 }));
+// Build 14: the send lane sends after a LONG agent reply (Syed: the scroll to his message stuttered then).
+OLD.push({
+  id: "oldlong",
+  kind: "message",
+  author: "agent",
+  body: Array.from({ length: 14 }, (_, i) => `**Point ${i + 1}.** A long markdown paragraph with \`code\`, a [link](https://example.com) and enough words to wrap over several lines on a phone screen.`).join("\n\n"),
+  streaming: false,
+  status: "completed",
+} as ChatMessage);
 const REPLY = ["Sure, ", "here is ", "a streamed ", "reply that ", "arrives in ", "six chunks."];
 const target = {
   kind: "agent" as const,
@@ -112,8 +121,44 @@ function E2EList() {
       if (h !== ph) runOnJS(report)(`E2EKB shows=${shows.get()} backsteps=${backs.get()} maxBack=${maxBack.get().toFixed(1)}`);
     },
   );
+  // Build 14 send glide: after a send, the list's scroll must only move toward the end (rev = direction
+  // changes over 2 dp, maxStep = the largest move in one frame, steps = frames that moved).
+  const sArmed = useSharedValue(false);
+  const sPrev = useSharedValue(0);
+  const sDir = useSharedValue(0);
+  const sRev = useSharedValue(0);
+  const sMax = useSharedValue(0);
+  const sSteps = useSharedValue(0);
+  const [scrollStats, setScrollStats] = useState("E2ESCROLL rev=0 maxStep=0 steps=0");
+  const scrollReport = (text: string) => {
+    setScrollStats(text);
+    console.log(text);
+  };
+  useAnimatedReaction(
+    () => motion.scrollOffset.get(),
+    (y) => {
+      if (!sArmed.get()) {
+        sPrev.set(y);
+        return;
+      }
+      const d = y - sPrev.get();
+      sPrev.set(y);
+      if (Math.abs(d) <= 2) return;
+      const dir = d > 0 ? 1 : -1;
+      if (sDir.get() !== 0 && dir !== sDir.get()) sRev.set(sRev.get() + 1);
+      sDir.set(dir);
+      sSteps.set(sSteps.get() + 1);
+      sMax.set(Math.max(sMax.get(), Math.abs(d)));
+      runOnJS(scrollReport)(`E2ESCROLL rev=${sRev.get()} maxStep=${sMax.get().toFixed(1)} steps=${sSteps.get()}`);
+    },
+  );
   const send = (text: string) => {
     const n = stats.sent + 1;
+    sRev.set(0);
+    sMax.set(0);
+    sSteps.set(0);
+    sDir.set(0);
+    sArmed.set(true);
     motion.beginSend();
     Keyboard.dismiss();
     setDraft("");
@@ -183,7 +228,7 @@ function E2EList() {
         frostTarget={colorOS ? frost : undefined}
       />
       <View pointerEvents="none" style={{ position: "absolute", top: insets.top + 100, left: 12 }}>
-        <Text style={{ color: "#fff", fontSize: 12 }}>{`E2E LIST OPEN colorOS=${colorOS ? "ON" : "OFF"} E2ELIST sent=${stats.sent} replied=${stats.replied}`}</Text>
+        <Text style={{ color: "#fff", fontSize: 12 }}>{`E2E LIST OPEN colorOS=${colorOS ? "ON" : "OFF"} E2ELIST sent=${stats.sent} replied=${stats.replied} ${scrollStats}`}</Text>
         <Text style={{ color: "#fff", fontSize: 12 }}>{kb}</Text>
       </View>
       <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, motion.composerStyle]} onLayout={motion.onComposerLayout}>

@@ -768,6 +768,7 @@ list_scn() { # $1 name $2 ON|OFF: the real chat list: focus -> keyboard up, send
   sleep 0.5; adb shell input tap $xy; sleep 3.4; wait $rec 2>/dev/null
   gfx "$n-send"; adb pull /sdcard/$n-send.mp4 "$OUT/$n-send.mp4" >/dev/null 2>&1; check "$n-send" || return
   expect_text "replied=1" 6 "$n-s1"; shot "$n-replied"
+  local sc; sc=$(grep -oE 'E2ESCROLL[^"&]*' "$OUT/$n-s1.xml" 2>/dev/null | head -1); log "  send scroll ($n): $sc"; echo "$n $sc" >> "$OUT/send-summary.txt"
   blur_max "$n"
   adb shell input keyevent 4; sleep 1; home
 }
@@ -961,7 +962,9 @@ if [ -f .github/e2e/quick113 ]; then
   touch "$OUT/real-lanes.txt"; ensure_running q
   if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
-  toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; toggle_to q-on ON
+  # Build 14: send after a long reply, ColorOS ON and OFF (jank + scroll direction changes).
+  if [ -f .github/e2e/sendlane ]; then list_scn q-send ON; list_scn q-send2 ON; fi
+  toggle_to q-off OFF; if [ -n "${BACKXY:-}" ]; then real_lanes OFF 5 "L2 L3 L9"; fi; [ -f .github/e2e/sendlane ] && list_scn q-sendoff OFF; toggle_to q-on ON
   if [ -f .github/e2e/shots ]; then log "== build 12 key-screen shots"; home; zoom_open s-zoom ON && chat_scn s-chat ON; blur_max s-after-chat; retry_infra whatsapp_scn s-wa; blur_max s-after-wa; fi
   log "real lanes summary: $(cut -d' ' -f4 "$OUT/real-lanes.txt" | sort | uniq -c | tr '\n' ' ')"
   adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
