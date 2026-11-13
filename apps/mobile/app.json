@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "run.openbot.local",
-      "versionCode": 10410,
+      "versionCode": 10411,
       "icon": "./assets/icons/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-foreground.png",
