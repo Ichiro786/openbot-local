@@ -359,7 +359,7 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
   // Home rows: arm the zoom at the row's centre (as chat-link-pressable arms it at the tap), then push.
   let f = readFileSync(index, "utf8");
   f = must(f, 'import { zoomOpen } from "@/shared/motion/ZoomOpenOverlay";', 'import { armLiveZoom as __arm } from "@/shared/motion/liveZoom";');
-  f = must(f, "      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0)) go();", "      (globalThis as any).__e2eTap = Date.now();\n      if (width && height) __arm(y + height / 2);\n      go();");
+  f = must(f, "      if (!width || !height || !zoomOpen({ x, y, width, height }, go, 0)) go();", "      (globalThis as any).__e2eTap = Date.now();\n      if (width && height) __arm({ x, y, width, height });\n      go();");
   const ref = "const zoomRow = useRef<View>(null);";
   const row = '<Text style={{ color: "#fff", fontSize: 17 }}>E2E Zoom chat (tap me)</Text>\n        </Pressable>';
   f = must(f, ref, `${ref}
@@ -370,7 +370,7 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
     if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
     view.measureInWindow((x, y, width, height) => {
       (globalThis as any).__e2eTap = Date.now();
-      if (width && height) __arm(y + height / 2);
+      if (width && height) __arm({ x, y, width, height });
       go();
     });
   };
@@ -383,7 +383,7 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
     if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
     view.measureInWindow((x, y, width, height) => {
       (globalThis as any).__e2eTap = Date.now();
-      if (width && height) __arm(y + height / 2);
+      if (width && height) __arm({ x, y, width, height });
       go();
     });
   };
@@ -396,7 +396,7 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
     if (!view || !useMotionPreferences.getState().colorOSMotion) return go();
     view.measureInWindow((x, y, width, height) => {
       (globalThis as any).__e2eTap = Date.now();
-      if (width && height) __arm(y + height / 2);
+      if (width && height) __arm({ x, y, width, height });
       go();
     });
   };`);
@@ -460,7 +460,13 @@ const __e2eSince = () => Date.now() - ((globalThis as any).__e2eTap ?? 0);`);
   if (z.includes(rafOpen)) z = must(z, rafOpen, "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = undefined;\n    let frame = requestAnimationFrame(() => {\n      frame = requestAnimationFrame(() => {\n        __e2e.start = __e2eSince();");
   else z = must(z, "    const done = api.opened;\n    visible.set(\n      openClock(", "    const done = api.opened;\n    __e2e.push = __e2eSince();\n    __e2e.start = __e2eSince();\n    visible.set(\n      openClock(");
   z = must(z, "        st.gestureOn = true;", "        st.gestureOn = true;\n        __e2e.maxP = 0;");
-  z = must(z, "        if (st.gestureOn) gesture.set(progress);", "        if (st.gestureOn) gesture.set(progress);\n        __e2e.maxP = Math.max(__e2e.maxP, progress);");
+  // Build 14: the progress is followed on the UI thread (withTiming); older apps set it directly.
+  {
+    const follow = "        if (st.gestureOn) gesture.set(withTiming(progress, { duration: FOLLOW_MS, easing: Easing.linear }));";
+    const direct = "        if (st.gestureOn) gesture.set(progress);";
+    const at = z.includes(follow) ? follow : direct;
+    z = must(z, at, `${at}\n        __e2e.maxP = Math.max(__e2e.maxP, progress);`);
+  }
   z = must(z, "        gestureCancelledAt = Date.now();", "        gestureCancelledAt = Date.now();\n        console.log(\"E2ECLOSE cancel\");");
   writeFileSync(lz, z);
   console.log("build 11.3 simple zoom harness applied");
