@@ -423,7 +423,9 @@ if (existsSync("apps/mobile/src/shared/motion/liveZoom.ts")) {
   const real = "apps/mobile/src/app/e2e-real.tsx";
   let r = readFileSync(real, "utf8");
   r = must(r, "export default function E2ERealRoute() {", "function E2ERealRoute() {");
-  r = `import { withLiveZoom as __withLiveZoom } from "@/shared/motion/LiveZoomScreen";\n${r}\nexport default __withLiveZoom(E2ERealRoute);\n`;
+  // Build 13: the real chat route opens on the zoom shell skeleton, as the app's agent route does (when the app has it).
+  const __shell = existsSync("apps/mobile/src/features/chat/components/chat-open-skeleton.tsx");
+  r = `import { withLiveZoom as __withLiveZoom } from "@/shared/motion/LiveZoomScreen";\n${__shell ? 'import { ChatShellSkeleton as __Shell } from "@/features/chat/components/chat-open-skeleton";\n' : ""}${r}\nexport default __withLiveZoom(E2ERealRoute${__shell ? ", __Shell" : ""});\n`;
   writeFileSync(real, r);
   // Routes: the same options and listener the real chat routes use.
   const lzOptions = (fallback) => `({ route }) => ({ ...(__e2eLz(route.key) ? { animation: __e2eLz(route.key).nativeClose ? "slide_from_right" : "none", presentation: "transparentModal", contentStyle: { backgroundColor: "transparent" } } : { animation: "slide_from_right", contentStyle: { backgroundColor: "#000" } }), headerShown: false${fallback} })`;
