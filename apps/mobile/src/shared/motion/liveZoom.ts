@@ -10,8 +10,10 @@ import { routeMemo } from "./routeMemo";
  */
 
 /**
- * Home stays drawn under a zoomed chat. From the tap until the chat unmounts, home pauses its two blurs:
- * the screen never runs more than two, and none re-renders under the moving chat.
+ * Home stays drawn under a zoomed chat. Build 14: home pauses its two blurs only while the open chat
+ * covers it (from the open's end, when the chat's own frosts start, to the close's start, when they stop),
+ * so the screen never runs more than two and the tap itself re-renders nothing on home (build 12 videos:
+ * the home search bar redrew on the tap frame, then home froze 133-342 ms before the open started).
  */
 let covering = 0;
 const watchers = new Set<() => void>();
@@ -94,7 +96,6 @@ let armed: {
   origin: ZoomOrigin;
   chatId?: string;
   measure?: MeasureSource;
-  release: () => void;
   expire: ReturnType<typeof setTimeout>;
 } | null = null;
 /** The home blur pause each zoomed route holds from its tap until it unmounts (or closes). */
@@ -119,15 +120,12 @@ const routes = routeMemo<LiveZoom | false>();
 function dropArmed(): void {
   const current = armed;
   armed = null;
-  if (!current) return;
-  clearTimeout(current.expire);
-  current.release();
+  if (current) clearTimeout(current.expire);
 }
 
 /**
- * Called by a chat row right before it navigates. Home pauses its blurs from here (the commit lands
- * with the chat's mount, before the open starts) until the chat unmounts, so no blur re-renders under
- * the moving chat. A zoom that no push takes releases home after ARM_MS.
+ * Called by a chat row right before it navigates: plain module state, nothing on home renders. A zoom
+ * that no push takes is dropped after ARM_MS.
  */
 export function armLiveZoom(origin: ZoomOrigin, chatId?: string, measure?: MeasureSource): void {
   dropArmed();
@@ -136,7 +134,6 @@ export function armLiveZoom(origin: ZoomOrigin, chatId?: string, measure?: Measu
     origin,
     chatId,
     measure,
-    release: holdHomeCovered(),
     expire: setTimeout(dropArmed, ARM_MS),
   };
 }
@@ -149,7 +146,6 @@ export function liveZoomFor(routeKey: string | undefined): LiveZoom | undefined 
     if (!current || Date.now() >= current.until) return false;
     armed = null;
     clearTimeout(current.expire);
-    homeHolds.set(routeKey, current.release);
     return { origin: current.origin, chatId: current.chatId, measure: current.measure };
   });
   return zoom || undefined;
@@ -160,7 +156,12 @@ export function liveZoomOf(routeKey: string): LiveZoom | undefined {
   return routes.peek(routeKey) || undefined;
 }
 
-/** The zoomed chat has unmounted (or closed): home's blurs run again. */
+/** The zoomed chat's open has ended and covers home: home's blurs pause (once per route). */
+export function coverLiveZoomHome(routeKey: string): void {
+  if (!homeHolds.has(routeKey)) homeHolds.set(routeKey, holdHomeCovered());
+}
+
+/** The zoomed chat starts its close (or unmounted, or closed): home's blurs run again. */
 export function releaseLiveZoomHome(routeKey: string): void {
   const release = homeHolds.get(routeKey);
   homeHolds.delete(routeKey);

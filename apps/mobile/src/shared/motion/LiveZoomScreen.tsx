@@ -27,7 +27,14 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
 import { isAndroid } from "@/shared/lib/platform";
-import { type LiveZoom, LiveZoomSettledContext, liveZoomOf, releaseLiveZoomHome, resolveZoomOrigin } from "./liveZoom";
+import {
+  coverLiveZoomHome,
+  type LiveZoom,
+  LiveZoomSettledContext,
+  liveZoomOf,
+  releaseLiveZoomHome,
+  resolveZoomOrigin,
+} from "./liveZoom";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
 
@@ -160,6 +167,8 @@ function useLiveZoomMotion(
   closing: SharedValue<number>,
   /** Build 14: re-finds the element the chat closes into (it may have moved since the open). */
   resolveOrigin: () => void,
+  /** Build 14: a close starts: the chat's frosts stop (home's blurs run again). */
+  onClosing: () => void,
 ) {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   const focused = useIsFocused();
@@ -170,6 +179,8 @@ function useLiveZoomMotion(
   activeNow.current = active;
   const settledCallback = useRef(onSettled);
   settledCallback.current = onSettled;
+  const closingCallback = useRef(onClosing);
+  closingCallback.current = onClosing;
   const st = useRef<MotionFlags>({ leaving: null, recover: null, gestureOn: false, settled: false }).current;
 
   const api = useRef({
@@ -178,6 +189,8 @@ function useLiveZoomMotion(
       // Never during a close: the frosts and deferred content would commit under the moving chat.
       if (st.settled || st.leaving) return;
       st.settled = true;
+      // Build 14: the chat covers home now: home's blurs pause as the chat's frosts start.
+      coverLiveZoomHome(routeKey);
       settledCallback.current();
     },
     /** The real pop of this chat; a no-op once the chat is not on top. */
@@ -249,6 +262,12 @@ function useLiveZoomMotion(
       }, BACK_HARD_MS);
       st.leaving = { popped: false, timer };
       st.gestureOn = false;
+      // Build 14: home's blurs run again under the closing card and the chat's frosts stop (their
+      // scrim stands in), so the unmount at the end restarts nothing on home (build 12 video 97: a
+      // 34 ms frame there). An open that comes back (showAgain) settles again.
+      st.settled = false;
+      releaseLiveZoomHome(routeKey);
+      closingCallback.current();
       resolveOrigin();
       // From where it is (mid-open, or shrunk by the gesture) to closed, on the close's curve: it leaves
       // at once and lands softly in the element. The same eased point, so a close mid-open does not jump.
@@ -407,9 +426,11 @@ function LiveZoomFrame({
       originH.set(rect.height);
     });
   }, [zoom, originX, originY, originW, originH]);
-  // One commit, after the open: the chat's frosts and deferred content start then.
+  // One commit after the open (the chat's frosts start), one at a close's start (they stop).
   const [settled, setSettled] = useState(false);
-  useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge, closing, resolveOrigin);
+  const onSettled = useCallback(() => setSettled(true), []);
+  const onClosing = useCallback(() => setSettled(false), []);
+  useLiveZoomMotion(routeKey, zoom, onSettled, visible, gesture, edge, closing, resolveOrigin, onClosing);
   const [chatShown, setChatShown] = useState(!shell);
   const [shellGone, setShellGone] = useState(!shell);
   const shellOpacity = useSharedValue(1);
