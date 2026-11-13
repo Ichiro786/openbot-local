@@ -276,7 +276,7 @@ export function AntigravityRuntimeSection({
     const lowVa = info?.vaBits != null && info.vaBits < 48;
     Alert.alert(
       "Set up Antigravity (Gemini)?",
-      `Downloads Google's official Antigravity server (about 310 MB) from dl.google.com, checks it against the published sha256 and prepares it on this phone. Needs about 2.5 GB free while it works and 340 MB after.${
+      `Downloads Google's official Antigravity CLI (about 70 MB) from Google's GitHub release, checks it against the published sha256 and prepares it on this phone. Needs about 400 MB free while it works and 230 MB after.${
         lowVa ? " This phone's kernel needs it for Gemini to start." : ""
       }`,
       [
