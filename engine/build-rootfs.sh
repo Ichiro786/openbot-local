@@ -203,8 +203,10 @@ install -d -m 0755 "$ROOTFS/opt/openbot-local/lib"
 cc -O2 -Wall -shared -fPIC -o "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so" "$SCRIPT_DIR/nonroot-shim.c"
 chmod 0755 "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so"
 
-# Antigravity (Gemini) hybrid runtime tools. Google's ACP server aborts in TCMalloc on 39-bit VA kernels
-# (antigravity-cli#64); the hybrid runs its Python frontend on a stock CPython 3.14 instead. Only the
+# Antigravity (Gemini) runtime tools. OpenBot >= 0.69 uses Google's Antigravity CLI (Go, 39-bit safe),
+# which prepare.py downloads on the phone (pinned below). Older engines used the hybrid: Google's 1.4.x
+# ACP server aborts in TCMalloc on 39-bit VA kernels (antigravity-cli#64), so the hybrid ran its Python
+# frontend on a stock CPython 3.14 instead (kept for the 1.4 bridge and rollback). Only the
 # PSF-licensed interpreter and our scripts ship here: prepare.py downloads Google's files from
 # dl.google.com on the phone, checks the registry sha256 and builds the runtime under /root (kept on
 # engine updates). /opt/agy-hybrid/current points at it; openbot-start.sh uses it once it is .ready.
@@ -243,6 +245,16 @@ for f in agy_acp_server open-url agy-hybrid.sh; do install -m 0755 "$SCRIPT_DIR/
 ln -sfn /root/.local/share/agy-hybrid/current "$ROOTFS/opt/agy-hybrid/current"
 ln -sfn /opt/agy-hybrid/tools/agy-hybrid.sh "$ROOTFS/usr/local/bin/agy-hybrid"
 printf 'python=%s\npbs_release=%s\n' "$pbs_name" "$PBS_RELEASE" >"$ROOTFS/opt/agy-hybrid/tools/versions"
+# prepare.py pins the Antigravity CLI that this OpenBot build was tested with (native-runtime.lock.json,
+# bundled in app.asar). A different pin would hand the engine a CLI it does not expect.
+agy_cli_sha=$(sed -n 's/^CLI_SHA256 = "\([0-9a-f]\{64\}\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.py")
+agy_cli_ver=$(sed -n 's/^CLI_VERSION = "\([0-9.]*\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.py")
+if [ -n "$agy_cli_sha" ] && grep -q -a -F "$agy_cli_sha" "$ROOTFS/opt/OpenBot/app/resources/app.asar"; then
+  echo "Antigravity CLI pin $agy_cli_ver matches this OpenBot's native-runtime.lock.json"
+else
+  echo "::warning::prepare.py pins Antigravity CLI $agy_cli_ver ($agy_cli_sha), which this OpenBot's app.asar does not name; update CLI_* in engine/agy-hybrid/prepare.py"
+fi
+printf 'antigravity_cli=%s\n' "$agy_cli_ver" >>"$ROOTFS/opt/agy-hybrid/tools/versions"
 
 # Static DNS and identity. Android has no readable /etc/resolv.conf; the app may overwrite this file
 # with the device's DNS servers before each start.

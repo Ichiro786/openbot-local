@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""OpenBot Local: prepare the Antigravity ACP "hybrid" runtime ON THE DEVICE.
+"""OpenBot Local: prepare the Antigravity (Gemini) runtime ON THE DEVICE.
+
+Default (engine >= 0.69): Google's Antigravity CLI (one Go binary, `antigravity acp` is its ACP server). It
+has no TCMalloc, so it runs on 39-bit VA Android kernels. Version and hashes are pinned to the engine's own
+native-runtime.lock.json (CLI_* below; build-rootfs.sh checks the pin is in app.asar). Downloaded from
+Google's GitHub release on the device and verified (archive and executable sha256); never shipped.
+  <root>/<version>/bin/antigravity        sh wrapper (OPENBOT_ANTIGRAVITY_PATH points here)
+  <root>/<version>/libexec/antigravity    Google's binary
+  <root>/current -> <version>             only after `--version` and ACP initialize pass
+  prepare.py [--root DIR]                 install the pinned CLI
+  prepare.py [--root DIR] --check         installed=, latest= (the pin, no network), update=0|1
+
+--legacy-hybrid: the 1.4.x hybrid below (engines <= 0.61 only; kept for rollback and the CI bridge test).
+
+Legacy hybrid: the Antigravity ACP "hybrid" runtime.
 
 Runs Google's own ACP server Python frontend (extracted from the official linux-arm64 PAR) on a stock
 CPython 3.14 (glibc malloc, no TCMalloc), plus Google's official localharness_external (Go, VA-safe).
@@ -33,6 +47,22 @@ REPLACE = {"pydantic": ("pydantic", True), "pydantic_core": (None, False),   # p
 ALWAYS = ["protobuf"]  # public protobuf; the bundled one is internal (7.38.0, not on PyPI)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SMOKE_TIMEOUT = 180
+# Antigravity CLI pinned to OpenBot 0.69.0's native-runtime.lock.json ("antigravity", linux-arm64).
+CLI_VERSION = "1.5.4"
+CLI_URL = f"https://github.com/google-antigravity/antigravity-cli/releases/download/{CLI_VERSION}/agy_cli_linux_arm64.tar.gz"
+CLI_SHA256 = "aa8870d1b93b646ed52fd0862752b3ec8c5e91afd22d943eb2a9a0b0671fd939"
+CLI_EXE_SHA256 = "874d86300e64ff6f378abd55bcb45cbc1f8749fa422629c10ddecbac683b7b97"
+CLI_WRAPPER = """#!/bin/sh
+# OpenBot Local: Google's Antigravity CLI, downloaded on this phone by /opt/agy-hybrid/tools/prepare.py.
+# stdout is the ACP JSON-RPC channel: nothing here may print to it.
+D=$(cd "$(dirname "$0")" && pwd)
+# The CLI replaces itself when it updates; the engine pins the version it was tested with.
+export AGY_CLI_DISABLE_AUTO_UPDATE=true
+# Without a display the CLI refuses the Google sign-in ("No browser is available here"); with one it runs
+# `xdg-open <link>` from PATH, which the engine replaces with its own opener and relays to the app.
+[ -n "${DISPLAY:-}" ] || export DISPLAY=:0
+exec "$D/../libexec/antigravity" "$@"
+"""
 
 def log(*a): print("[agy-hybrid]", *a, file=sys.stderr, flush=True)
 
@@ -75,6 +105,91 @@ def download(url, dest):
             if pct != last[0]: last[0] = pct; stage("download", pct)
     urllib.request.urlretrieve(url, dest, hook)
 
+def switch_current(root, ver):
+    cur = os.path.join(root, "current"); tmp = cur + ".new"
+    prev = installed(root)   # a running engine may still use it until restarted: keep one back
+    if os.path.lexists(tmp): os.remove(tmp)
+    os.symlink(ver, tmp); os.replace(tmp, cur)
+    for old in os.listdir(root):
+        if old not in (ver, prev, "current") and re.fullmatch(r"\d+\.\d+\.\d+", old):
+            shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+
+def acp_initialize(argv, env, timeout=SMOKE_TIMEOUT):
+    """ACP initialize; returns the parsed answer or exits."""
+    req = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": 1, "clientInfo": {"name": "openbot", "version": "0"}, "clientCapabilities": {}}})
+    p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
+    timer = threading.Timer(timeout, p.kill); timer.start()
+    try:
+        p.stdin.write((req + "\n").encode()); p.stdin.flush()
+        line = p.stdout.readline()
+    finally:
+        timer.cancel(); p.kill(); p.wait()
+    if not line: sys.exit(f"smoke test: no answer to ACP initialize within {timeout}s")
+    return json.loads(line)
+
+def cli_main(a):
+    ver = CLI_VERSION
+    if a.check:
+        have = installed(a.root)
+        print(f"installed={have or ''}\nlatest={ver}\nupdate={int(have != ver)}\nerror=")
+        return
+    dest = os.path.join(a.root, ver)
+    if (os.path.exists(os.path.join(dest, ".ready")) and installed(a.root) == ver
+            and os.access(os.path.join(dest, "bin", "antigravity"), os.X_OK)):
+        log("already prepared", dest); stage("done", 100); return
+    os.makedirs(a.root, exist_ok=True)
+    for old in os.listdir(a.root):   # leftovers of an interrupted run
+        if old.startswith(f".{ver}."): shutil.rmtree(os.path.join(a.root, old), ignore_errors=True)
+    free = shutil.disk_usage(a.root).free
+    if free < 450_000_000:
+        sys.exit(f"not enough storage: {free // 1048576} MiB free, about 400 MiB needed while preparing (230 MiB after)")
+    work = tempfile.mkdtemp(prefix=f".{ver}.", dir=a.root)
+    try:
+        tgz = os.path.join(work, "cli.tar.gz")
+        log("download", CLI_URL); download(CLI_URL, tgz)
+        stage("verify", 0)
+        got = sha256(tgz)
+        if got != CLI_SHA256: sys.exit(f"sha256 mismatch: {got} != {CLI_SHA256}")
+        stage("extract", 0)
+        import tarfile
+        os.makedirs(os.path.join(work, "bin")); os.makedirs(os.path.join(work, "libexec"))
+        exe = os.path.join(work, "libexec", "antigravity")
+        with tarfile.open(tgz) as t:
+            m = next((m for m in t.getmembers() if m.isfile() and os.path.basename(m.name) == "antigravity"), None)
+            if m is None: sys.exit("the Antigravity CLI archive has no `antigravity` executable")
+            with t.extractfile(m) as f, open(exe, "wb") as o: shutil.copyfileobj(f, o, 1 << 20)
+        os.remove(tgz)
+        os.chmod(exe, 0o755)
+        if sha256(exe) != CLI_EXE_SHA256: sys.exit("sha256 mismatch for the antigravity executable")
+        stage("extract", 100)
+        wrapper = os.path.join(work, "bin", "antigravity")
+        open(wrapper, "w").write(CLI_WRAPPER); os.chmod(wrapper, 0o755)
+        json.dump({"version": ver}, open(os.path.join(work, "antigravity-package.json"), "w"))
+
+        # Smoke test: what the engine runs. `--version` must print the bare version (cli.ts
+        # parseAntigravityVersion), and `acp --gemini-dir=<abs> --app-data-dir=antigravity-acp` must answer
+        # ACP initialize with agentInfo.version == the pin.
+        stage("smoke")
+        home = os.path.join(work, ".smokehome")
+        env = dict(os.environ, HOME=home, WSL_DISTRO_NAME="OpenBot")
+        out = subprocess.run([wrapper, "--version"], capture_output=True, text=True, timeout=120, env=env).stdout
+        if not re.fullmatch(r"\s*" + re.escape(ver) + r"\s*", out):
+            sys.exit(f"smoke test: `antigravity --version` printed {out.strip()[:80]!r}, expected {ver}")
+        ans = acp_initialize([wrapper, "acp", f"--gemini-dir={os.path.join(home, '.gemini')}",
+                              "--app-data-dir=antigravity-acp"], env)
+        got_ver = ans["result"]["agentInfo"]["version"]
+        if got_ver != ver: sys.exit(f"smoke test: the CLI reports {got_ver}, expected {ver}")
+        shutil.rmtree(home, ignore_errors=True)
+        open(os.path.join(work, ".ready"), "w").write(ver + "\n")
+
+        if os.path.exists(dest): shutil.rmtree(dest)
+        os.rename(work, dest)
+        switch_current(a.root, ver)
+        log("ready", dest); stage("done", 100)
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True); raise
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="/opt/agy-hybrid")
@@ -82,7 +197,11 @@ def main():
     ap.add_argument("--zip"); ap.add_argument("--sha256"); ap.add_argument("--version")
     ap.add_argument("--keep-zip", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--legacy-hybrid", action="store_true")
     a = ap.parse_args()
+
+    if not a.legacy_hybrid:
+        return cli_main(a)
 
     if a.check:
         have = installed(a.root)

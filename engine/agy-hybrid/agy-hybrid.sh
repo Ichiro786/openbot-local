@@ -1,8 +1,9 @@
 #!/bin/sh
-# OpenBot Local: Antigravity (Gemini) hybrid runtime helper, run by the app through runCommand.
+# OpenBot Local: Antigravity (Gemini) runtime helper, run by the app through runCommand.
+# Engine >= 0.69: the runtime is Google's Antigravity CLI pinned in prepare.py (the 1.4.x hybrid is legacy).
 #   agy-hybrid.sh status        key=value: ready=0|1 installed=<ver> python=0|1 va_bits=<n> free_mib=<n>
-#   agy-hybrid.sh check         key=value from prepare.py --check (installed, latest, update, error)
-#   agy-hybrid.sh prepare       download from dl.google.com, verify sha256, build; progress on stderr
+#   agy-hybrid.sh check         key=value from prepare.py --check (installed, latest = the engine's pin, update, error)
+#   agy-hybrid.sh prepare       download Google's release on the phone, verify sha256, smoke-test; progress on stderr
 #   agy-hybrid.sh remove        delete the prepared runtime (the engine falls back to OpenBot's managed copy)
 #   agy-hybrid.sh signin-url    last Google sign-in link the server asked to open: "<epoch> <url>", if any
 # The prepared runtime lives under /root (carried over on engine updates); /opt/agy-hybrid/current points at it.
