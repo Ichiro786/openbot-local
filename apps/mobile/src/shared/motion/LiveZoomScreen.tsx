@@ -19,6 +19,7 @@ import Animated, {
   Easing,
   type SharedValue,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withSpring,
   withTiming,
@@ -26,20 +27,43 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
 import { isAndroid } from "@/shared/lib/platform";
-import { type LiveZoom, LiveZoomSettledContext, liveZoomOf, releaseLiveZoomHome } from "./liveZoom";
+import { type LiveZoom, LiveZoomSettledContext, liveZoomOf, releaseLiveZoomHome, resolveZoomOrigin } from "./liveZoom";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
 import { useColorOSMotion } from "./useColorOSMotion";
 
 /**
  * The open and close run one LINEAR clock (`visible`, 0 closed .. 1 open); the frame's style eases it.
- * The open's ease starts gently (no 60%-in-one-frame jump, the #97 "just appears"), never overshoots,
- * and the close is the same clock run backwards: the exact reverse, accelerating back into the row.
+ * Build 14 (Syed's phone, build 12 videos 97/98): a container transform. The chat is an OPAQUE rounded
+ * card that grows out of the tapped element's rect to the full screen (and back into it), with the chat
+ * inside fading in over the card's own surface, so home never shows through the chat. The card's clip is
+ * two nested translated views (top edge, bottom edge) under one scale: transforms only, on the UI
+ * thread, no layout per frame. The curve is critically damped (no overshoot, a gentle first frame).
  */
-const OPEN_MS = 360;
-const CLOSE_MS = 300;
-const EASE = Easing.bezierFn(0.2, 0, 0, 1);
-/** The chat fades in over this share of the open's time (and out over the close's last share). */
-const FADE_SHARE = 0.4;
+const OPEN_MS = 270;
+const CLOSE_MS = 260;
+/** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
+const CRIT_K = 7.4;
+const CRIT_NORM = 1 - (1 + CRIT_K) * Math.exp(-CRIT_K);
+function crit(t: number): number {
+  "worklet";
+  return (1 - (1 + CRIT_K * t) * Math.exp(-CRIT_K * t)) / CRIT_NORM;
+}
+/** The clock value whose eased value is `value` (crit is monotonic): to turn an open into a close mid-way. */
+function critInverse(value: number): number {
+  let low = 0;
+  let high = 1;
+  for (let step = 0; step < 24; step += 1) {
+    const mid = (low + high) / 2;
+    if (crit(mid) < value) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
+}
+/** The card itself fades in over this share of the open (out over the close's last share): no hard edge on the row. */
+const CARD_FADE_SHARE = 0.1;
+/** The chat fades in over the card's opaque surface from this share of the clock, over this share. */
+const CONTENT_FADE_FROM = 0.06;
+const CONTENT_FADE_SHARE = 0.3;
 /**
  * The open clock advances at most this much per drawn frame: a slow frame (the chat's mount, a busy
  * render thread) never skips the open, so its first drawn frame is the start and every frame moves.
@@ -47,13 +71,15 @@ const FADE_SHARE = 0.4;
 const MAX_STEP_MS = 25;
 /** The open settles by this at the latest (its deferred work then starts anyway). */
 const SETTLE_BOUND_MS = 1200;
-/** The chat's scale when closed (around the tapped row), and how far the predictive gesture shrinks it more. */
-const CLOSED_SCALE = 0.86;
+/** The card's narrowest start (a pinned tile grows from about its own width), and its widest (a row). */
+const MIN_START_SCALE = 0.3;
+const MAX_START_SCALE = 0.92;
+/** The card's corner on screen at the start, in dp (none once open: the chat fills the screen). */
+const START_RADIUS = 24;
+/** The predictive gesture: how far it shrinks the chat more, its corner, and how far it shifts it toward the finger. */
 const GESTURE_SCALE = 0.1;
-/** How far the gesture shifts the chat toward the finger, as a share of the width. */
+const GESTURE_RADIUS = 28;
 const GESTURE_SHIFT = 0.06;
-/** When closed, the chat's centre sits this share of the way from the screen's centre to the row. */
-const ROW_PULL = 0.3;
 /** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
 const SHELL_FADE_MS = 160;
 /** Home dims at most this much under the open chat. */
@@ -130,6 +156,10 @@ function useLiveZoomMotion(
   visible: SharedValue<number>,
   gesture: SharedValue<number>,
   edge: SharedValue<number>,
+  /** Build 14: 1 while the clock runs the close's curve (the open's mirrored), 0 for the open's. */
+  closing: SharedValue<number>,
+  /** Build 14: re-finds the element the chat closes into (it may have moved since the open). */
+  resolveOrigin: () => void,
 ) {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   const focused = useIsFocused();
@@ -173,6 +203,11 @@ function useLiveZoomMotion(
       st.gestureOn = false;
       gesture.set(withSpring(0, SPRING_BACK));
       const done = api.opened;
+      // From where the close got to, on the open's curve again (the same eased point, no jump).
+      if (closing.get() > 0) {
+        visible.set(critInverse(1 - crit(1 - visible.get())));
+        closing.set(0);
+      }
       visible.set(
         openClock((finished) => {
           "worklet";
@@ -214,11 +249,19 @@ function useLiveZoomMotion(
       }, BACK_HARD_MS);
       st.leaving = { popped: false, timer };
       st.gestureOn = false;
-      // From where it is (mid-open, or shrunk by the gesture, which it keeps) to closed. The worklet
-      // callback captures the bare function only, never the api object.
+      resolveOrigin();
+      // From where it is (mid-open, or shrunk by the gesture) to closed, on the close's curve: it leaves
+      // at once and lands softly in the element. The same eased point, so a close mid-open does not jump.
+      // The gesture's extra shrink and shift go with it, so the card lands exactly on the element.
+      const from = closing.get() > 0 ? visible.get() : 1 - critInverse(1 - crit(visible.get()));
+      closing.set(1);
+      visible.set(from);
+      const duration = CLOSE_MS * from;
+      if (gesture.get() > 0) gesture.set(withTiming(0, { duration, easing: Easing.out(Easing.quad) }));
+      // The worklet callback captures the bare function only, never the api object.
       const done = api.closed;
       visible.set(
-        withTiming(0, { duration: CLOSE_MS * visible.get(), easing: Easing.linear }, (finished) => {
+        withTiming(0, { duration, easing: Easing.linear }, (finished) => {
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -346,13 +389,27 @@ function LiveZoomFrame({
 }) {
   const background = String(useThemeColor("background") ?? "#000");
   const { width, height } = useWindowDimensions();
-  const pull = (Math.max(0, zoom.originY) - height / 2) * ROW_PULL;
   const visible = useSharedValue(0);
   const gesture = useSharedValue(0);
   const edge = useSharedValue(1);
+  const closing = useSharedValue(0);
+  // The source element's window rect: the open's, then the one a close re-finds.
+  const originX = useSharedValue(zoom.origin.x);
+  const originY = useSharedValue(zoom.origin.y);
+  const originW = useSharedValue(zoom.origin.width);
+  const originH = useSharedValue(zoom.origin.height);
+  const resolveOrigin = useCallback(() => {
+    resolveZoomOrigin(zoom, (rect) => {
+      zoom.origin = rect;
+      originX.set(rect.x);
+      originY.set(rect.y);
+      originW.set(rect.width);
+      originH.set(rect.height);
+    });
+  }, [zoom, originX, originY, originW, originH]);
   // One commit, after the open: the chat's frosts and deferred content start then.
   const [settled, setSettled] = useState(false);
-  useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge);
+  useLiveZoomMotion(routeKey, zoom, () => setSettled(true), visible, gesture, edge, closing, resolveOrigin);
   const [chatShown, setChatShown] = useState(!shell);
   const [shellGone, setShellGone] = useState(!shell);
   const shellOpacity = useSharedValue(1);
@@ -370,51 +427,84 @@ function LiveZoomFrame({
     );
   }, [shellOpacity]);
   const shellStyle = useAnimatedStyle(() => ({ opacity: shellOpacity.get() }));
-  const frameStyle = useAnimatedStyle(() => {
+  // The card's geometry on this frame (all on the UI thread): its scale, the half height of its window
+  // in the chat's own coordinates, and its centre on screen.
+  const card = useDerivedValue(() => {
     const clock = visible.get();
-    const open = EASE(clock);
+    const open = closing.get() > 0 ? 1 - crit(1 - clock) : crit(clock);
     const drag = gesture.get();
-    // Transform and opacity only (no animated corner radius: no clip re-render while it moves).
+    const startScale = Math.min(MAX_START_SCALE, Math.max(MIN_START_SCALE, originW.get() / width));
+    const scale = startScale + (1 - startScale) * open;
+    const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
+    const centreX = originX.get() + originW.get() / 2;
+    const centreY = originY.get() + originH.get() / 2;
+    const total = scale * (1 - GESTURE_SCALE * drag);
     return {
-      opacity: Math.min(1, clock / FADE_SHARE),
-      transform: [
-        { translateX: edge.get() * drag * width * GESTURE_SHIFT },
-        { translateY: (1 - open) * pull },
-        { scale: (CLOSED_SCALE + (1 - CLOSED_SCALE) * open) * (1 - GESTURE_SCALE * drag) },
-      ],
+      clock,
+      open,
+      scale: total,
+      half: Math.min(height / 2, half),
+      x: (centreX - width / 2) * (1 - open) + edge.get() * drag * width * GESTURE_SHIFT,
+      y: (centreY - height / 2) * (1 - open),
+      // The corner on screen, drawn in the scaled card's own units.
+      radius: (START_RADIUS * (1 - open) + GESTURE_RADIUS * drag) / total,
     };
   });
-  const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * EASE(visible.get()) }));
+  const cardStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    return {
+      opacity: Math.min(1, c.clock / CARD_FADE_SHARE),
+      transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
+    };
+  });
+  // The window's top edge (and its top corners), then its bottom edge (and bottom corners).
+  const topClipStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    return { borderRadius: c.radius, transform: [{ translateY: height / 2 - c.half }] };
+  });
+  const bottomClipStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    return { borderRadius: c.radius, transform: [{ translateY: 2 * c.half - height }] };
+  });
+  // The chat stays where it is on screen inside the moving window; it fades in over the opaque card.
+  const contentStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    return {
+      opacity: Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE)),
+      transform: [{ translateY: height / 2 - c.half }],
+    };
+  });
+  const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * card.get().open }));
   return (
     <View style={styles.fill}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
-      {/* While the open runs, the chat is drawn once into a GPU layer and each frame only composites it
-          (scaled, faded); off once settled, before the frosts and deferred content come on. */}
-      <Animated.View
-        renderToHardwareTextureAndroid={!settled}
-        style={[
-          styles.fill,
-          styles.frame,
-          { backgroundColor: background, transformOrigin: `50% ${Math.max(0, zoom.originY)}px` },
-          frameStyle,
-        ]}
-      >
-        <LiveZoomSettledContext.Provider value={settled}>
-          {chatShown ? (
-            shell ? (
-              <View style={styles.fill} onLayout={chatLaidOut}>
-                {children}
-              </View>
-            ) : (
-              children
-            )
-          ) : null}
-        </LiveZoomSettledContext.Provider>
-        {shellGone ? null : (
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shellStyle]}>
-            {shell}
+      <Animated.View style={[StyleSheet.absoluteFill, cardStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.clip, topClipStyle]}>
+          <Animated.View
+            style={[StyleSheet.absoluteFill, styles.clip, { backgroundColor: background }, bottomClipStyle]}
+          >
+            {/* While the open runs, the chat is drawn once into a GPU layer and each frame only composites
+                it (moved, faded); off once settled, before the frosts and deferred content come on. */}
+            <Animated.View renderToHardwareTextureAndroid={!settled} style={[StyleSheet.absoluteFill, contentStyle]}>
+              <LiveZoomSettledContext.Provider value={settled}>
+                {chatShown ? (
+                  shell ? (
+                    <View style={styles.fill} onLayout={chatLaidOut}>
+                      {children}
+                    </View>
+                  ) : (
+                    children
+                  )
+                ) : null}
+              </LiveZoomSettledContext.Provider>
+              {shellGone ? null : (
+                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shellStyle]}>
+                  {shell}
+                </Animated.View>
+              )}
+            </Animated.View>
           </Animated.View>
-        )}
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -457,6 +547,6 @@ export function withLiveZoom<P extends object>(
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  frame: { overflow: "hidden" },
+  clip: { overflow: "hidden" },
   dim: { backgroundColor: "#000" },
 });

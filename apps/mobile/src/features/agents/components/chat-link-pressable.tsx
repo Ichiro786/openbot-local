@@ -1,12 +1,12 @@
 import { useNavigation, useRoute } from "expo-router/react-navigation";
 import { type ComponentProps, createContext, useContext, useEffect, useRef } from "react";
-import { Pressable } from "react-native";
+import { Pressable, useWindowDimensions, type ViewInstance } from "react-native";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
 import type { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
-import { armLiveZoom } from "@/shared/motion/liveZoom";
+import { armLiveZoom, registerZoomSource, type ZoomOrigin } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export const ChatNavigationGateContext = createContext<ReturnType<typeof createChatNavigationGate> | null>(null);
@@ -52,10 +52,21 @@ export function ChatLinkPressable({
       mounted.current = false;
     };
   }, []);
+  // Build 14: the chat grows out of this element and shrinks back into it (re-found by the chat's id).
+  const element = useRef<ViewInstance>(null);
+  const window = useWindowDimensions();
+  const measure = useRef((done: (rect: ZoomOrigin) => void) => {
+    element.current?.measureInWindow((x, y, width, height) => done({ x, y, width, height }));
+  }).current;
+  useEffect(() => {
+    if (!zoom || !chatId) return;
+    return registerZoomSource(chatId, measure);
+  }, [zoom, chatId, measure]);
 
   return (
     <Pressable
       {...props}
+      ref={element}
       onPressIn={(event) => {
         if (chatId && prefetchServerId && !conversationStore.isUpToDate(chatId))
           void loadConversation(chatId, prefetchServerId).catch(() => undefined);
@@ -82,8 +93,12 @@ export function ChatLinkPressable({
         }
         if (Date.now() - lastZoomTapAt < ZOOM_TAP_GUARD_MS) return;
         lastZoomTapAt = Date.now();
-        // The chat grows from the tapped row's height (LiveZoomScreen).
-        armLiveZoom(event.nativeEvent.pageY);
+        // The chat grows from the tapped element (LiveZoomScreen): until it is measured (synchronous on
+        // the new architecture), a full-width strip at the tap.
+        const { pageY, locationY } = event.nativeEvent;
+        const origin: ZoomOrigin = { x: 0, y: pageY - locationY, width: window.width, height: 72 };
+        armLiveZoom(origin, chatId, measure);
+        measure((rect) => Object.assign(origin, rect));
         go();
       }}
     />

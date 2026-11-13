@@ -45,14 +45,66 @@ export function useHomeCovered(): boolean {
   return useSyncExternalStore(subscribe, homeCovered);
 }
 
+/**
+ * Build 14: the tapped element's rect in the window (a row, or a pinned agent's tile), which the chat grows
+ * out of as an opaque card and shrinks back into.
+ */
+export type ZoomOrigin = { x: number; y: number; width: number; height: number };
+/** Measures a source element now (callback with its window rect); undefined once it unmounted. */
+type MeasureSource = (done: (rect: ZoomOrigin) => void) => void;
+/** Every mounted zoom source, by chat: a close re-finds its element by the chat's id. */
+const sources = new Map<string, Set<MeasureSource>>();
+
+/** Called by a chat row while mounted: the zoom of that chat can find it again for its close. */
+export function registerZoomSource(chatId: string, measure: MeasureSource): () => void {
+  let set = sources.get(chatId);
+  if (!set) {
+    set = new Set();
+    sources.set(chatId, set);
+  }
+  set.add(measure);
+  return () => {
+    const current = sources.get(chatId);
+    current?.delete(measure);
+    if (current?.size === 0) sources.delete(chatId);
+  };
+}
+
+/**
+ * The element a closing chat shrinks into, measured now: the element it opened from when still mounted,
+ * else any element of the same chat. Nothing when none is mounted (the close keeps the open's rect).
+ */
+export function resolveZoomOrigin(zoom: LiveZoom, done: (rect: ZoomOrigin) => void): void {
+  const accept = (rect: ZoomOrigin) => {
+    if (rect.width > 0 && rect.height > 0) done(rect);
+  };
+  const own = zoom.measure;
+  const set = zoom.chatId !== undefined ? sources.get(zoom.chatId) : undefined;
+  if (own && set?.has(own)) own(accept);
+  else {
+    const [first] = set ?? [];
+    first?.(accept);
+  }
+}
+
 /** An armed zoom is for the push that follows the tap, never a later unrelated push. */
 const ARM_MS = 3000;
-let armed: { until: number; originY: number; release: () => void; expire: ReturnType<typeof setTimeout> } | null = null;
+let armed: {
+  until: number;
+  origin: ZoomOrigin;
+  chatId?: string;
+  measure?: MeasureSource;
+  release: () => void;
+  expire: ReturnType<typeof setTimeout>;
+} | null = null;
 /** The home blur pause each zoomed route holds from its tap until it unmounts (or closes). */
 const homeHolds = new Map<string, () => void>();
 
 export type LiveZoom = {
-  originY: number;
+  /** The tapped element's window rect (updated in place when a close re-finds it). */
+  origin: ZoomOrigin;
+  chatId?: string;
+  measure?: MeasureSource;
   /**
    * Set once a screen was pushed over the chat. react-native-screens then detaches home under the
    * transparent chat and does not attach it again when the chat is back in front, so a live close would
@@ -77,9 +129,16 @@ function dropArmed(): void {
  * with the chat's mount, before the open starts) until the chat unmounts, so no blur re-renders under
  * the moving chat. A zoom that no push takes releases home after ARM_MS.
  */
-export function armLiveZoom(originY: number): void {
+export function armLiveZoom(origin: ZoomOrigin, chatId?: string, measure?: MeasureSource): void {
   dropArmed();
-  armed = { until: Date.now() + ARM_MS, originY, release: holdHomeCovered(), expire: setTimeout(dropArmed, ARM_MS) };
+  armed = {
+    until: Date.now() + ARM_MS,
+    origin,
+    chatId,
+    measure,
+    release: holdHomeCovered(),
+    expire: setTimeout(dropArmed, ARM_MS),
+  };
 }
 
 /** For the options of a chat-like route: its zoom, decided the first time the route is seen. */
@@ -91,7 +150,7 @@ export function liveZoomFor(routeKey: string | undefined): LiveZoom | undefined 
     armed = null;
     clearTimeout(current.expire);
     homeHolds.set(routeKey, current.release);
-    return { originY: current.originY };
+    return { origin: current.origin, chatId: current.chatId, measure: current.measure };
   });
   return zoom || undefined;
 }
