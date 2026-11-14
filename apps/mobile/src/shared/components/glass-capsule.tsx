@@ -6,11 +6,8 @@ import Animated, { cubicBezier } from "react-native-reanimated";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
-import { GlintRim } from "@/shared/glass/GlintRim";
 import { useChromeGlass } from "@/shared/lib/chrome-glass";
 import { isAndroid } from "@/shared/lib/platform";
-import { pill } from "@/shared/motion/tokens";
-import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /** The height of the bottom search capsules: home search and the Marketplace field. */
 export const GLASS_CAPSULE_HEIGHT = 52;
@@ -38,14 +35,8 @@ export function GlassCapsule({
   tintShown = true,
   blurTarget,
   blurPaused = false,
-  colorOSFrost = false,
   children,
 }: PropsWithChildren<{
-  /**
-   * ColorOS motion (build 9): while the capsule blurs, a lighter fill lets the colours behind glow
-   * through, with a hairline specular rim and a soft top light. Ignored when ColorOS motion is off.
-   */
-  colorOSFrost?: boolean;
   liquidGlass: boolean;
   /** Android: the content to blur under the capsule. Without it the capsule has the solid glass. */
   blurTarget?: RefObject<ViewInstance | null>;
@@ -73,9 +64,6 @@ export function GlassCapsule({
   const { theme } = useUniwind();
   const blurFill = String(useCSSVariable("--openbot-bg-chrome-blur"));
   const blurs = ANDROID_BLUR && !liquidGlass && blurTarget !== undefined && !blurPaused;
-  const colorOS = useColorOSMotion().enabled;
-  const frost = colorOSFrost && colorOS && blurs;
-  const dark = theme === "dark";
   useBlurBudget(blurs, "glass-capsule");
   const fallback = isAndroid ? milky : { backgroundColor: String(fallbackBackground), boxShadow: CAPSULE_SHADOW };
   return (
@@ -123,17 +111,11 @@ export function GlassCapsule({
             style={[
               StyleSheet.absoluteFill,
               {
-                backgroundColor: frost
-                  ? dark
-                    ? pill.fillDark
-                    : pill.fillLight
-                  : blurs
-                    ? blurFill
-                    : milky.backgroundColor,
+                backgroundColor: blurs ? blurFill : milky.backgroundColor,
               },
             ]}
           />
-          {frost ? <FrostRim height={height} dark={dark} /> : <ChromeGlassSheen />}
+          <ChromeGlassSheen />
         </>
       ) : null}
       {/* The tint lies over the glass, as in the prototype. The native glass tint cannot animate, and
@@ -156,12 +138,4 @@ export function GlassCapsule({
       {children}
     </GlassView>
   );
-}
-
-/**
- * ColorOS frost (build 11): no top sheen and no drawn hairline. The shared glass edge: two soft glints
- * and the lens glow low inside (spec §1).
- */
-function FrostRim({ height, dark }: { height: number; dark: boolean }) {
-  return <GlintRim radius={height / 2} dark={dark} />;
 }

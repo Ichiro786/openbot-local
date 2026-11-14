@@ -87,6 +87,7 @@ import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { HomeEdgeBlur } from "@/shared/motion/HomeEdgeBlur";
 import { useHomeCovered } from "@/shared/motion/liveZoom";
 import { edges } from "@/shared/motion/tokens";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /**
  * Opens an agent chat from the search. In the chat list pane, the chat takes the place of the open
@@ -1065,11 +1066,22 @@ function useHomeAtRest(): boolean {
  * scrim covers home then, and the Android blur would blur the whole home list again on each frame of
  * the motion. Only the capsule reads the drawer state, so the field itself does not render again.
  */
-function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeof GlassCapsule>) {
+function HomeFieldCapsule({ blurPaused = false, blurTarget, ...props }: ComponentProps<typeof GlassCapsule>) {
   const drawerShown = useAppDrawerShown();
   // Build 11.3 simple zoom: home stays drawn under a zoomed chat; its blurs pause while a chat covers it.
   const covered = useHomeCovered();
-  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown || covered} colorOSFrost />;
+  // Build 15.1 (Syed): with ColorOS motion on, the field is the solid capsule, always. Its blur used to
+  // pause while home was not at rest and start again only when home's return transition had ended
+  // (useHomeAtRest), so after Back from a chat the field turned from solid to frosted glass a moment
+  // late, in front of him. With no blur the field has nothing to switch; home keeps one blur (the edge).
+  const colorOS = useColorOSMotion().enabled;
+  return (
+    <GlassCapsule
+      {...props}
+      blurTarget={colorOS ? undefined : blurTarget}
+      blurPaused={blurPaused || drawerShown || covered}
+    />
+  );
 }
 
 /** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
