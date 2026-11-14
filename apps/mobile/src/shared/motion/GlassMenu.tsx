@@ -64,6 +64,7 @@ export type GlassReactions = {
 };
 
 export type GlassMenuAnchor = { x: number; y: number; width: number; height: number };
+export type GlassMenuPauses = "composer" | "header";
 
 type GlassMenuRequest = {
   key: number;
@@ -82,6 +83,12 @@ type GlassMenuRequest = {
    * the keyboard, which the host's frame includes).
    */
   above?: boolean;
+  /**
+   * Build 15.1: which of the chat's two frosts a one-blur menu takes, so the screen stays at two blurs.
+   * Default `composer` (menus at the top: thread menu, •••). The composer + menu takes the header band's
+   * blur instead (its scrim stays), so the composer it opens from keeps its glass.
+   */
+  pauses?: GlassMenuPauses;
   /** Runs once, after the menu has closed and unmounted. */
   onSelect: (id: string) => void;
   /**
@@ -130,6 +137,11 @@ const useGlassMenuStore = create<{ request: GlassMenuRequest | null; frosted: bo
 /** Build 10: whether an open glass menu frosts (draws at least one blur), for a screen's blur budget. */
 export function useGlassMenuFrostOpen(): boolean {
   return useGlassMenuStore((s) => s.request !== null && s.frosted);
+}
+
+/** Build 15.1: whether an open frosted one-blur menu takes this chat frost's blur (`pauses`). */
+export function useGlassMenuPauses(surface: GlassMenuPauses): boolean {
+  return useGlassMenuStore((s) => s.request !== null && s.frosted && (s.request.pauses ?? "composer") === surface);
 }
 
 /** Whether an open glass menu draws two blurs (reaction bar + card), so a screen can pause its own. */

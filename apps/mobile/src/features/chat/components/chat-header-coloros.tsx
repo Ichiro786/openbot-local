@@ -23,7 +23,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
-import { useGlassMenuDoubleFrost } from "@/shared/motion/GlassMenu";
+import { useGlassMenuDoubleFrost, useGlassMenuPauses } from "@/shared/motion/GlassMenu";
 import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import type { ChatTarget } from "../model/chat-target";
@@ -134,9 +134,11 @@ export function ColorOSChatHeader({
   // + menu, ••• menus) takes the composer's blur instead (ChatComposer pauses), so the band stays.
   // Only a two-blur menu (message long-press: reaction bar + card) pauses it; its dim stays.
   const menuDouble = useGlassMenuDoubleFrost();
+  // Build 15.1: the composer's + menu takes the band's blur (the composer keeps its glass); the scrim stays.
+  const plusMenu = useGlassMenuPauses("header");
   // Build 11.3 simple zoom: the band's blur starts once a zoom open has settled (none under the moving chat).
   const settled = useLiveZoomSettled();
-  const bandOn = Boolean(frostTarget) && !menuDouble && settled;
+  const bandOn = Boolean(frostTarget) && !menuDouble && !plusMenu && settled;
   // Build 11.3: the band ends above the pill, so the pill and the side buttons (which reach below it)
   // carry their own solid glass fill; text under them never shows through sharp.
   const material = "solid";

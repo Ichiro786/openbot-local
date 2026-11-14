@@ -82,7 +82,7 @@ import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";
 import { END_X, fieldDirectionStyle, layoutDirection, MIRROR_IN_RTL, textDirection } from "@/shared/lib/text-direction";
 import { ComposerFrost } from "@/shared/motion/ComposerFrost";
-import { glassMenuHostBox, openGlassMenu, useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
+import { glassMenuHostBox, openGlassMenu, useGlassMenuPauses } from "@/shared/motion/GlassMenu";
 import { menu as menuTokens } from "@/shared/motion/tokens";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
@@ -404,7 +404,8 @@ export const ChatComposer = memo(function ChatComposer({
   // Build 10: frosted glass (ColorOS motion, Android 12+, a target from the chat).
   const colorOSFrost = useColorOSMotion().enabled;
   const frosted = isAndroid && ANDROID_BLUR && !liquidGlassAvailable && colorOSFrost && frostTarget !== undefined;
-  const frostMenu = useGlassMenuFrostOpen();
+  // A frosted one-blur menu that takes this frost (thread menu, •••); the + menu takes the header band's.
+  const frostMenu = useGlassMenuPauses("composer");
   // A live conversation turns the card into a call bar of the full width, not the round button.
   const voiceBar = voice?.bar;
   const barMode = Boolean(voiceBar);
@@ -929,6 +930,8 @@ export const ChatComposer = memo(function ChatComposer({
       stagger: true,
       // Below the + are the composer and the keyboard (inside the host's frame): never flip there.
       above: true,
+      // Build 15.1 (Syed): the composer keeps its glass under its own + menu; the header band pauses.
+      pauses: "header",
       items: [
         ...(onUseSkill ? [{ id: "skill", title: t("mobile.chat.attachment.useSkill"), icon: icon(Sparkles) }] : []),
         { id: "files", title: t("mobile.chat.attachment.files"), icon: icon(Paperclip), disabled: files.preparing },
@@ -1271,9 +1274,10 @@ export const ChatComposer = memo(function ChatComposer({
             {frosted && frostTarget ? (
               <ComposerFrost
                 target={frostTarget}
-                // At most two blurs on the chat. Build 11.3: ANY frosted menu (thread menu, + menu, message
-                // menu) takes this blur, so the header band stays frosted under a one-blur menu.
-                shown={!voiceOpen && !frostMenu && !plusMenuOpen}
+                // At most two blurs on the chat. Build 11.3: a frosted menu (thread menu, message menu) takes
+                // this blur, so the header band stays frosted under a one-blur menu. Build 15.1: the + menu
+                // takes the header band's instead (pauses: "header"), so this frost stays while it shows.
+                shown={!voiceOpen && !frostMenu}
                 solid={String(fallbackBackground)}
                 radius={CARD_RADIUS}
               />
