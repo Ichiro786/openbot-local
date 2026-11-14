@@ -21,17 +21,25 @@ index ea7a7f9d0..7c07f0d03 100644
        options.memoryReview
 diff --git a/src/backend/openbot-ui-guide.test.ts b/src/backend/openbot-ui-guide.test.ts
 new file mode 100644
-index 000000000..62b7e1312
+index 000000000..8854be1f0
 --- /dev/null
 +++ b/src/backend/openbot-ui-guide.test.ts
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,135 @@
 +import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 +import { tmpdir } from "node:os";
 +import { join } from "node:path";
 +import { type AgentSummary, DEFAULT_AGENT_DEFAULTS } from "@openbot/contracts/ipc";
 +import { afterEach, beforeEach, describe, expect, it } from "vitest";
 +import { developerInstructions } from "./agent/developer-instructions";
-+import { OPENBOT_UI_GUIDE, openbotUiEnabled, openbotUiInstructions } from "./openbot-ui-guide";
++import {
++  OPENBOT_UI_GUIDE,
++  OPENBOT_UI_LEVELS,
++  openbotUiEnabled,
++  openbotUiGuide,
++  openbotUiInstructions,
++  openbotUiSetting,
++  parseOpenbotUiSetting,
++} from "./openbot-ui-guide";
 +
 +let dir: string;
 +let file: string;
@@ -68,97 +76,229 @@ index 000000000..62b7e1312
 +  return developerInstructions(agent, "/root/OpenBot/shared", [], "/root/OpenBot/automation", DEFAULT_AGENT_DEFAULTS);
 +}
 +
-+describe("openbot-ui guide", () => {
-+  it("is on without a setting file, and with an unreadable one", () => {
-+    expect(openbotUiEnabled()).toBe(true);
++describe("openbot-ui setting", () => {
++  it("is on + balanced without a setting file, and with an unreadable one", () => {
++    expect(openbotUiSetting()).toEqual({ enabled: true, level: "balanced" });
 +    write("{not json", 1000);
++    expect(openbotUiSetting()).toEqual({ enabled: true, level: "balanced" });
 +    expect(openbotUiEnabled()).toBe(true);
 +  });
 +
-+  it("is off when the app writes enabled false, and on again after the next write", () => {
-+    write('{"enabled":false}', 2000);
-+    expect(openbotUiEnabled()).toBe(false);
++  it("reads v1 files as balanced", () => {
++    expect(parseOpenbotUiSetting('{"version":1,"enabled":true}')).toEqual({ enabled: true, level: "balanced" });
++    expect(parseOpenbotUiSetting('{"version":1,"enabled":false}')).toEqual({ enabled: false, level: "balanced" });
++    expect(parseOpenbotUiSetting('{"enabled":false}')).toEqual({ enabled: false, level: "balanced" });
++  });
++
++  it("reads v2 levels, and an unknown level as balanced", () => {
++    for (const level of OPENBOT_UI_LEVELS)
++      expect(parseOpenbotUiSetting(JSON.stringify({ version: 2, enabled: true, level }))).toEqual({
++        enabled: true,
++        level,
++      });
++    expect(parseOpenbotUiSetting('{"version":2,"enabled":true,"level":"max"}').level).toBe("balanced");
++    expect(parseOpenbotUiSetting('{"version":2,"enabled":true,"level":7}').level).toBe("balanced");
++    expect(parseOpenbotUiSetting("null")).toEqual({ enabled: true, level: "balanced" });
++  });
++
++  it("follows the file by mtime: off, then each level", () => {
++    write('{"version":2,"enabled":false,"level":"high"}', 2000);
 +    expect(openbotUiInstructions()).toEqual([]);
-+    write('{"enabled":true}', 3000);
-+    expect(openbotUiEnabled()).toBe(true);
++    write('{"version":2,"enabled":true,"level":"low"}', 3000);
++    expect(openbotUiInstructions()).toEqual([openbotUiGuide("low")]);
++    write('{"version":2,"enabled":true,"level":"high"}', 4000);
++    expect(openbotUiInstructions()).toEqual([openbotUiGuide("high")]);
++    write('{"version":1,"enabled":true}', 5000);
 +    expect(openbotUiInstructions()).toEqual([OPENBOT_UI_GUIDE]);
 +  });
++});
 +
++describe("openbot-ui guide", () => {
 +  it("goes into every agent's developer instructions once while on, and not at all while off", () => {
 +    const on = instructions();
 +    expect(on.split("<openbot_ui>").length - 1).toBe(1);
 +    expect(on).toContain("[ui:action]");
-+    write('{"enabled":false}', 4000);
++    expect(on).toContain(openbotUiGuide("balanced"));
++    write('{"version":2,"enabled":true,"level":"low"}', 6000);
++    expect(instructions()).toContain(openbotUiGuide("low"));
++    write('{"version":2,"enabled":false,"level":"balanced"}', 7000);
 +    expect(instructions()).not.toContain("<openbot_ui>");
 +  });
 +
-+  it("says when to use UI and when not, and stays short", () => {
-+    expect(OPENBOT_UI_GUIDE).toMatch(/only when structure clearly beats prose/u);
-+    expect(OPENBOT_UI_GUIDE).toMatch(/Not for casual chat/u);
-+    expect(OPENBOT_UI_GUIDE).toMatch(/Never invent or pad data/u);
-+    expect(OPENBOT_UI_GUIDE).toMatch(/At most two blocks/u);
-+    // About 400 tokens at most: it rides in every system prompt.
-+    expect(OPENBOT_UI_GUIDE.length).toBeLessThan(1900);
++  it("balanced is the decision rule: concrete triggers", () => {
++    const g = openbotUiGuide("balanced");
++    expect(g).toBe(OPENBOT_UI_GUIDE);
++    expect(g).toMatch(/2\+ options compared on 2\+ attributes: table/u);
++    expect(g).toMatch(/real numeric series.*: chart/u);
++    expect(g).toMatch(/pick one of 2-6 known options: actions chips/u);
++    expect(g).toMatch(/2\+ fields from the user: form/u);
++    expect(g).toMatch(/multi-step work with status: steps or progress/u);
++    expect(g).toMatch(/warning they must not miss: callout/u);
++  });
++
++  it("low waits for an explicit ask or overwhelming structure; high lowers thresholds", () => {
++    expect(openbotUiGuide("low")).toMatch(/only when the user asks for a chart, table, buttons, choices or a form/u);
++    expect(openbotUiGuide("low")).not.toMatch(/- 2\+ options compared/u);
++    expect(openbotUiGuide("high")).toMatch(/any comparison of 2\+ options/u);
++    expect(openbotUiGuide("high")).toMatch(/Never add UI just to decorate/u);
++  });
++
++  it("every level keeps the anti-triggers, the prose line, no invented data, the examples and the catalog", () => {
++    for (const level of OPENBOT_UI_LEVELS) {
++      const g = openbotUiGuide(level);
++      expect(g).toMatch(/Never a block for: chit-chat/u);
++      expect(g).toMatch(/emotional or personal talk/u);
++      expect(g).toMatch(/code \(use a code block\)/u);
++      expect(g).toMatch(/never invent, estimate or pad/u);
++      expect(g).toMatch(/follow-up the UI above already answers/u);
++      expect(g).toMatch(/Always a one-line prose answer/u);
++      expect(g).toMatch(/at most two blocks/u);
++      expect(g).toMatch(/Bad: ask for the data/u);
++      expect(g).toMatch(/callout \{tone/u);
++      // About 550 tokens at most: it rides in every system prompt.
++      expect(g.length).toBeLessThan(2200);
++    }
 +  });
 +});
 diff --git a/src/backend/openbot-ui-guide.ts b/src/backend/openbot-ui-guide.ts
 new file mode 100644
-index 000000000..ab458faa6
+index 000000000..7cdad80d3
 --- /dev/null
 +++ b/src/backend/openbot-ui-guide.ts
-@@ -0,0 +1,55 @@
-+// OpenBot Local (fork patch engine-0.70.0-2): every agent learns the `openbot-ui` blocks that the
+@@ -0,0 +1,136 @@
++// OpenBot Local (fork patch engine-0.70.0-3): every agent learns the `openbot-ui` blocks that the
 +// OpenBot Local Android app renders as native UI (docs/openbot-ui.md in the fork), so nobody has to
-+// paste the spec into an agent's instructions. The guide is about WHEN to use UI first, then the
-+// shape, and is kept short because it rides in every system prompt.
++// paste the spec into an agent's instructions. The guide is a decision rule first (when UI beats
++// prose and when it never does), then the shape, and is kept short because it rides in every
++// system prompt.
 +//
-+// The setting "Rich UI in replies" lives in a small JSON file that the app writes inside the rootfs
-+// (like dm-context.json). A missing or unreadable file means ON (the default). It is cached by
-+// mtime, so a toggle applies to the next instructions the engine builds, without a restart.
++// The settings "Rich UI in replies" (on/off) and "Rich UI usage" (low | balanced | high) live in a
++// small JSON file that the app writes inside the rootfs (like dm-context.json):
++//   v2: {"version":2,"enabled":bool,"level":"low"|"balanced"|"high"}
++//   v1: {"version":1,"enabled":bool}            -> level balanced
++// A missing or unreadable file means ON + balanced (the defaults); an unknown level means balanced.
++// It is cached by mtime, so a change applies to the next instructions the engine builds, without a
++// restart.
 +import { readFileSync, statSync } from "node:fs";
 +import { homedir } from "node:os";
 +import { join } from "node:path";
 +
-+export const OPENBOT_UI_GUIDE = [
-+  "<openbot_ui>",
-+  "The user's OpenBot app renders a fenced ```openbot-ui block (JSON: one node, or one node per line) as native UI; other clients show the JSON.",
-+  "Use it only when structure clearly beats prose: a comparison or table, numbers, stats or progress, a chart of real data, a choice or confirmation as buttons or chips, several fields to collect (form), step-by-step status. Not for casual chat, short answers, emotional or personal talk, or when one sentence is clearer.",
-+  "At most two blocks per reply, each with a one-line prose summary outside it, so the text reads fine alone. Never invent or pad data for a chart, table or stat. Approvals of sends, deletes and payments still go through openbot.ask_ui.",
-+  'Nodes ("type"): card {title,subtitle?,body? markdown,image? https,children?: nodes}; stats {items:[{label,value,delta?,tone?:positive|negative|neutral}]}; table {columns:[..],rows:[[..]]}; chart {kind:bar|line|donut,labels:[..],series:[{name,values:[numbers]}]}; list {items:[{icon?,title,subtitle?,trailing?}]}; actions {style?:buttons|chips,items:[{id,label,value?}]}; form {id,fields:[{name,label,kind:text|number|select|toggle,options?,required?}],submit?}; steps {items:[{label,status:done|active|pending|failed}]}; progress {value 0..1,label?}; callout {tone:info|success|warning|error,title?,body}. Max 8 columns, 50 rows, 60 nodes, nesting 3.',
-+  'A tap or form submit comes back as a user message "[ui:action] {"id":…,"value":…} — label". Treat it as the user\'s answer to that UI and continue the work; do not show the same UI again unless asked.',
-+  "</openbot_ui>",
++export type OpenbotUiLevel = "low" | "balanced" | "high";
++export const OPENBOT_UI_LEVELS: readonly OpenbotUiLevel[] = ["low", "balanced", "high"];
++
++const HEAD =
++  "The user's OpenBot app renders a fenced ```openbot-ui block (JSON: one node, or one node per line) as native UI; other clients show the JSON. Prose is the default.";
++
++// When to use a block. One rule per level; the never-list below holds at every level.
++const WHEN: Record<OpenbotUiLevel, string> = {
++  low: "Use a block only when the user asks for a chart, table, buttons, choices or a form, or when prose would be overwhelming (4+ options on 3+ attributes, or 8+ numbers). Otherwise answer in prose or Markdown.",
++  balanced: [
++    "Use a block only when one trigger holds, else prose:",
++    "- 2+ options compared on 2+ attributes: table (stats for up to 4 headline numbers)",
++    "- a real numeric series, 3+ points over time or categories: chart",
++    "- the user must pick one of 2-6 known options: actions chips",
++    "- you need 2+ fields from the user: form",
++    "- multi-step work with status: steps or progress",
++    "- a warning they must not miss: callout",
++  ].join("\n"),
++  high: [
++    "Prefer a block wherever structure helps the user, with low thresholds:",
++    "- any comparison of 2+ options: table or stats",
++    "- any set of 3+ real numbers: stats or chart",
++    "- any choice the user must make: actions chips",
++    "- any field to collect: form",
++    "- any multi-step task: steps or progress; any risk: callout",
++    "Still prose when no trigger holds. Never add UI just to decorate.",
++  ].join("\n"),
++};
++
++const NEVER =
++  "Never a block for: chit-chat or greetings, a single fact or short answer, emotional or personal talk, code (use a code block), explanations or reasoning, data you do not have (never invent, estimate or pad numbers; ask or say so), or a follow-up the UI above already answers.";
++
++const RULES =
++  "Always a one-line prose answer outside the block that reads fine alone; at most two blocks. Approvals of sends, deletes and payments still go through openbot.ask_ui.";
++
++const EXAMPLES = [
++  "Examples:",
++  '- "Compare these 3 phones on price, battery, weight" -> one line + table. Good.',
++  '- "thanks!" or "what is the capital of France?" -> a card. Bad: answer in one sentence.',
++  '- "chart my spending" with no figures given -> a chart of guesses. Bad: ask for the data.',
 +].join("\n");
++
++const CATALOG =
++  'Nodes ("type"): card {title,subtitle?,body? markdown,image? https,children?: nodes}; stats {items:[{label,value,delta?,tone?:positive|negative|neutral}]}; table {columns:[..],rows:[[..]]}; chart {kind:bar|line|donut,labels:[..],series:[{name,values:[numbers]}]}; list {items:[{icon?,title,subtitle?,trailing?}]}; actions {style?:buttons|chips,items:[{id,label,value?}]}; form {id,fields:[{name,label,kind:text|number|select|toggle,options?,required?}],submit?}; steps {items:[{label,status:done|active|pending|failed}]}; progress {value 0..1,label?}; callout {tone:info|success|warning|error,title?,body}. Max 8 columns, 50 rows, 60 nodes, nesting 3.';
++
++const REPLY =
++  'A tap or form submit comes back as a user message "[ui:action] {"id":…,"value":…} — label": the user\'s answer to that UI. Continue the work; do not show the same UI again unless asked.';
++
++/** The guide for one usage level. */
++export function openbotUiGuide(level: OpenbotUiLevel): string {
++  return ["<openbot_ui>", HEAD, WHEN[level], NEVER, RULES, EXAMPLES, CATALOG, REPLY, "</openbot_ui>"].join("\n");
++}
++
++/** The default (balanced) guide. */
++export const OPENBOT_UI_GUIDE = openbotUiGuide("balanced");
++
++export interface OpenbotUiSetting {
++  enabled: boolean;
++  level: OpenbotUiLevel;
++}
++
++const DEFAULT_SETTING: OpenbotUiSetting = { enabled: true, level: "balanced" };
 +
 +function settingFile(): string {
 +  return process.env.OPENBOT_LOCAL_OPENBOT_UI_FILE || join(homedir(), ".openbot-local", "openbot-ui.json");
 +}
 +
-+let cached: { path: string; mtimeMs: number; enabled: boolean } | null = null;
++function isLevel(value: unknown): value is OpenbotUiLevel {
++  return value === "low" || value === "balanced" || value === "high";
++}
 +
-+/** Whether "Rich UI in replies" is on. Default ON. */
-+export function openbotUiEnabled(): boolean {
++/** Parse the app's setting file text (v1 or v2). Anything unreadable falls back to the defaults. */
++export function parseOpenbotUiSetting(text: string): OpenbotUiSetting {
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(text);
++  } catch {
++    return DEFAULT_SETTING;
++  }
++  if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTING;
++  const enabled = !("enabled" in parsed && parsed.enabled === false);
++  // v1 files have no level: balanced, the behaviour the v1 toggle had.
++  const level = "level" in parsed && isLevel(parsed.level) ? parsed.level : "balanced";
++  return { enabled, level };
++}
++
++let cached: { path: string; mtimeMs: number; setting: OpenbotUiSetting } | null = null;
++
++/** "Rich UI in replies" and "Rich UI usage". Default ON + balanced. */
++export function openbotUiSetting(): OpenbotUiSetting {
 +  const path = settingFile();
 +  let mtimeMs: number;
 +  try {
 +    mtimeMs = statSync(path).mtimeMs;
 +  } catch {
 +    cached = null;
-+    return true;
++    return DEFAULT_SETTING;
 +  }
-+  if (cached && cached.path === path && cached.mtimeMs === mtimeMs) return cached.enabled;
-+  let enabled = true;
++  if (cached && cached.path === path && cached.mtimeMs === mtimeMs) return cached.setting;
++  let setting = DEFAULT_SETTING;
 +  try {
-+    const parsed = JSON.parse(readFileSync(path, "utf8"));
-+    if (typeof parsed === "object" && parsed !== null && "enabled" in parsed && parsed.enabled === false)
-+      enabled = false;
++    setting = parseOpenbotUiSetting(readFileSync(path, "utf8"));
 +  } catch {
-+    enabled = true;
++    setting = DEFAULT_SETTING;
 +  }
-+  cached = { path, mtimeMs, enabled };
-+  return enabled;
++  cached = { path, mtimeMs, setting };
++  return setting;
 +}
 +
-+/** The guide as an instructions section, or nothing when the setting is off. */
++/** Whether "Rich UI in replies" is on. Default ON. */
++export function openbotUiEnabled(): boolean {
++  return openbotUiSetting().enabled;
++}
++
++/** The guide for the chosen level as an instructions section, or nothing when the setting is off. */
 +export function openbotUiInstructions(): string[] {
-+  return openbotUiEnabled() ? [OPENBOT_UI_GUIDE] : [];
++  const setting = openbotUiSetting();
++  return setting.enabled ? [openbotUiGuide(setting.level)] : [];
 +}
