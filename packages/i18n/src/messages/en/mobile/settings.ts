@@ -499,4 +499,12 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.openbotUi.label": "Rich UI in replies",
   "mobile.settings.openbotUi.footer":
     "Agents may answer with tables, charts, buttons and forms that this app draws natively, when that is clearer than text. Off: agents are no longer told about them and write plain text. Needs engine 0.70.0-2 or later.",
+  "mobile.settings.openbotUi.level": "Rich UI usage",
+  "mobile.settings.openbotUi.levelLow": "Low",
+  "mobile.settings.openbotUi.levelBalanced": "Balanced",
+  "mobile.settings.openbotUi.levelHigh": "High",
+  "mobile.settings.openbotUi.levelFooter":
+    "How readily agents answer with tables, charts, buttons and forms. Low: only when you ask for them or the answer would be hard to read as text. Balanced: when they clearly beat text. High: wherever they help. Never for small talk, short answers or made-up data. Needs engine 0.70.0-3 or later.",
+  "mobile.settings.openbotUi.levelOffFooter":
+    "Rich UI in replies is off (Settings > Local engine), so agents write plain text.",
 });

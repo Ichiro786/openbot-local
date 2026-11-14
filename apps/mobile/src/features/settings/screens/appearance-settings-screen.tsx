@@ -6,6 +6,7 @@ import Check from "lucide-react-native/icons/check";
 import { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useUniwind } from "uniwind";
+import { OpenbotUiLevelSection } from "@/features/local-engine/dm-context-section";
 import { readableOn } from "@/features/onboarding/model/onboarding-colors";
 import { AvatarSizeSlider } from "@/features/settings/components/avatar-size-slider";
 import { MessageColorPicker } from "@/features/settings/components/message-color-picker";
@@ -204,6 +205,8 @@ export function AppearanceSettingsScreen() {
         ) : null}
       </SettingsSection>
       <RoutineCollapseSection dark={theme === "dark"} />
+      {/* Build 15.1: how readily agents answer with rich UI (openbot-ui blocks). Android engine only. */}
+      {isAndroid ? <OpenbotUiLevelSection /> : null}
     </SettingsContent>
   );
 }
