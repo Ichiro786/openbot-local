@@ -421,9 +421,13 @@ export function useChatMotion(
     },
     [content, scrolledUp],
   );
-  const onComposerLayout = useCallback(
-    (event: Pick<LayoutChangeEvent, "nativeEvent">) => {
-      const height = event.nativeEvent.layout.height + 20;
+  // Build 15.2 (Syed: the composer's grow on tap stuttered as the keyboard opened): the composer grows
+  // with the keyboard's progress, and its layout reported each frame of that grow to JS, which moved the
+  // list's end space a frame late every time. With ColorOS motion on, a height measured while the
+  // keyboard is between down and up waits, and the latest one lands once when the keyboard settles.
+  const heldComposer = useRef<number | null>(null);
+  const setComposer = useCallback(
+    (height: number) => {
       const grew = height !== measurements.current.composer;
       measurements.current.composer = height;
       composerHeight.set(height);
@@ -432,6 +436,30 @@ export function useChatMotion(
         requestAnimationFrame(() => void listRef.current?.scrollToEnd({ animated: false }));
     },
     [composerHeight, scrolledUp],
+  );
+  const onComposerLayout = useCallback(
+    (event: Pick<LayoutChangeEvent, "nativeEvent">) => {
+      const height = event.nativeEvent.layout.height + 20;
+      const progress = keyboardProgress.get();
+      if (fallback.get() && progress > 0 && progress < 1) {
+        heldComposer.current = height;
+        return;
+      }
+      heldComposer.current = null;
+      setComposer(height);
+    },
+    [fallback, keyboardProgress, setComposer],
+  );
+  const landHeldComposer = useCallback(() => {
+    const height = heldComposer.current;
+    heldComposer.current = null;
+    if (height !== null) setComposer(height);
+  }, [setComposer]);
+  useAnimatedReaction(
+    () => keyboardProgress.get() <= 0 || keyboardProgress.get() >= 1,
+    (settled, previous) => {
+      if (settled && previous === false) scheduleOnRN(landHeldComposer);
+    },
   );
   /**
    * The rows from the latest user message to the end have their sizes, so the blank space under that
