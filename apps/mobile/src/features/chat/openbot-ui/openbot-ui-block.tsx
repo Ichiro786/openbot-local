@@ -4,6 +4,7 @@
 // that does not validate is shown as its code. No blur here: the chat's two frosts stay the only ones.
 import { Image } from "expo-image";
 import { Skeleton, Typography } from "heroui-native";
+import { useThemeColor } from "heroui-native/hooks";
 import Banknote from "lucide-react-native/icons/banknote";
 import Calendar from "lucide-react-native/icons/calendar";
 import ChartColumn from "lucide-react-native/icons/chart-column";
@@ -36,10 +37,13 @@ import { DonutChart, donutArcs } from "@/shared/components/donut-chart";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import {
+  actionItemStyle,
+  actionSentKey,
   estimateOpenbotUiHeight,
   formValues,
   openbotUiActionMessage,
   parseOpenbotUi,
+  type UiActionStyle,
   type UiActions,
   type UiCallout,
   type UiCard,
@@ -89,6 +93,7 @@ const sentFrom = new Map<string, string>();
 
 interface BlockState {
   send: ((text: string) => void) | undefined;
+  /** What was sent: a form's id, or an action item's actionSentKey (its id and place in its node). */
   sentId: string | undefined;
   markSent: (id: string) => void;
   renderBody: (body: string) => ReactNode;
@@ -462,31 +467,48 @@ function ListView({ node }: { node: UiList }) {
   );
 }
 
+function chipClass(style: UiActionStyle, chosen: boolean, dimmed: boolean): { box: string; label: string } {
+  const dim = dimmed ? " opacity-50" : "";
+  if (chosen) return { box: `border-accent bg-accent/15${dim}`, label: "text-accent" };
+  if (style === "primary") return { box: `border-accent bg-accent${dim}`, label: "font-semibold" };
+  if (style === "danger") return { box: `border-danger bg-control/50${dim}`, label: "text-danger-text" };
+  return { box: `border-separator bg-control/50${dim}`, label: "text-foreground" };
+}
+
 function ActionsView({ node }: { node: UiActions }) {
   const { send, sentId, markSent } = useBlock();
   const { t } = useText();
+  const [accentForeground] = useThemeColor(["accent-foreground"]);
   const disabled = !send || sentId !== undefined;
-  const press = (item: UiActions["items"][number]) => {
+  const press = (item: UiActions["items"][number], index: number) => {
     if (disabled || !send) return;
     void haptics.impact("soft");
-    markSent(item.id);
+    markSent(actionSentKey(item.id, index));
     send(openbotUiActionMessage(item.id, item.value, item.label));
   };
-  if (node.style === "chips") {
+  const kind = node.style === "chips" ? "chips" : "buttons";
+  if (kind === "chips") {
     return (
       <View className="flex-row flex-wrap gap-2">
-        {node.items.map((item) => {
-          const chosen = sentId === item.id;
+        {node.items.map((item, index) => {
+          const chosen = sentId === actionSentKey(item.id, index);
+          const style = actionItemStyle(item, node.items, kind);
+          const look = chipClass(style, chosen, disabled && !chosen);
           return (
             <Pressable
-              key={item.id}
+              // biome-ignore lint/suspicious/noArrayIndexKey: items may share an id; a finished block never reorders them.
+              key={index}
               accessibilityRole="button"
               accessibilityState={{ disabled, selected: chosen }}
               disabled={disabled}
-              onPress={() => press(item)}
-              className={`rounded-full border px-3.5 py-2 ${chosen ? "border-accent bg-accent/15" : "border-separator bg-control/50"} ${disabled && !chosen ? "opacity-50" : ""}`}
+              onPress={() => press(item, index)}
+              className={`rounded-full border px-3.5 py-2 ${look.box}`}
             >
-              <Typography.Paragraph type="body-sm" className={chosen ? "text-accent" : "text-foreground"}>
+              <Typography.Paragraph
+                type="body-sm"
+                className={look.label}
+                style={!chosen && style === "primary" ? { color: accentForeground } : undefined}
+              >
                 {chosen ? `${item.label} · ${t("mobile.chat.ui.chosen")}` : item.label}
               </Typography.Paragraph>
             </Pressable>
@@ -497,16 +519,17 @@ function ActionsView({ node }: { node: UiActions }) {
   }
   return (
     <View className="flex-row flex-wrap gap-2">
-      {node.items.map((item) => (
+      {node.items.map((item, index) => (
         <Button
-          key={item.id}
+          // biome-ignore lint/suspicious/noArrayIndexKey: items may share an id; a finished block never reorders them.
+          key={index}
           size="sm"
-          variant={item.style === "danger" ? "danger" : item.style === "secondary" ? "secondary" : "primary"}
+          variant={actionItemStyle(item, node.items, kind)}
           isDisabled={disabled}
-          onPress={() => press(item)}
+          onPress={() => press(item, index)}
         >
           <Button.Label>
-            {sentId === item.id ? `${item.label} · ${t("mobile.chat.ui.chosen")}` : item.label}
+            {sentId === actionSentKey(item.id, index) ? `${item.label} · ${t("mobile.chat.ui.chosen")}` : item.label}
           </Button.Label>
         </Button>
       ))}

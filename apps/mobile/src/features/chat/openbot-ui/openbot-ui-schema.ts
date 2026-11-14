@@ -313,6 +313,31 @@ export function openbotUiActionMessage(
   return `[ui:action] ${payload} — ${label.replace(/\s+/gu, " ").trim()}`;
 }
 
+/**
+ * The key an action item's sent state is kept under. Items in one `actions` node may share an id
+ * (one question, several answers: docs/openbot-ui.md), so the item's place in the node tells them
+ * apart; the message sent still carries only the item's id and value.
+ */
+export function actionSentKey(itemId: string, index: number): string {
+  return `${itemId}#${index}`;
+}
+
+export type UiActionStyle = NonNullable<UiActions["items"][number]["style"]>;
+
+/**
+ * The style an action item is drawn in. An item with no style is primary only when no item in its
+ * node asks for primary, so a block without styles keeps its look and a "primary" item stands out.
+ */
+export function actionItemStyle(
+  item: UiActions["items"][number],
+  items: UiActions["items"],
+  kind: "buttons" | "chips",
+): UiActionStyle {
+  if (item.style) return item.style;
+  if (kind === "chips") return "secondary";
+  return items.some((other) => other.style === "primary") ? "secondary" : "primary";
+}
+
 /** A form's values from its fields' drafts: numbers as numbers, toggles as booleans. Null when a required field is empty or a number is not one. */
 export function formValues(
   fields: readonly UiFormField[],

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionItemStyle,
+  actionSentKey,
   estimateOpenbotUiHeight,
   fenceClosed,
   formValues,
@@ -146,5 +148,42 @@ describe("formValues", () => {
     expect(formValues(fields, { n: "3" })).toBeNull();
     expect(formValues(fields, { name: "A", n: "three" })).toBeNull();
     expect(formValues(fields, { name: "A", size: "XL" })).toBeNull();
+  });
+});
+
+describe("action items", () => {
+  it("keys sent state by id and place, so items sharing an id stay apart", () => {
+    const parsed = parseOpenbotUi(
+      '{"type":"actions","style":"chips","items":[{"id":"plan","label":"Basic","value":"basic"},{"id":"plan","label":"Plus","value":"plus"},{"id":"plan","label":"Pro","value":"pro","style":"primary"}]}',
+    );
+    if (!parsed.ok || parsed.nodes[0]?.type !== "actions") throw new Error("expected an actions node");
+    const items = parsed.nodes[0].items;
+    const keys = items.map((item, index) => actionSentKey(item.id, index));
+    expect(keys).toEqual(["plan#0", "plan#1", "plan#2"]);
+    expect(new Set(keys).size).toBe(items.length);
+    const sent = actionSentKey("plan", 1);
+    expect(keys.filter((key) => key === sent)).toEqual(["plan#1"]);
+    // The message still carries only the item's id and value.
+    const plus = items[1];
+    if (!plus) throw new Error("expected a second item");
+    expect(openbotUiActionMessage(plus.id, plus.value, plus.label)).toBe(
+      '[ui:action] {"id":"plan","value":"plus"} — Plus',
+    );
+  });
+
+  it("honours item styles", () => {
+    const plain = [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ];
+    expect(plain.map((item) => actionItemStyle(item, plain, "buttons"))).toEqual(["primary", "primary"]);
+    expect(plain.map((item) => actionItemStyle(item, plain, "chips"))).toEqual(["secondary", "secondary"]);
+    const mixed = [
+      { id: "a", label: "A", style: "primary" as const },
+      { id: "b", label: "B" },
+      { id: "c", label: "C", style: "danger" as const },
+    ];
+    expect(mixed.map((item) => actionItemStyle(item, mixed, "buttons"))).toEqual(["primary", "secondary", "danger"]);
+    expect(mixed.map((item) => actionItemStyle(item, mixed, "chips"))).toEqual(["primary", "secondary", "danger"]);
   });
 });
