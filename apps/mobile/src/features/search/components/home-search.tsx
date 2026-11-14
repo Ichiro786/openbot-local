@@ -85,9 +85,8 @@ import { typeScale } from "@/shared/lib/type-scale";
 import { useLiquidGlass } from "@/shared/lib/use-liquid-glass";
 import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { HomeEdgeBlur } from "@/shared/motion/HomeEdgeBlur";
-import { useHomeCovered } from "@/shared/motion/liveZoom";
+import { type LiveZoom, liveZoomOf, useHomeCovered } from "@/shared/motion/liveZoom";
 import { edges } from "@/shared/motion/tokens";
-import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 /**
  * Opens an agent chat from the search. In the chat list pane, the chat takes the place of the open
@@ -1031,6 +1030,11 @@ function TargetChip({ agent, onPress }: { agent: MobileAgent; onPress: () => voi
  * blur blurs the whole home list again on each frame that the list changes, so it stops from the
  * moment home loses focus. It starts again when home has focus and its return animation has ended.
  * A sheet over home does not hide home, so its close gives focus with no animation to wait for.
+ * Build 15.2 (Syed): a ColorOS zoom chat is a transparent route with no native animation: home stays
+ * drawn and still under it, so its push and pop leave home at rest, and the field stays frosted through
+ * the chat's open, its close and right after Back (useHomeCovered alone pauses the blurs, while the
+ * opaque chat covers home). Once a screen was pushed over that chat, its pop is the stack's own
+ * animation again (LiveZoom.nativeClose), and home waits for it as for any other screen.
  */
 function useHomeAtRest(): boolean {
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
@@ -1039,13 +1043,24 @@ function useHomeAtRest(): boolean {
     if (!ANDROID_BLUR) return;
     // A screen that slid over home hid it; home then comes back with its own animation.
     let hidden = false;
+    // The zoom chat home lost its focus to, until the next blur (its pop's focus and transitions follow it).
+    let zoom: LiveZoom | undefined;
+    const zoomOver = () => zoom !== undefined && !zoom.nativeClose;
     const listeners = [
-      navigation.addListener("blur", () => setAtRest(false)),
+      navigation.addListener("blur", () => {
+        const state = navigation.getState();
+        const top = state.routes[state.index];
+        zoom = top ? liveZoomOf(top.key) : undefined;
+        if (!zoomOver()) setAtRest(false);
+      }),
       navigation.addListener("focus", () => {
         if (!hidden) setAtRest(true);
       }),
-      navigation.addListener("transitionStart", () => setAtRest(false)),
+      navigation.addListener("transitionStart", () => {
+        if (!zoomOver()) setAtRest(false);
+      }),
       navigation.addListener("transitionEnd", (event) => {
+        if (zoomOver()) return;
         if (event.data.closing) {
           hidden = !navigation.isFocused();
           return;
@@ -1066,22 +1081,11 @@ function useHomeAtRest(): boolean {
  * scrim covers home then, and the Android blur would blur the whole home list again on each frame of
  * the motion. Only the capsule reads the drawer state, so the field itself does not render again.
  */
-function HomeFieldCapsule({ blurPaused = false, blurTarget, ...props }: ComponentProps<typeof GlassCapsule>) {
+function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeof GlassCapsule>) {
   const drawerShown = useAppDrawerShown();
   // Build 11.3 simple zoom: home stays drawn under a zoomed chat; its blurs pause while a chat covers it.
   const covered = useHomeCovered();
-  // Build 15.1 (Syed): with ColorOS motion on, the field is the solid capsule, always. Its blur used to
-  // pause while home was not at rest and start again only when home's return transition had ended
-  // (useHomeAtRest), so after Back from a chat the field turned from solid to frosted glass a moment
-  // late, in front of him. With no blur the field has nothing to switch; home keeps one blur (the edge).
-  const colorOS = useColorOSMotion().enabled;
-  return (
-    <GlassCapsule
-      {...props}
-      blurTarget={colorOS ? undefined : blurTarget}
-      blurPaused={blurPaused || drawerShown || covered}
-    />
-  );
+  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown || covered} colorOSFrost />;
 }
 
 /** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
