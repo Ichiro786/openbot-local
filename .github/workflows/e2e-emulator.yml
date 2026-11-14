@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 12)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build15-ci]
+    branches: [build151-ci]
 
 permissions:
   contents: read

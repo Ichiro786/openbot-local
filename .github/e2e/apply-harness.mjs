@@ -517,3 +517,59 @@ console.log("harness applied");
     console.log(`open timing marks applied (${n} chat-view, ${k} motion)`);
   }
 }
+// Build 15.1 glass lanes (optional, only on targets that have the 15.1 code):
+// (1) E2EBLUR logcat lines: every change of the live blur set (count + tags), so a lane can read which
+//     blurs run at any moment (composer frost under the + menu) and the most at once during the lane.
+// (2) The REAL home field capsule (HomeFieldCapsule + useHomeAtRest from home-search.tsx, exported for
+//     the harness only) at the bottom of the harness home, outside its BlurTargetView, with home's props.
+{
+  const bb = "apps/mobile/src/shared/glass/blurBudget.ts";
+  if (existsSync(bb) && readFileSync("apps/mobile/src/shared/motion/GlassMenu.tsx", "utf8").includes("useGlassMenuPauses")) {
+    let b = readFileSync(bb, "utf8");
+    const inc = "    live += 1;\n";
+    const dec = "      live -= 1;\n";
+    if (!b.includes(inc) || !b.includes(dec)) throw new Error("blurBudget anchors missing (15.1)");
+    b = b.replace("let live = 0;", `let live = 0;
+const __e2eTags: string[] = [];
+function __e2eBlur(tag: string, delta: 1 | -1) {
+  if (delta > 0) __e2eTags.push(tag);
+  else {
+    const i = __e2eTags.indexOf(tag);
+    if (i >= 0) __e2eTags.splice(i, 1);
+  }
+  console.log(\`E2EBLUR live=\${live} tags=\${__e2eTags.join(",")}\`);
+}`);
+    b = b.replace(inc, `${inc}    __e2eBlur(tag, 1);\n`).replace(dec, `${dec}      __e2eBlur(tag, -1);\n`);
+    writeFileSync(bb, b);
+    console.log("15.1 blur tag log applied");
+  }
+  const hs = "apps/mobile/src/features/search/components/home-search.tsx";
+  const index = "apps/mobile/src/app/index.tsx";
+  if (existsSync(hs) && existsSync(index) && readFileSync(hs, "utf8").includes("function HomeFieldCapsule(")) {
+    writeFileSync(hs, `${readFileSync(hs, "utf8")}\nexport { HomeFieldCapsule as __E2EHomeFieldCapsule, useHomeAtRest as __E2EHomeAtRest };\n`);
+    let f = readFileSync(index, "utf8");
+    const open = "<BlurTargetView ref={frost} style={{ flex: 1 }}>";
+    const close = "    </BlurTargetView>\n  );";
+    if (!f.includes(open) || !f.includes(close)) throw new Error("home bar anchors missing (15.1)");
+    f = `import type { RefObject as __RefObject } from "react";\nimport { __E2EHomeAtRest, __E2EHomeFieldCapsule } from "@/features/search/components/home-search";\n${f}`
+      .replace(open, `<View style={{ flex: 1 }}>\n    ${open}`)
+      .replace(close, `    </BlurTargetView>
+    <__E2EHomeBar target={frost} />
+    </View>
+  );`);
+    f += `
+function __E2EHomeBar({ target }: { target: __RefObject<ViewInstance | null> }) {
+  const atRest = __E2EHomeAtRest();
+  return (
+    <View accessible accessibilityLabel="E2E HOME BAR" pointerEvents="none" style={{ position: "absolute", left: 16, right: 16, bottom: 40 }}>
+      <__E2EHomeFieldCapsule liquidGlass={false} fallbackBackground="#2a2f36" blurTarget={target} blurPaused={!atRest}>
+        <View style={{ flex: 1 }} />
+      </__E2EHomeFieldCapsule>
+    </View>
+  );
+}
+`;
+    writeFileSync(index, f);
+    console.log("15.1 home bar applied");
+  }
+}

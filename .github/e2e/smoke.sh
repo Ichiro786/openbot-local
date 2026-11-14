@@ -956,6 +956,108 @@ genui_shot() { # build 15: an agent reply with openbot-ui blocks (stats, bar cha
   adb shell input swipe 540 900 540 1500 300; sleep 1.2; shot genui-up
   [ -n "${BACKXY:-}" ] && real_tap $BACKXY; sleep 2; on_home gu-h || home
 }
+# ---------------- build 15.1 glass lanes ----------------
+# E2EBLUR lines (harness patch of blurBudget.ts): "E2EBLUR live=N tags=a,b" on every change of the live blur set.
+# lane_mark writes a sentinel into the same log; blur_since prints the E2EBLUR lines after it.
+lane_mark() { adb shell log -t ReactNativeJS "E2ELANE $1" >/dev/null 2>&1; }
+blur_since() { adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'E2ELANE [A-Za-z0-9_-]+|E2EBLUR live=[0-9]+ tags=[A-Za-z0-9,_-]*' | awk -v m="E2ELANE $1" '$0==m{on=1;next} on&&/^E2EBLUR/'; }
+blur_now() { adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'E2EBLUR live=[0-9]+ tags=[A-Za-z0-9,_-]*' | tail -1; }
+blur_lane_max() { blur_since "$1" | sed -E 's/.*live=([0-9]+).*/\1/' | sort -n | tail -1; }
+homebar_lane() { # (a) chat -> Back -> home: bar region at ~0/300/800/1500 ms (+3000 reference) after Back, 5x (2 rapid)
+  local i xy box kind mx
+  log "== 15.1 lane A: home bar after Back (ColorOS ON)"
+  home; dump hb-0; box=$(node "$OUT/hb-0.xml" "E2E HOME BAR" b)
+  [ -n "$box" ] || { log "FAIL homebar: no E2E HOME BAR on the harness home (harness not applied?)"; FAIL=1; return 0; }
+  shot hb-rest; log "  home bar bounds px: $box; at rest: $(blur_now)"
+  lane_mark hb
+  for i in 1 2 3 4 5; do
+    home; xy=$(real_row) || { log "FAIL homebar: no E2E Real chat row"; FAIL=1; return 0; }
+    adb shell input tap $xy
+    if [ $i -le 3 ]; then kind=settled; sleep 2.6; dump hb-$i-c; on_real hb-$i-c || log "  homebar $i: chat not on screen before Back"; else kind=rapid; sleep 0.5; fi
+    # One device-side script: Back, then screencaps at >= 0/300/800/1500/3000 ms after the key (uptime, 10 ms steps).
+    adb shell 'input keyevent 4; u=$(cut -d" " -f1 /proc/uptime); t0=${u%.*}${u#*.}; for t in 0 300 800 1500 3000; do while :; do u=$(cut -d" " -f1 /proc/uptime); n=${u%.*}${u#*.}; [ $(( (n - t0) * 10 )) -ge $t ] && break; sleep 0.01; done; screencap -p /sdcard/hb-$t.png; u=$(cut -d" " -f1 /proc/uptime); e=${u%.*}${u#*.}; echo "$t $(( (n - t0) * 10 )) $(( (e - t0) * 10 ))"; done' > "$OUT/hb-$i-times.txt" 2>&1
+    for t in 0 300 800 1500 3000; do adb pull /sdcard/hb-$t.png "$OUT/hb-$i-$t.png" >/dev/null 2>&1; done
+    adb shell rm -f /sdcard/hb-*.png
+    on_home hb-$i-h || { log "  homebar $i ($kind): not home 3 s after Back"; home; }
+    python3 - "$OUT" "$i" "$kind" $box >> "$OUT/homebar.txt" <<'PYHB' || log "  homebar $i: compare failed"
+import sys
+from PIL import Image, ImageChops, ImageStat
+out,i,kind=sys.argv[1],sys.argv[2],sys.argv[3]; x1,y1,x2,y2=map(int,sys.argv[4:8])
+box=(x1+24,y1+16,x2-24,y2-16)
+times={}
+for l in open(f"{out}/hb-{i}-times.txt"):
+    p=l.split()
+    if len(p)==3: times[p[0]]=(p[1],p[2])
+def crop(t): return Image.open(f"{out}/hb-{i}-{t}.png").convert("RGB").crop(box)
+ref=crop(3000)
+res=[]
+for t in (0,300,800,1500):
+    try: c=crop(t)
+    except Exception as e: res.append(f"{t}:missing"); continue
+    d=ImageChops.difference(c,ref); mean=sum(ImageStat.Stat(d).mean)/3
+    px=sum(1 for p in d.getdata() if max(p)>24)/ (d.size[0]*d.size[1])
+    sd=sum(ImageStat.Stat(c).stddev)/3
+    res.append(f"{t}(at {times.get(str(t),('?','?'))[0]}-{times.get(str(t),('?','?'))[1]}ms):diff={mean:.2f},px>24={px*100:.1f}%,sd={sd:.1f}")
+    if t>=800 and (mean>6 or px>0.05): res.append(f"CHANGED@{t}")
+print(f"homebar {i} {kind} ref3000 sd={sum(ImageStat.Stat(ref).stddev)/3:.1f} | "+" ".join(res))
+PYHB
+    tail -1 "$OUT/homebar.txt" | tee -a "$OUT/steps.txt"
+    grep -q "^homebar $i .*CHANGED" "$OUT/homebar.txt" && { log "FAIL homebar $i ($kind): the bar look changed >= 800 ms after Back"; FAIL=1; }
+    cp "$OUT/hb-$i-0.png" "$OUT/homebar-$i-0ms.png" 2>/dev/null; cp "$OUT/hb-$i-800.png" "$OUT/homebar-$i-800ms.png" 2>/dev/null
+  done
+  mx=$(blur_lane_max hb); blur_since hb > "$OUT/homebar-blurs.txt"
+  log "  home bar lane: blurs live max=${mx:-none} during the lane; capsule blurs: $(grep -c 'glass-capsule' "$OUT/homebar-blurs.txt")"
+  [ "${mx:-0}" -gt 2 ] && { log "FAIL homebar: blurs live max=$mx (>2)"; FAIL=1; }
+  grep -q 'glass-capsule' "$OUT/homebar-blurs.txt" && { log "FAIL homebar: the home field capsule blurred with ColorOS ON (should be solid)"; FAIL=1; }
+  blur_max homebar
+}
+plus_tags_ok() { # $1 name: menu open -> composer frost live, header band paused, <= 2 live
+  local now; now=$(blur_now); echo "$1 $now" >> "$OUT/plusfrost.txt"
+  case "$now" in *composer-frost*glass-menu*|*glass-menu*composer-frost*) ;; *) log "FAIL $1: composer frost not live under the + menu ($now)"; FAIL=1; return 0;; esac
+  case "$now" in *glass-band*) log "FAIL $1: header band still blurring under the + menu ($now)"; FAIL=1;; esac
+  log "ok: $1 composer frost live under the + menu ($now)"
+}
+plusfrost_lane() { # (b) real chat -> + : composer keeps its frost, header band pauses, <= 2 live; rapid open/close 5x
+  local xy i now mx
+  log "== 15.1 lane B: composer frost under the + menu (real chat, ColorOS ON)"
+  home; real_open 3.2 || { log "FAIL plusfrost: no real chat row"; FAIL=1; return 0; }
+  dump pf-0; on_real pf-0 || { log "FAIL plusfrost: real chat not on screen"; FAIL=1; home; return 0; }
+  xy=$(find_node "$OUT/pf-0.xml" "Add attachment")
+  [ -n "$xy" ] || { log "FAIL plusfrost: no + (Add attachment) in the real chat composer"; FAIL=1; real_tap $BACKXY; sleep 2; home; return 0; }
+  sleep 0.8; shot plus-composer-closed; log "  at rest in the chat: $(blur_now)"
+  lane_mark pf
+  adb shell input tap $xy; sleep 1.5; check pf-open || return 0
+  shot plus-composer; dump pf-1
+  log "  + menu rows: Files=$(count "$OUT/pf-1.xml" Files) Photos=$(count "$OUT/pf-1.xml" Photos)"
+  plus_tags_ok pf-open
+  python3 - "$OUT/plus-composer.png" "$OUT/plus-composer-bottom.png" "$OUT/plus-composer-closed.png" <<'PYPC' || true
+import sys
+from PIL import Image, ImageChops, ImageStat
+a=Image.open(sys.argv[1]).convert("RGB"); w,h=a.size; box=(0,int(h*0.80),w,h); a.crop(box).save(sys.argv[2])
+b=Image.open(sys.argv[3]).convert("RGB").crop(box); d=ImageChops.difference(a.crop(box),b)
+print(f"composer band (bottom 20%) open vs closed: mean diff {sum(ImageStat.Stat(d).mean)/3:.2f}")
+PYPC
+  adb shell input keyevent 4; sleep 1.3; dump pf-c0
+  on_real pf-c0 || { log "FAIL plusfrost: Back with the + menu open left the chat"; FAIL=1; home; return 0; }
+  now=$(blur_now); echo "pf-closed $now" >> "$OUT/plusfrost.txt"; log "  after close: $now"
+  case "$now" in *composer-frost*) ;; *) log "FAIL plusfrost: composer frost not live after the menu closed ($now)"; FAIL=1;; esac
+  case "$now" in *glass-band*) ;; *) log "  note plusfrost: header band not back 1.3 s after close ($now)";; esac
+  for i in 1 2 3 4 5; do
+    if [ $((i % 2)) = 1 ]; then adb shell input tap $xy; sleep 0.2; adb shell input keyevent 4          # Back during the open
+    else adb shell input tap $xy; sleep 0.2; adb shell input tap 540 520; sleep 0.1; adb shell input tap $xy; sleep 1.0; plus_tags_ok pf-reopen-$i; adb shell input keyevent 4; fi  # outside tap during the open, + during the close, then Back
+    sleep 1.3; dump pf-r$i
+    if ! on_real pf-r$i; then log "  plusfrost rapid $i: left the chat (a Back reached the screen after the menu closed); reopening"; check pf-r$i || return 0; home; real_open 3.2 || return 0; dump pf-0b; xy=$(find_node "$OUT/pf-0b.xml" "Add attachment"); [ -n "$xy" ] || return 0; continue; fi
+    [ "$(count "$OUT/pf-r$i.xml" Photos)" = 0 ] || { log "FAIL plusfrost rapid $i: + menu still open"; FAIL=1; close_menu_if_open pf-r$i-left; }
+    now=$(blur_now); echo "pf-r$i $now" >> "$OUT/plusfrost.txt"
+    case "$now" in *composer-frost*) log "ok: plusfrost rapid $i: closed, $now";; *) log "FAIL plusfrost rapid $i: composer frost not live after close ($now)"; FAIL=1;; esac
+    case "$now" in *glass-menu*) log "FAIL plusfrost rapid $i: menu blur still live after close ($now)"; FAIL=1;; esac
+  done
+  mx=$(blur_lane_max pf); blur_since pf > "$OUT/plusfrost-blurs.txt"
+  log "  + menu lane: blurs live max=${mx:-none}"
+  [ "${mx:-0}" -gt 2 ] && { log "FAIL plusfrost: blurs live max=$mx (>2)"; FAIL=1; }
+  real_tap $BACKXY; sleep 2.2; on_home pf-h || home
+  blur_max plusfrost
+}
 header_shot() { # build 11.3 scope: the ColorOS chat header over scrolled text (real ChatHeader + list), dark
   log "== header frost shot ($1)"
   home; tapl "E2E List" 10 "$1-0" || { log "  header shot: no List row"; return; }
@@ -973,7 +1075,7 @@ if [ -f .github/e2e/quick113 ]; then
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
   log "== QUICK113 lane: real chat Back lanes + stuck + close (target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
   touch "$OUT/real-lanes.txt"; ensure_running q
-  if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; genui_shot; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
+  if real_setup; then open_latest "E2E Real chat" LATEST-END-VEYR 8; open_latest "E2E Long chat" LATEST-END-LONG 12; open_latest "E2E Short chat" LATEST-END-SHORT 8; genui_shot; homebar_lane; plusfrost_lane; [ -f .github/e2e/open-only ] && { log "RESULT FAIL=$FAIL (open-only)"; exit $FAIL; }; real_timing; real_lanes ON $REALN "$(cat .github/e2e/lanes 2>/dev/null || echo L1 L2 L3 L4 L5 L6 L7 L8 L9)"; fi
   stuck_scn q-stuck; close_scn q-close ON
   # Build 14: send after a long reply, ColorOS ON and OFF (jank + scroll direction changes).
   if [ -f .github/e2e/sendlane ]; then list_scn q-send ON; list_scn q-send2 ON; fi
