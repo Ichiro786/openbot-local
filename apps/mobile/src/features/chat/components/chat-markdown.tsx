@@ -91,6 +91,7 @@ import { ChatCodeBlock } from "./chat-code-block";
 import { ChatCodePreview } from "./chat-code-preview";
 import { useOpenMessageFile } from "./chat-file-actions";
 import { ChatMath } from "./chat-math";
+import { ChatRenderBoundary } from "./chat-render-boundary";
 import { useOpenTaggedTab } from "./chat-tag-actions";
 import { CHAT_CODE_STYLES, CHAT_HEADING_RAMP, CHAT_TEXT_STYLES, type ChatTextType } from "./chat-text-styles";
 import { type ReplyPlayback, useReplyPlayback } from "./use-reply-playback";
@@ -1169,24 +1170,28 @@ const MarkdownBlock = memo(function MarkdownBlock({
     );
   }
   if (tokenIs(token, "code") && token.lang?.trim().toLowerCase() === "openbot-ui") {
-    // OpenBot Local: an agent's declarative UI (docs/openbot-ui.md), drawn natively.
-    return (
-      <OpenbotUiBlock
+    // OpenBot Local: an agent's declarative UI (docs/openbot-ui.md), drawn natively. A block that
+    // does not validate, or whose renderer throws (build 15.3), is shown as its code.
+    const code = (
+      <ChatCodeBlock
+        selectable={presentation.selectable}
         text={token.text}
-        complete={presentation.finished || !presentation.streaming || fenceClosed(token.raw)}
-        renderBody={(body) => (
-          <ChatMarkdown body={body} color={presentation.style.color} finished selectable={presentation.selectable} />
-        )}
-        fallback={
-          <ChatCodeBlock
-            selectable={presentation.selectable}
-            text={token.text}
-            language="json"
-            finished={presentation.finished}
-            tone={presentation.tone}
-          />
-        }
+        language="json"
+        finished={presentation.finished}
+        tone={presentation.tone}
       />
+    );
+    return (
+      <ChatRenderBoundary resetKey={token.text} fallback={code}>
+        <OpenbotUiBlock
+          text={token.text}
+          complete={presentation.finished || !presentation.streaming || fenceClosed(token.raw)}
+          renderBody={(body) => (
+            <ChatMarkdown body={body} color={presentation.style.color} finished selectable={presentation.selectable} />
+          )}
+          fallback={code}
+        />
+      </ChatRenderBoundary>
     );
   }
   if (tokenIs(token, "code")) {

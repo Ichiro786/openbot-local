@@ -122,6 +122,7 @@ import {
 import { ChatMessageGesture } from "./chat-message-gesture";
 import { openMessageMenu } from "./chat-message-menu";
 import { ChatOutboxStatus, OutboxMessageMenu, type OutboxRowStatus } from "./chat-outbox-status";
+import { ChatRenderBoundary } from "./chat-render-boundary";
 import { ChatSelectableText } from "./chat-selectable-text";
 import { ChatTagActionsContext, useTaggedTabOpener } from "./chat-tag-actions";
 import { HistoryShownContext } from "./use-history-shown";
@@ -805,6 +806,13 @@ const MessageRow = memo(function MessageRow({
     animationEnabled: shared.animationActive && arriving,
     align: message.kind === "message" && message.author === "user" ? ("end" as const) : ("start" as const),
   };
+  // Build 15.3: a message whose Markdown or UI blocks throw while rendering shows its raw text instead.
+  const rawBody =
+    message.kind === "message" ? (
+      <Typography.Paragraph selectable style={{ color: textColor }}>
+        {message.body}
+      </Typography.Paragraph>
+    ) : null;
   // The wrappers keep their identity while their inputs stay, so `ChatMarkdown` and its table blocks
   // keep their memo when the row renders again for another reason, such as its actions.
   const bubbleFor = useCallback(
@@ -973,14 +981,16 @@ const MessageRow = memo(function MessageRow({
         ) : null}
         {message.body.trim() ? (
           tableOutside && !selecting ? (
-            <ChatFileActionsContext value={openMessageFile}>
-              <ChatMarkdown
-                {...markdownProps}
-                renderText={bubbleFor}
-                renderTable={message.kind === "message" && message.author === "user" ? sentTable : undefined}
-                tableFrame={tone ? tableOnColor : undefined}
-              />
-            </ChatFileActionsContext>
+            <ChatRenderBoundary resetKey={message.body} fallback={bubbleFor(rawBody)}>
+              <ChatFileActionsContext value={openMessageFile}>
+                <ChatMarkdown
+                  {...markdownProps}
+                  renderText={bubbleFor}
+                  renderTable={message.kind === "message" && message.author === "user" ? sentTable : undefined}
+                  tableFrame={tone ? tableOnColor : undefined}
+                />
+              </ChatFileActionsContext>
+            </ChatRenderBoundary>
           ) : (
             bubbleFor(
               // The message text stays mounted while the reader selects, so it does not change size or
@@ -991,9 +1001,11 @@ const MessageRow = memo(function MessageRow({
                   accessibilityElementsHidden={selecting}
                   importantForAccessibility={selecting ? "no-hide-descendants" : "auto"}
                 >
-                  <ChatFileActionsContext value={openMessageFile}>
-                    <ChatMarkdown {...markdownProps} />
-                  </ChatFileActionsContext>
+                  <ChatRenderBoundary resetKey={message.body} fallback={rawBody}>
+                    <ChatFileActionsContext value={openMessageFile}>
+                      <ChatMarkdown {...markdownProps} />
+                    </ChatFileActionsContext>
+                  </ChatRenderBoundary>
                 </View>
                 {selecting ? (
                   <ChatSelectableText
