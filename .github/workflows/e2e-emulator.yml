@@ -1,4 +1,4 @@
-name: E2E emulator smoke (build 12)
+name: E2E emulator smoke (build 15.3 genlong)
 
 # Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build11-review-ci (build 11 reviewer; from build10-review-ci).
 # Build 11.2 builder copy: branch build11-2-ci (from build11-review-ci ed3de711), target build11-2; adds the zoom-close / predictive back and colour picker checks.
@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 12)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build151-ci]
+    branches: [build153-ci]
 
 permissions:
   contents: read
@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       target: ${{ steps.p.outputs.target }}
+      old: ${{ steps.p.outputs.old }}
       reuse: ${{ steps.p.outputs.reuse }}
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +33,7 @@ jobs:
       - id: p
         run: |
           echo "target=$(tr -d '[:space:]' < .github/e2e/target-ref)" >> "$GITHUB_OUTPUT"
+          echo "old=$(tr -d '[:space:]' < .github/e2e/target-ref-old)" >> "$GITHUB_OUTPUT"
           echo "reuse=$( [ -f .github/e2e/apk-run-id ] && tr -d '[:space:]' < .github/e2e/apk-run-id || true)" >> "$GITHUB_OUTPUT"
           cat .github/e2e/target-ref
 
@@ -39,6 +41,11 @@ jobs:
     needs: plan
     if: needs.plan.outputs.reuse == ''
     runs-on: ubuntu-24.04
+    # Build 15.3: the new build and the old one (15.2, to reproduce Syed's blank chat) with the same harness.
+    strategy:
+      fail-fast: false
+      matrix:
+        which: [new, old]
     timeout-minutes: 120
     env:
       CI: "1"
@@ -58,7 +65,7 @@ jobs:
       - name: Check out target
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.plan.outputs.target }}
+          ref: ${{ matrix.which == 'new' && needs.plan.outputs.target || needs.plan.outputs.old }}
           persist-credentials: false
       - name: Check out harness
         uses: actions/checkout@v4
@@ -111,7 +118,7 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.ccache
-          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}
+          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}-${{ matrix.which }}
           restore-keys: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-
       - name: Fetch proot (module expects its jniLibs)
         working-directory: apps/mobile/modules/openbot-engine
@@ -128,11 +135,11 @@ jobs:
         if: always()
         with:
           path: ~/.ccache
-          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}
+          key: ccache-e2e-x86_64-rn${{ steps.ccache.outputs.rn }}-${{ github.run_id }}-${{ matrix.which }}
       - run: cp "$(ls apps/mobile/android/app/build/outputs/apk/release/*.apk | head -n1)" e2e.apk && ls -la e2e.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: e2e-apk
+          name: e2e-apk-${{ matrix.which }}
           path: |
             e2e.apk
             target-sha.txt
@@ -140,85 +147,48 @@ jobs:
 
   emulator:
     needs: [plan, build]
-    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    if: always() && needs.plan.result == 'success' && needs.build.result == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    # Build 11.3: Syed's phone is Android 17 (API 37); test only on API 36 and 37 (Syed 14:17 IST).
+    timeout-minutes: 170
     strategy:
       fail-fast: false
       matrix:
         api: ["36"]
     steps:
-      - name: Available system images (API 36/37)
-        run: |
-          SDKM=$(ls $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | head -1)
-          $SDKM --list 2>/dev/null | grep -E "system-images;android-(36|37)|Baklava|CANARY" | sort -u | head -60 || true
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: APK from this run
-        if: needs.plan.outputs.reuse == ''
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: e2e-apk
-          path: apk
-      - name: APK from an earlier run
-        if: needs.plan.outputs.reuse != ''
-        uses: actions/download-artifact@v4
+          name: e2e-apk-new
+          path: apk-new
+      - uses: actions/download-artifact@v4
         with:
-          name: e2e-apk
-          path: apk
-          run-id: ${{ needs.plan.outputs.reuse }}
-          github-token: ${{ github.token }}
-      - run: ls -la apk && cat apk/target-sha.txt
+          name: e2e-apk-old
+          path: apk-old
+      - run: ls -la apk-new apk-old && cat apk-new/target-sha.txt apk-old/target-sha.txt && mkdir -p e2e-out
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Smoke test on emulator
+      - name: GENLONG on the old and the new APK
         id: emu1
-        # Build 11.3: API 37.0 boot can report done before the input service is up; the runner's own
-        # `input keyevent 82` then fails (41809028530, Broken pipe). One retry when the smoke never started.
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
-        env:
-          APK: ${{ github.workspace }}/apk/e2e.apk
-          OUT: ${{ github.workspace }}/e2e-out
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
           disk-size: 8G
-          # Build 11.3: API 37.0 sat at load ~21 at install (41812759046): all runner cores, more RAM.
           cores: 4
           ram-size: 4096M
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash .github/e2e/smoke.sh
-      - name: Smoke test on emulator (retry boot)
-        if: steps.emu1.outcome == 'failure' && hashFiles('e2e-out/steps.txt') == ''
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          APK: ${{ github.workspace }}/apk/e2e.apk
-          OUT: ${{ github.workspace }}/e2e-out
-        with:
-          api-level: ${{ matrix.api }}
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          # Build 11.3: the API 37 image's default /data is too small for the ~350 MB APK (41803342032).
-          disk-size: 8G
-          # Build 11.3: API 37.0 sat at load ~21 at install (41812759046): all runner cores, more RAM.
-          cores: 4
-          ram-size: 4096M
-          disable-animations: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash .github/e2e/smoke.sh
+          script: bash .github/e2e/two.sh
       - name: Smoke result
-        if: steps.emu1.outcome == 'failure' && hashFiles('e2e-out/steps.txt') != ''
+        if: steps.emu1.outcome == 'failure'
         run: exit 1
       - uses: actions/upload-artifact@v4
         if: always()

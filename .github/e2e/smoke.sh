@@ -1070,6 +1070,105 @@ im=Image.open(sys.argv[1]); w,h=im.size; im.crop((0,0,w,int(h*0.22))).save(sys.a
 PYH
   adb shell input keyevent 4; sleep 1; home; blur_max "header-$1"
 }
+# ---------------- build 15.3 generative UI lanes ----------------
+# Syed 2026-11-16: a long reply with openbot-ui blocks went blank below "Feature Breakdown" (bubble
+# still there, no content) and the chat opened blank with the scroll-to-bottom button. These lanes
+# scroll the stand-in replies of that shape top to bottom in 800 px steps and judge each screen:
+# ink = % of pixel rows in the list band (17-83% of the height) with any contrast; a step with ink
+# < 1% and no text node in the band is BLANK. Every marker (V1-M10 ... V4-END) must be seen.
+ink() { # -> ink % of the list band, from a raw screencap (no PIL on the runner)
+  adb exec-out screencap > "$OUT/.raw" 2>/dev/null
+  python3 - "$OUT/.raw" <<'PYI'
+import sys,struct
+d=open(sys.argv[1],'rb').read()
+w,h=struct.unpack('<II',d[:8]); off=len(d)-w*h*4
+top,bot=int(h*0.17),int(h*0.83); ink=0
+for y in range(top,bot):
+    row=d[off+y*w*4:off+(y+1)*w*4]
+    lum=[(row[x]*3+row[x+1]*6+row[x+2])//10 for x in range(160,w*4-160,16)]
+    med=sorted(lum)[len(lum)//2]
+    if sum(1 for v in lum if abs(v-med)>40)>=2: ink+=1
+print(f"{100*ink/(bot-top):.1f}")
+PYI
+}
+band_texts() { # $1 xml -> count of text nodes centred in the list band, then the markers seen
+  python3 - "$1" "$(adb shell wm size | grep -oE '[0-9]+$' | tail -1 | tr -d '\r')" <<'PYT'
+import re,sys,html
+xml=open(sys.argv[1],encoding="utf8",errors="ignore").read(); H=int(sys.argv[2] or 2400)
+n=0; marks=set()
+for node in re.findall(r'<node [^>]*>',xml):
+    t=re.search(r' text="([^"]*)"',node); b=re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',node)
+    if not t or not t.group(1).strip() or not b: continue
+    y=(int(b.group(2))+int(b.group(4)))//2
+    if H*0.17<=y<=H*0.83: n+=1
+    marks.update(re.findall(r'\b[VS][1-4]-(?:M\d+|END)\b',html.unescape(t.group(1))))
+print(n, ",".join(sorted(marks)))
+PYT
+}
+gen_open() { # $1 row label $2 tag -> opens the chat from home
+  home; local xy; xy=$(wait_for "$1" 6 "$2-row") || { adb shell input swipe 540 1600 540 900 300; sleep 1; xy=$(wait_for "$1" 6 "$2-row"); } || { log "FAIL $2: no '$1' row"; FAIL=1; return 1; }
+  adb shell input tap $xy; sleep 3.2; check "$2-open" || { ensure_running "$2"; return 1; }
+}
+gen_at_latest() { # $1 tag $2 end marker: the chat must open at its last reply, not on a blank screen
+  local r k; dump "$1-open"; shot "$1-open"; k=$(ink); r=$(band_texts "$OUT/$1-open.xml")
+  echo "$1 open ink=$k texts=${r%% *} marks=${r#* }" >> "$OUT/gen-scan.txt"
+  case ",${r#* }," in *",$2,"*) log "ok: $1 opened at the latest reply ($2 on screen, ink $k%)";; *) log "FAIL $1: opened without $2 on screen (ink $k%, texts ${r%% *})"; FAIL=1;; esac
+  awk -v k="$k" 'BEGIN{exit !(k<1.0)}' && [ "${r%% *}" = 0 ] && { log "FAIL $1: BLANK screen right after open (Syed's screenshot)"; FAIL=1; }
+}
+gen_scan() { # $1 tag $2 "expected markers" : top to bottom in 800 px steps
+  local tag=$1 i r k blanks=0 seen="" m miss="" n
+  for i in $(seq 1 30); do adb shell input swipe 540 700 540 2100 60; done; sleep 1.5; dump "$tag-top"
+  grep -q "Can u compare" "$OUT/$tag-top.xml" || { for i in $(seq 1 30); do adb shell input swipe 540 700 540 2100 60; done; sleep 1.5; }
+  for i in $(seq 1 160); do
+    dump "$tag-s$i"; k=$(ink); r=$(band_texts "$OUT/$tag-s$i.xml"); n=${r%% *}; seen="$seen,${r#* }"
+    echo "$tag step $i ink=$k texts=$n marks=${r#* }" >> "$OUT/gen-scan.txt"
+    if awk -v k="$k" 'BEGIN{exit !(k<1.0)}' && [ "$n" = 0 ]; then
+      blanks=$((blanks + 1)); log "  $tag step $i: BLANK (ink $k%, no text in the band)"
+      if [ $blanks -le 3 ]; then shot "$tag-blank-$i"; adb shell dumpsys activity top > "$OUT/$tag-blank-$i-views.txt" 2>/dev/null; fi
+    fi
+    [ $((i % 6)) = 1 ] && shot "$tag-s$i"
+    case "$seen," in *",${2##* },"*) break;; esac
+    adb shell input swipe 540 1500 540 700 1500; sleep 0.9
+  done
+  for m in $2; do case "$seen," in *",$m,"*) ;; *) miss="$miss $m";; esac; done
+  log "  $tag scan: $i steps, $blanks blank, markers missing:${miss:- none}"
+  echo "$tag summary steps=$i blank=$blanks missing=${miss:-none}" >> "$OUT/gen-scan.txt"
+  [ $blanks = 0 ] && [ -z "$miss" ] && log "ok: $tag every part of the replies drew" || { log "FAIL $tag: $blanks blank screens, missing:${miss:- none}"; FAIL=1; }
+}
+GEN_MARKS="V1-M10 V1-M20 V1-M30 V1-M40 V1-END V2-M10 V2-END V3-M10 V3-M20 V3-M30 V3-M40 V3-M50 V3-M60 V3-END V4-M10 V4-END"
+STREAM_MARKS="S1-M10 S1-M20 S1-M30 S1-M40 S1-END"
+gen_lanes() { # $1 build label (old|new)
+  local b=$1 k i
+  log "== 15.3 gen lanes ($b, colorOS ON, dark)"
+  adb shell cmd uimode night yes; sleep 2
+  gen_open "E2E Gen chat" "$b-gen-on" && { gen_at_latest "$b-gen-on" V4-END; gen_scan "$b-gen-on" "$GEN_MARKS"; real_tap ${BACKXY:-80 200}; sleep 2; }
+  # Streamed: frames while it streams (60 chars / 150 ms), then the finished reply, then a reopen.
+  if gen_open "E2E Gen stream" "$b-gens"; then
+    for i in $(seq 1 14); do k=$(ink); echo "$b-gens streaming t=$((i * 2))s ink=$k" >> "$OUT/gen-scan.txt"; [ $((i % 3)) = 1 ] && shot "$b-gens-stream-$i"; adb logcat -d -s ReactNativeJS 2>/dev/null | grep -q "E2EGENS done" && break; sleep 1.4; done
+    for i in $(seq 1 20); do adb logcat -d -s ReactNativeJS 2>/dev/null | grep -q "E2EGENS done" && break; sleep 1; done
+    sleep 2.5; gen_at_latest "$b-gens-done" S1-END; gen_scan "$b-gens-done" "$STREAM_MARKS"; real_tap ${BACKXY:-80 200}; sleep 2
+    gen_open "E2E Gen stream" "$b-gens-re" && { gen_at_latest "$b-gens-re" S1-END; gen_scan "$b-gens-re" "$STREAM_MARKS"; real_tap ${BACKXY:-80 200}; sleep 2; }
+  fi
+  toggle_to "$b-gen-t1" OFF
+  gen_open "E2E Gen chat" "$b-gen-off" && { gen_at_latest "$b-gen-off" V4-END; gen_scan "$b-gen-off" "$GEN_MARKS"; real_tap ${BACKXY:-80 200}; sleep 2; }
+  toggle_to "$b-gen-t2" ON
+  adb shell cmd uimode night no; sleep 1.5
+  adb logcat -d | grep -E "OpenGLRenderer|HWUI|Layer exceeds|too large|Chat message part failed|ReactNativeJS.*(Error|Warn)" | tail -200 > "$OUT/$b-gen-logcat.txt" 2>/dev/null
+}
+# Build 15.3: GENLONG mode (two.sh runs it once per APK: the old build 15.2 first, then the new 15.3).
+if [ -f .github/e2e/genlong ]; then
+  B=${GEN_BUILD:-new}
+  log "== GENLONG ($B) target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+  touch "$OUT/real-lanes.txt"; ensure_running g
+  real_setup || true
+  gen_lanes "$B"
+  if [ "$B" = new ]; then
+    open_latest "E2E Real chat" LATEST-END-VEYR 4; open_latest "E2E Long chat" LATEST-END-LONG 6; open_latest "E2E Short chat" LATEST-END-SHORT 4; genui_shot
+  fi
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
+  log "RESULT FAIL=$FAIL ($B)"; exit $FAIL
+fi
 if [ -f .github/e2e/quick113 ]; then
   adb shell cmd uimode night yes; sleep 1; header_shot q; adb shell cmd uimode night no; sleep 1
   if [ -f .github/e2e/header-only ]; then log "RESULT FAIL=$FAIL (header only)"; exit $FAIL; fi
