@@ -338,6 +338,13 @@ export function actionItemStyle(
   return items.some((other) => other.style === "primary") ? "secondary" : "primary";
 }
 
+/** The narrowest a table column is drawn; a table whose columns need more than its card scrolls sideways. */
+export const TABLE_COLUMN_MIN = 88;
+/** The 24 dp is the table's padding (p-3 on both sides). Before the card is measured (0) it is not known. */
+export function tableFits(columns: number, width: number): boolean {
+  return width > 0 && columns * TABLE_COLUMN_MIN <= width - 24;
+}
+
 /** A form's values from its fields' drafts: numbers as numbers, toggles as booleans. Null when a required field is empty or a number is not one. */
 export function formValues(
   fields: readonly UiFormField[],

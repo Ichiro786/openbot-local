@@ -43,6 +43,8 @@ import {
   formValues,
   openbotUiActionMessage,
   parseOpenbotUi,
+  TABLE_COLUMN_MIN,
+  tableFits,
   type UiActionStyle,
   type UiActions,
   type UiCallout,
@@ -282,8 +284,44 @@ function StatsView({ node }: { node: UiStats }) {
   );
 }
 
+// Equal columns keep the cells of every row aligned; the minimum keeps the table at least as wide as its columns need.
+const FIT_COLUMN = { flex: 1, minWidth: TABLE_COLUMN_MIN } as const;
+const SCROLL_COLUMN = { minWidth: TABLE_COLUMN_MIN, maxWidth: 200 } as const;
+
 function TableView({ node }: { node: UiTable }) {
   const cell = (value: UiScalar | null) => (value === null ? "" : String(value));
+  // Build 15.3: a table whose columns fit the card wraps its cells at the card's width; only a wider
+  // one scrolls sideways (with its scroll bar, so the hidden columns are discoverable).
+  const [width, setWidth] = useState(0);
+  const scrolls = width > 0 && !tableFits(node.columns.length, width);
+  const column = scrolls ? SCROLL_COLUMN : FIT_COLUMN;
+  const grid = (
+    <View>
+      <View className="flex-row border-b border-separator pb-1.5">
+        {node.columns.map((title, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: columns are fixed.
+          <View key={index} style={column} className="pe-3">
+            <Typography.Paragraph type="body-sm" className="font-semibold text-foreground">
+              {title}
+            </Typography.Paragraph>
+          </View>
+        ))}
+      </View>
+      {node.rows.map((row, rowIndex) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a finished block never reorders its rows.
+        <View key={rowIndex} className="flex-row border-b border-separator/50 py-1.5">
+          {node.columns.map((_, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: columns are fixed.
+            <View key={index} style={column} className="pe-3">
+              <Typography.Paragraph type="body-sm" className="text-foreground" selectable>
+                {cell(row[index] ?? null)}
+              </Typography.Paragraph>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
   return (
     <Panel padded={false}>
       {node.title ? (
@@ -291,33 +329,15 @@ function TableView({ node }: { node: UiTable }) {
           <Title>{node.title}</Title>
         </View>
       ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="p-3">
-        <View>
-          <View className="flex-row border-b border-separator pb-1.5">
-            {node.columns.map((column, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: columns are fixed.
-              <View key={index} style={{ minWidth: 88, maxWidth: 200 }} className="pe-3">
-                <Typography.Paragraph type="body-sm" className="font-semibold text-foreground">
-                  {column}
-                </Typography.Paragraph>
-              </View>
-            ))}
-          </View>
-          {node.rows.map((row, rowIndex) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: a finished block never reorders its rows.
-            <View key={rowIndex} className="flex-row border-b border-separator/50 py-1.5">
-              {node.columns.map((_, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: columns are fixed.
-                <View key={index} style={{ minWidth: 88, maxWidth: 200 }} className="pe-3">
-                  <Typography.Paragraph type="body-sm" className="text-foreground" selectable>
-                    {cell(row[index] ?? null)}
-                  </Typography.Paragraph>
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+      <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        {scrolls ? (
+          <ScrollView horizontal contentContainerClassName="p-3">
+            {grid}
+          </ScrollView>
+        ) : (
+          <View className="p-3">{grid}</View>
+        )}
+      </View>
     </Panel>
   );
 }
