@@ -3,7 +3,7 @@
 // skeleton at an estimated height (no partial layout that grows node by node); a finished block
 // that does not validate is shown as its code. No blur here: the chat's two frosts stay the only ones.
 import { Image } from "expo-image";
-import { Skeleton, Typography } from "heroui-native";
+import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import Banknote from "lucide-react-native/icons/banknote";
 import Calendar from "lucide-react-native/icons/calendar";
@@ -151,10 +151,13 @@ export const OpenbotUiBlock = memo(function OpenbotUiBlock({
     [send, sentId, renderBody, text],
   );
   if (!parsed) {
+    // Build 15.3: a plain placeholder. heroui's Skeleton mounts and unmounts with Reanimated
+    // entering/exiting layout animations; on Android (Fabric) a layout animation inside a reply that
+    // keeps streaming can leave the blocks after it laid out but not drawn (Syed's blank chat).
     return (
-      <Skeleton
+      <View
         accessibilityLabel={t("mobile.chat.ui.loading")}
-        className="w-full"
+        className="w-full bg-control/50"
         style={{ ...CARD_STYLE, height: estimateOpenbotUiHeight(text) }}
       />
     );

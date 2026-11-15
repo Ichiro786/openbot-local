@@ -153,3 +153,27 @@ describe("tableFits", () => {
     expect(tableFits(1, 0)).toBe(false);
   });
 });
+
+describe("openbot-ui blocks in a streaming reply", () => {
+  it("use no Reanimated layout animations (entering/exiting/layout) and no heroui Skeleton", async () => {
+    // A block mounts and unmounts its placeholder while the reply around it keeps streaming. Layout
+    // animations there left the rest of the reply laid out but not drawn on Android (build 15.3).
+    // The app's tsconfig has no Node types; a computed specifier keeps this test-only import untyped.
+    const fsModule = "node:fs";
+    const {
+      readdirSync,
+      readFileSync,
+    }: {
+      readdirSync: (dir: URL) => string[];
+      readFileSync: (file: URL, encoding: "utf8") => string;
+    } = await import(/* @vite-ignore */ fsModule);
+    const dir = new URL(".", import.meta.url);
+    const offenders = readdirSync(dir)
+      .filter((name) => name.endsWith(".tsx"))
+      .flatMap((name) => {
+        const source = readFileSync(new URL(name, dir), "utf8");
+        return /\b(?:entering|exiting|layout)=\{|<Skeleton\b/u.test(source) ? [name] : [];
+      });
+    expect(offenders).toEqual([]);
+  });
+});
