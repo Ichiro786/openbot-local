@@ -17,7 +17,7 @@ import { type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, u
 import { AppState, Keyboard, useColorScheme, View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardGestureArea } from "react-native-keyboard-controller";
-import Animated, { useSharedValue } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, ReduceMotion, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { MobileConversationAnalytics } from "@/features/analytics/conversation";
@@ -71,6 +71,7 @@ import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
 import { liveZoomOf } from "@/shared/motion/liveZoom";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
+import { chatShowsLatestButton } from "../model/chat-layout";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import { getComposerDraft, useComposerDraft } from "../model/composer-drafts";
@@ -208,6 +209,10 @@ export interface ChatViewProps {
 }
 
 const CHAT_BACK_EDGE_WIDTH = 24;
+/** The scroll-to-latest arrow, 56 dp over the composer (was `absolute -top-14 self-center`). */
+const LATEST_BUTTON_STYLE = { position: "absolute", top: -56, alignSelf: "center" } as const;
+const LATEST_BUTTON_IN = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
+const LATEST_BUTTON_OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
 const NO_DELIVERIES: ChatQueueController["deliveries"] = [];
 /** A host starts a turn within a second or two; this only ends a wait for a turn that never shows. */
 const AWAIT_TURN_MS = 10_000;
@@ -1331,8 +1336,21 @@ export function ChatView({
               pointerEvents="box-none"
               onLayout={motion.onComposerLayout}
             >
-              {!voiceOpen && (detached || !atLatest) && motion.historyVisible && messages.length > 0 ? (
-                <View className="absolute -top-14 self-center">
+              {!voiceOpen &&
+              motion.historyVisible &&
+              messages.length > 0 &&
+              chatShowsLatestButton({
+                place: motion.latestPlace,
+                detached,
+                followsEnd: motion.followsEnd,
+                userScrolled: motion.userScrolled,
+              }) ? (
+                // Build 16.1: ColorOS motion fades the arrow in and out (OFF keeps upstream's plain show).
+                <Animated.View
+                  style={LATEST_BUTTON_STYLE}
+                  entering={colorOSMotion ? LATEST_BUTTON_IN : undefined}
+                  exiting={colorOSMotion ? LATEST_BUTTON_OUT : undefined}
+                >
                   <ChatGlassIconButton
                     accessibilityLabel={t("mobile.chat.scrollToLatest")}
                     fallbackBackground={fieldBackground}
@@ -1341,7 +1359,7 @@ export function ChatView({
                   >
                     <ArrowDown color={String(foreground)} size={22} />
                   </ChatGlassIconButton>
-                </View>
+                </Animated.View>
               ) : null}
               <View style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
                 <ConnectionStatus

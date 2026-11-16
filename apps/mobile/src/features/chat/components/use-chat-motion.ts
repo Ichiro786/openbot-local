@@ -18,7 +18,7 @@ import { supportLog } from "@/features/support/model/support-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isAndroid } from "@/shared/lib/platform";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
-import { chatContentIsVisible } from "../model/chat-layout";
+import { type ChatLatestPlace, chatContentHiddenBy, chatContentIsVisible, chatLatestPlace } from "../model/chat-layout";
 
 /** The space under each row of the list. */
 export const CHAT_ROW_GAP = 10;
@@ -60,6 +60,11 @@ const FALLBACK_KEYBOARD_MS = 240;
 const ANTICIPATE_MS = 280;
 /** Build 10 keyboard fallback: no keyboard this long after a focus lowers the anticipated lift. */
 const ANTICIPATE_WAIT_MS = 1200;
+/**
+ * Build 16.1: a keyboard move that has not ended this long after the keyboard reported itself shown or
+ * hidden lost its last event. The chat then counts the keyboard as still (a guaranteed reset).
+ */
+const KEYBOARD_MOVE_SAFETY_MS = 700;
 /** The last keyboard height of the app (any chat), for the anticipated lift. */
 const lastKeyboardHeight = makeMutable(0);
 /** True once a keyboard show came only as a settled burst (no IME frames on this phone). */
@@ -120,6 +125,9 @@ export function useChatMotion(
   const keyboardEvents = useSharedValue(0);
   /** Build 11.2: the keyboard is between its Start and its End (showing or hiding). */
   const keyboardMoving = useSharedValue(false);
+  /** Build 16.1: the destination of the last keyboard Start, and whether that Start came with the keyboard down. */
+  const keyboardTarget = useSharedValue(0);
+  const keyboardFromDown = useSharedValue(true);
   // Track opening and interactive frames. Once dismissal starts, finish the
   // return independently so a missing completion cannot retain keyboard space.
   useKeyboardHandler(
@@ -128,6 +136,8 @@ export function useChatMotion(
         "worklet";
         keyboardEvents.set(keyboardEvents.get() + 1);
         keyboardMoving.set(true);
+        keyboardFromDown.set(keyboardTarget.get() <= 0);
+        keyboardTarget.set(event.height);
         if (event.height > 0) {
           // Fallback: the settled burst (duration 0) leaves an anticipated lift running; onEnd lands it.
           if (!(fallback.get() && event.duration === 0)) {
@@ -150,10 +160,14 @@ export function useChatMotion(
             keyboardHeight.set(withTiming(event.height, timing));
             keyboardProgress.set(withTiming(1, timing));
           }
-        } else if (fallback.get() && framesSeen.get() && !framesMissing.get() && event.duration > 0) {
-          // Build 11.3 motion B8 (audit N06), ColorOS on Android with real IME frames: the hide follows
-          // the frames like the show, so the composer, the keyboard-aware list and the IME stay locked
-          // (an own out-cubic timing ran ahead of the IME). onEnd and keyboardDidHide still land it at 0.
+        } else if (isAndroid && event.duration > 0 && !(fallback.get() && framesMissing.get())) {
+          // Build 11.3 motion B8 (audit N06), Build 16.1 for every Android chat (Syed's video: the composer
+          // dropped under the closing keyboard): the hide follows the IME frames like the show, so the
+          // composer, the keyboard-aware list and the IME stay locked frame by frame. An own out-cubic
+          // timing ran ahead of the IME, and the ColorOS gate missed phones where a resize had set
+          // `framesMissing`. onEnd lands it at 0; iOS keeps the timing below (a dismissal there can omit
+          // its last frame).
+          keyboardDismissed.set(false);
           cancelAnimation(keyboardHeight);
           cancelAnimation(keyboardProgress);
         } else {
@@ -210,9 +224,10 @@ export function useChatMotion(
           keyboardProgress.set(0);
         } else if (!keyboardDismissed.get()) {
           lastKeyboardHeight.set(event.height);
-          // A show reported only once settled: this phone sends no IME frames (or the keyboard resized).
-          // Only where the fallback runs (ColorOS ON, Android): OFF stays build 9 and says nothing.
-          if (fallback.get() && event.duration === 0 && !framesMissing.get()) {
+          // A show reported only once settled: this phone sends no IME frames. Only where the fallback runs
+          // (ColorOS ON, Android): OFF stays build 9 and says nothing. Build 16.1: only a show that started
+          // with the keyboard down; a resize of an open keyboard (its suggestion strip) is no evidence.
+          if (fallback.get() && event.duration === 0 && keyboardFromDown.get() && !framesMissing.get()) {
             framesMissing.set(true);
             scheduleOnRN(reportSettledKeyboard, event.height);
           }
@@ -231,11 +246,42 @@ export function useChatMotion(
         }
       },
     },
-    [keyboardHeight, keyboardProgress, keyboardDismissed, fallback, keyboardEvents, keyboardMoving],
+    [
+      keyboardHeight,
+      keyboardProgress,
+      keyboardDismissed,
+      fallback,
+      keyboardEvents,
+      keyboardMoving,
+      keyboardTarget,
+      keyboardFromDown,
+    ],
   );
   useEffect(() => {
+    let safety: ReturnType<typeof setTimeout> | undefined;
+    // Build 16.1: a keyboard move whose End never came stops counting as a move.
+    const armSafety = () => {
+      if (safety) clearTimeout(safety);
+      safety = setTimeout(() => {
+        safety = undefined;
+        if (!keyboardMoving.get()) return;
+        keyboardMoving.set(false);
+        if (!Keyboard.isVisible() && keyboardHeight.get() > 0) land();
+      }, KEYBOARD_MOVE_SAFETY_MS);
+    };
+    const shown = Keyboard.addListener("keyboardDidShow", armSafety);
     // A native picker or interrupted dismissal can omit the controller's final frame.
     const subscription = Keyboard.addListener("keyboardDidHide", () => {
+      // Build 16.1 (Syed's video: the composer fell under the keyboard while it was still closing): on
+      // Android this can come while the IME still animates down. The frames and onEnd land the composer
+      // then; this lands it only if they never come.
+      if (isAndroid && keyboardMoving.get()) {
+        armSafety();
+        return;
+      }
+      land();
+    });
+    function land(): void {
       keyboardDismissed.set(true);
       if (fallback.get() && keyboardHeight.get() > 0) {
         // Fallback: this arrives with the settled burst; the composer glides down instead of jumping.
@@ -250,9 +296,13 @@ export function useChatMotion(
       }
       keyboardHeight.set(0);
       keyboardProgress.set(0);
-    });
-    return () => subscription.remove();
-  }, [keyboardHeight, keyboardProgress, keyboardDismissed, fallback]);
+    }
+    return () => {
+      if (safety) clearTimeout(safety);
+      shown.remove();
+      subscription.remove();
+    };
+  }, [keyboardHeight, keyboardProgress, keyboardDismissed, fallback, keyboardMoving]);
   /**
    * Build 10 fallback: the composer's input took focus with the keyboard down. Where the phone sends
    * no IME frames, start lifting at once to the last keyboard height, so the composer rises with the
@@ -291,6 +341,12 @@ export function useChatMotion(
   const revealed = useSharedValue(false);
   const [atLatest, setAtLatest] = useState(false);
   const atLatestNow = useRef(false);
+  // Build 16.1: where the chat is against its latest message, for the scroll-to-latest arrow. Starts at
+  // the latest message: the arrow waits for a reading of the placed list.
+  const [latestPlace, setLatestPlace] = useState<ChatLatestPlace>("latest");
+  const sentLatestPlace = useSharedValue<ChatLatestPlace | null>(null);
+  /** Build 16.1: the pinned chat's keep-the-end scroll waits while the keyboard moves the list. */
+  const endAfterKeyboard = useRef(false);
   // The opening position is not the user's choice. Until the user drags the
   // list, the whole chat counts as seen, wherever the list lands.
   const [userScrolled, setUserScrolled] = useState(false);
@@ -336,15 +392,41 @@ export function useChatMotion(
   current.current = { lastUserId };
 
   const finishFirstMessage = useCallback(() => setResponseVisible(true), []);
-  const updateAtLatest = useCallback(
-    (visible: boolean) => {
+  /**
+   * Build #101/#102: while the chat is pinned, it keeps the end. Build 16.1 (Syed's video: the messages
+   * jumped up and down as the keyboard opened): while the keyboard moves, the keyboard-aware list moves
+   * its content frame by frame on the UI thread, and a jump to the end under it fought those frames, so
+   * the scroll waits for the keyboard's End.
+   */
+  const keepEnd = useCallback(() => {
+    if (!openingFollowNow.current || scrolledUp.get()) return;
+    if (keyboardMoving.get()) {
+      endAfterKeyboard.current = true;
+      return;
+    }
+    void listRef.current?.scrollToEnd({ animated: false });
+  }, [scrolledUp, keyboardMoving]);
+  const keepEndAfterKeyboard = useCallback(() => {
+    if (!endAfterKeyboard.current) return;
+    endAfterKeyboard.current = false;
+    keepEnd();
+  }, [keepEnd]);
+  useAnimatedReaction(
+    () => keyboardMoving.get(),
+    (moving, previous) => {
+      if (!moving && previous === true) scheduleOnRN(keepEndAfterKeyboard);
+    },
+  );
+  const updateLatestPlace = useCallback(
+    (place: ChatLatestPlace) => {
+      const visible = place === "latest";
       atLatestNow.current = visible;
       setAtLatest(visible);
+      setLatestPlace(place);
       // Build #102: a pinned chat that came to rest above the latest message takes the end again.
-      if (!visible && openingFollowNow.current && !scrolledUp.get())
-        void listRef.current?.scrollToEnd({ animated: false });
+      if (!visible) keepEnd();
     },
-    [scrolledUp],
+    [keepEnd],
   );
   const reveal = useCallback(() => {
     if (shown.current) return;
@@ -434,9 +516,9 @@ export function useChatMotion(
       content.set(height);
       contentChangedAt.current = Date.now();
       // Build #101/#102: while the chat is pinned, any growth (rows measured, latest page, end space) keeps the end.
-      if (openingFollowNow.current && !scrolledUp.get()) void listRef.current?.scrollToEnd({ animated: false });
+      keepEnd();
     },
-    [content, scrolledUp],
+    [content, keepEnd],
   );
   // Build 15.2 (Syed: the composer's grow on tap stuttered as the keyboard opened): the composer grows
   // with the keyboard's progress, and its layout reported each frame of that grow to JS, which moved the
@@ -449,10 +531,9 @@ export function useChatMotion(
       measurements.current.composer = height;
       composerHeight.set(height);
       // Build #102 (typing a long message moved the chat): a pinned chat keeps the end as the composer grows.
-      if (grew && openingFollowNow.current && !scrolledUp.get())
-        requestAnimationFrame(() => void listRef.current?.scrollToEnd({ animated: false }));
+      if (grew && openingFollowNow.current && !scrolledUp.get()) requestAnimationFrame(keepEnd);
     },
-    [composerHeight, scrolledUp],
+    [composerHeight, scrolledUp, keepEnd],
   );
   const onComposerLayout = useCallback(
     (event: Pick<LayoutChangeEvent, "nativeEvent">) => {
@@ -554,17 +635,25 @@ export function useChatMotion(
     ],
   );
 
+  // Build 16.1: read only while the keyboard is still (see `chatLatestPlace`): during its move the list
+  // reports its scroll a frame after the keyboard and the composer move, which read as "not at the latest
+  // message" for a frame, flashed the arrow and made the pinned chat jump to the end under the keyboard.
   useAnimatedReaction(
     () =>
-      revealed.get() &&
-      chatContentIsVisible(
-        content.get(),
-        viewport.get(),
-        scrollOffset.get(),
-        composerHeight.get() + Math.max(0, keyboardHeight.get() - keyboardOffset),
+      chatLatestPlace(
+        chatContentHiddenBy(
+          content.get(),
+          viewport.get(),
+          scrollOffset.get(),
+          composerHeight.get() + Math.max(0, keyboardHeight.get() - keyboardOffset),
+        ),
+        revealed.get(),
+        keyboardMoving.get(),
       ),
-    (visible, previous) => {
-      if (visible !== previous) scheduleOnRN(updateAtLatest, visible);
+    (place) => {
+      if (place === null || place === sentLatestPlace.get()) return;
+      sentLatestPlace.set(place);
+      scheduleOnRN(updateLatestPlace, place);
     },
   );
   useAnimatedReaction(
@@ -731,6 +820,7 @@ export function useChatMotion(
       /** While a message from search opens the chat, the list does not take the latest message. */
       startsAtEnd: !holdOpening,
       atLatest,
+      latestPlace,
       userScrolled,
       historyVisible,
       responseVisible,
@@ -772,6 +862,7 @@ export function useChatMotion(
       listPlaced,
       holdOpening,
       atLatest,
+      latestPlace,
       userScrolled,
       historyVisible,
       responseVisible,
