@@ -579,3 +579,19 @@ function __E2EHomeBar({ target }: { target: __RefObject<ViewInstance | null> }) 
     console.log("15.1 home bar applied");
   }
 }
+// Build 16.1 keyboard probe (required when .github/e2e/kb161 exists): E2EKBEV/E2EKBMOVE per keyboard move
+// (composer lift vs the IME's own frames, list scroll reversals) and E2EARROW on/off from the
+// scroll-to-latest arrow's mount, inside the REAL ChatView. Same anchors in build 16 and 16.1.
+if (existsSync(".github/e2e/kb161")) {
+  const cv = "apps/mobile/src/features/chat/components/chat-view.tsx";
+  cpSync(".github/e2e/harness-b161/kb-probe.tsx", "apps/mobile/src/e2e/kb-probe.tsx");
+  let f = readFileSync(cv, "utf8");
+  const arrow = "<ArrowDown color={String(foreground)} size={22} />";
+  const area = "          </KeyboardGestureArea>";
+  if (!f.includes(arrow) || !f.includes(area)) throw new Error("kb161 anchors missing in chat-view");
+  f = `import { E2EArrowMark as __E2EArrowMark, E2EKbProbe as __E2EKbProbe } from "@/e2e/kb-probe";\n${f}`
+    .replace(arrow, `<>\n<__E2EArrowMark />\n${arrow}\n</>`)
+    .replace(area, `            <__E2EKbProbe lift={motion.keyboardHeight} scroll={motion.scrollOffset} />\n${area}`);
+  writeFileSync(cv, f);
+  console.log("16.1 keyboard probe applied");
+}

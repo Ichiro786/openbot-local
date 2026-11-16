@@ -1155,6 +1155,103 @@ gen_lanes() { # $1 build label (old|new)
   adb shell cmd uimode night no; sleep 1.5
   adb logcat -d | grep -E "OpenGLRenderer|HWUI|Layer exceeds|too large|Chat message part failed|ReactNativeJS.*(Error|Warn)" | tail -200 > "$OUT/$b-gen-logcat.txt" 2>/dev/null
 }
+# ---------------- build 16.1 keyboard / composer / arrow lanes ----------------
+# The app side is the harness probe (harness-b161/kb-probe.tsx): E2EKBEV start|end, E2EKBMOVE per keyboard move
+# (lift vs the IME's own frames: maxBehind > 4 dp = the composer below the keyboard edge; scrollRev = list
+# direction reversals during the move) and E2EARROW on|off from the arrow's mount.
+ARROW_LABEL="Scroll to latest message"
+kb_js_since() { # $1 lane mark -> the probe's lines after it
+  adb logcat -d -s ReactNativeJS 2>/dev/null | grep -oE 'E2ELANE [A-Za-z0-9_-]+|E2E(KBMOVE|KBEV|ARROW) [^'"'"'"]*' | awk -v m="E2ELANE $1" '$0==m{on=1;next} on'
+}
+kb_rec() { # $1 name $2 seconds: screenrecord in the background (pid in REC)
+  adb shell "screenrecord --time-limit $2 --bit-rate 16000000 /sdcard/$1.mp4" >/dev/null 2>&1 & REC=$!
+}
+kb_pull() { wait $REC 2>/dev/null; adb pull /sdcard/$1.mp4 "$OUT/$1.mp4" >/dev/null 2>&1; adb shell rm -f /sdcard/$1.mp4; }
+kb_lane() { # $1 ON|OFF $2 iterations
+  local m=$1 i n xy ime f fy lines
+  log "== 16.1 keyboard lane colorOS=$m x$2"
+  for i in $(seq 1 $2); do
+    n="kb-$m-$i"; ensure_running "$n"; home
+    lane_mark "$n"
+    real_open 3.0 || { log "FAIL $n: no real chat row"; FAIL=1; return 0; }
+    dump "$n-o"
+    if ! on_real "$n-o"; then log "FAIL $n: real chat did not open"; FAIL=1; home; continue; fi
+    [ -n "$(find_node "$OUT/$n-o.xml" "$ARROW_LABEL")" ] && { log "FAIL $n: arrow shown at rest after open-at-latest"; shot "$n-o-arrow"; FAIL=1; }
+    set -- $(edit_xy "$OUT/$n-o.xml"); [ -n "${1:-}" ] || { log "FAIL $n: no composer field"; FAIL=1; real_tap $BACKXY; sleep 2; home; continue; }
+    f="$1 $2"
+    lane_mark "$n-up"
+    [ "$i" -le 2 ] && kb_rec "$n-up" 3; gfx_reset; sleep 0.4
+    adb shell input tap $f; sleep 2.2
+    gfx "$n-up"; [ "$i" -le 2 ] && kb_pull "$n-up"; check "$n-up" || { ensure_running "$n"; continue; }
+    ime=$(ime_top); dump "$n-k"; set -- $(edit_xy "$OUT/$n-k.xml"); fy=${3:-0}
+    shot "$n-kb-up"
+    if [ "${ime:-0}" -le 0 ]; then log "FAIL $n: keyboard did not open"; FAIL=1
+    elif [ "$fy" -gt "$ime" ] || [ "$fy" -le 0 ]; then log "FAIL $n: composer field bottom $fy not above the IME top $ime"; FAIL=1
+    else log "ok: $n composer above the keyboard (field bottom $fy, IME top $ime)"; fi
+    [ -n "$(find_node "$OUT/$n-k.xml" "$ARROW_LABEL")" ] && { log "FAIL $n: arrow shown with the keyboard up"; FAIL=1; }
+    # Syed's repeated taps: a second tap on the focused composer keeps the keyboard.
+    if [ -n "${1:-}" ]; then adb shell input tap $1 $2; sleep 1.2; ime=$(ime_top); [ "${ime:-0}" -gt 0 ] && log "ok: $n keyboard stays on a second composer tap" || { log "FAIL $n: a second composer tap closed the keyboard"; FAIL=1; }; fi
+    lane_mark "$n-down"
+    [ "$i" -le 2 ] && kb_rec "$n-down" 3; gfx_reset; sleep 0.4
+    adb shell input keyevent 111; sleep 2.0
+    gfx "$n-down"; [ "$i" -le 2 ] && kb_pull "$n-down"; check "$n-down" || { ensure_running "$n"; continue; }
+    ime=$(ime_top); dump "$n-d"; shot "$n-kb-down"
+    [ "${ime:-0}" -gt 0 ] && { log "FAIL $n: keyboard still up after dismiss"; FAIL=1; adb shell input keyevent 111; sleep 1; }
+    [ -n "$(find_node "$OUT/$n-d.xml" "$ARROW_LABEL")" ] && { log "FAIL $n: arrow shown after the keyboard closed"; shot "$n-d-arrow"; FAIL=1; }
+    lines=$(kb_js_since "$n"); echo "$lines" | sed "s/^/$m $i /" >> "$OUT/kb161-lines.txt"
+    log "  $n probe: $(echo "$lines" | grep -E 'E2EKBMOVE' | tr '\n' ' ')"
+    if echo "$lines" | grep -q 'E2EARROW on'; then log "FAIL $n: the arrow mounted during open/keyboard ($(echo "$lines" | grep -c 'E2EARROW on')x)"; FAIL=1; else log "ok: $n no arrow at any time"; fi
+    real_tap $BACKXY; sleep 2.2; on_home "$n-h" || home
+  done
+  # Positive control: a reader scrolled well above the latest message gets the arrow, and it takes them back.
+  n="kb-$m-away"; home; lane_mark "$n"; real_open 3.0 || return 0
+  adb shell input swipe 540 700 540 2000 250; sleep 0.3; adb shell input swipe 540 700 540 2000 250; sleep 1.5
+  dump "$n-1"; xy=$(find_node "$OUT/$n-1.xml" "$ARROW_LABEL")
+  if [ -z "$xy" ]; then log "FAIL $n: no arrow after scrolling away from the latest message"; shot "$n-1"; FAIL=1
+  else log "ok: $n arrow shown when scrolled away"; shot "$n-arrow"; adb shell input tap $xy; sleep 2; dump "$n-2"
+    [ -z "$(find_node "$OUT/$n-2.xml" "$ARROW_LABEL")" ] && log "ok: $n arrow took the chat back and left" || { log "FAIL $n: arrow still shown after tapping it"; FAIL=1; }
+  fi
+  echo "$(kb_js_since "$n")" | sed "s/^/$m away /" >> "$OUT/kb161-lines.txt"
+  real_tap $BACKXY; sleep 2.2; on_home "$n-h" || home
+}
+kb_summary() { # per mode: moves, covered frames, max behind/ahead, scroll reversals, arrow mounts, jank
+  python3 - "$OUT/kb161-lines.txt" "$OUT/gfx-summary.txt" <<'PYK' | tee -a "$OUT/steps.txt" "$OUT/kb161-summary.txt"
+import re,sys
+L=open(sys.argv[1]).read().splitlines() if True else []
+try: G=open(sys.argv[2]).read().splitlines()
+except Exception: G=[]
+for mode in ("ON","OFF"):
+  for d in ("open","close"):
+    mv=[l for l in L if l.startswith(mode+" ") and "E2EKBMOVE dir="+d in l]
+    def f(k): return [float(re.search(k+r"=([-\d.]+)",l).group(1)) for l in mv if re.search(k+r"=([-\d.]+)",l)]
+    cov=f("covered"); beh=f("maxBehind"); ah=f("maxAhead"); rev=f("scrollRev"); fr=f("frames")
+    print(f"KB161 {mode} {d}: moves={len(mv)} coveredFrames={int(sum(cov))} maxBehind={max(beh) if beh else 0:.1f} maxAhead={max(ah) if ah else 0:.1f} scrollRev={int(sum(rev))} frames/move={sum(fr)/len(fr) if fr else 0:.0f}")
+  arrows=[l for l in L if l.startswith(mode+" ") and "E2EARROW on" in l and " away " not in l]
+  print(f"KB161 {mode} arrow mounts in open/keyboard lanes: {len(arrows)}")
+  for d in ("up","down"):
+    g=[l for l in G if re.match(rf"kb-{mode}-\d+-{d} ",l)]
+    p90=[float(re.search(r"p90=([\d.]+)",l).group(1)) for l in g if "p90=" in l]; jk=[re.search(r"janky=([\d.?]+)%",l).group(1) for l in g if "janky=" in l]
+    print(f"KB161 {mode} gfx {d}: runs={len(g)} p90ms={'/'.join(f'{x:.0f}' for x in p90)} janky%={'/'.join(jk)}")
+PYK
+}
+if [ -f .github/e2e/kb161 ]; then
+  B=${GEN_BUILD:-new}
+  log "== KB161 ($B) target $(cat "$(dirname "$APK")/target-sha.txt" 2>/dev/null), api $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+  adb logcat -G 16M >/dev/null 2>&1 || true
+  touch "$OUT/real-lanes.txt" "$OUT/kb161-lines.txt"; ensure_running k
+  if real_setup; then
+    kb_lane ON 5
+    toggle_to kb-off OFF
+    kb_lane OFF 5
+    toggle_to kb-on2 ON
+    open_latest "E2E Real chat" LATEST-END-VEYR 3
+    [ "$B" = new ] && [ -f .github/e2e/sendlane ] && { list_scn q-send ON; toggle_to q-off OFF; list_scn q-sendoff OFF; toggle_to q-on ON; }
+  fi
+  kb_summary
+  adb logcat -d > "$OUT/logcat.txt" 2>/dev/null; adb logcat -d -b crash > "$OUT/crash-final.txt" 2>/dev/null
+  if [ -n "$(app_anr)" ]; then log "FAIL: app ANR"; FAIL=1; fi
+  log "RESULT FAIL=$FAIL ($B)"; exit $FAIL
+fi
 # Build 15.3: GENLONG mode (two.sh runs it once per APK: the old build 15.2 first, then the new 15.3).
 if [ -f .github/e2e/genlong ]; then
   B=${GEN_BUILD:-new}

@@ -1,4 +1,4 @@
-name: E2E emulator smoke (build 16 genlong + quick113 lanes)
+name: E2E emulator smoke (build 16.1 keyboard / composer / arrow lanes, old 16 vs new 16.1)
 
 # Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build11-review-ci (build 11 reviewer; from build10-review-ci).
 # Build 11.2 builder copy: branch build11-2-ci (from build11-review-ci ed3de711), target build11-2; adds the zoom-close / predictive back and colour picker checks.
@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 16 genlong + quick113 lanes)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build16-ci]
+    branches: [build161-ci]
 
 permissions:
   contents: read
@@ -41,11 +41,11 @@ jobs:
     needs: plan
     if: needs.plan.outputs.reuse == ''
     runs-on: ubuntu-24.04
-    # Build 16: the new build only (the 15.3 baseline is run 43760382742).
+    # Build 16.1: the new build (16.1) and the old one (16 2387ffb29), both run in one emulator boot (two.sh).
     strategy:
       fail-fast: false
       matrix:
-        which: [new]
+        which: [new, old]
     timeout-minutes: 120
     env:
       CI: "1"
@@ -162,13 +162,17 @@ jobs:
         with:
           name: e2e-apk-new
           path: apk-new
-      - run: ls -la apk-new && cat apk-new/target-sha.txt && mkdir -p e2e-out
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-apk-old
+          path: apk-old
+      - run: ls -la apk-new apk-old && cat apk-new/target-sha.txt apk-old/target-sha.txt && mkdir -p e2e-out
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: GENLONG + quick113 lanes on the new APK
+      - name: KB161 lanes on the old (16) then the new (16.1) APK
         id: emu1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
