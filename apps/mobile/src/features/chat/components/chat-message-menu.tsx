@@ -2,6 +2,8 @@ import { MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ip
 import Copy from "lucide-react-native/icons/copy";
 import GitFork from "lucide-react-native/icons/git-fork";
 import Hash from "lucide-react-native/icons/hash";
+import Pin from "lucide-react-native/icons/pin";
+import PinOff from "lucide-react-native/icons/pin-off";
 import Reply from "lucide-react-native/icons/reply";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Trash2 from "lucide-react-native/icons/trash";
@@ -96,6 +98,8 @@ export type MessageMenuLabels = {
   react: (emoji: string) => string;
   moreEmoji: string;
   sendToChannel: string;
+  pin: string;
+  unpin: string;
   delete: string;
 };
 
@@ -118,6 +122,8 @@ export function openMessageMenu({
   onSelectText,
   onReact,
   sendToChannel,
+  pinned,
+  onTogglePin,
   onDelete,
   danger,
 }: {
@@ -138,6 +144,10 @@ export function openMessageMenu({
   onReact?: (emoji: string | null) => void;
   /** Upstream 0.61 (#4957): the open channels the text can go to, as a sub-menu. */
   sendToChannel?: { channels: readonly { id: string; name: string }[]; onSend: (channelId: string) => void };
+  /** Upstream 1.4.10: the message is pinned in its chat. */
+  pinned?: boolean;
+  /** Upstream 1.4.10: pins the message, or unpins it when `pinned`. Unset where the chat cannot pin. */
+  onTogglePin?: () => void;
   /** Upstream 0.61 (#4957): asks, then deletes the message for everyone. */
   onDelete?: () => void;
   /** The colour of the Delete icon. */
@@ -165,6 +175,13 @@ export function openMessageMenu({
       children: channels.map((channel) => ({ id: `channel:${channel.id}`, title: channel.name })),
     });
   }
+  if (onTogglePin) {
+    items.push({
+      id: "pin",
+      title: pinned ? labels.unpin : labels.pin,
+      icon: pinned ? <PinOff size={18} color={icon} strokeWidth={2} /> : <Pin size={18} color={icon} strokeWidth={2} />,
+    });
+  }
   if (onDelete) {
     items.push({
       id: "delete",
@@ -183,6 +200,7 @@ export function openMessageMenu({
     branch: onBranch,
     copy: onCopy,
     select: onSelectText,
+    pin: onTogglePin,
     delete: onDelete,
   };
   const key = openGlassMenu({

@@ -5,12 +5,14 @@ import ChevronRight from "lucide-react-native/icons/chevron-right";
 import File from "lucide-react-native/icons/file";
 import Globe from "lucide-react-native/icons/globe";
 import Pencil from "lucide-react-native/icons/pencil";
+import Pin from "lucide-react-native/icons/pin";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { useBrowserFeature } from "@/features/browser/components/use-browser-feature";
+import { useMessagePinsEnabled } from "@/features/chat/components/use-message-pins";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { haptics } from "@/shared/lib/haptics";
@@ -59,6 +61,7 @@ export function AgentPageHero({
   const iconColor = String(foreground);
   const browserView = useMobileWorkspaceSelector((current) => current.browserViewSupport(agent.serverId).view);
   const browserShown = useBrowserFeature() && browserView && available;
+  const pinsShown = useMessagePinsEnabled(agent.serverId) && available;
   return (
     <View style={styles.hero}>
       <Pressable
@@ -100,24 +103,28 @@ export function AgentPageHero({
         </Pressable>
       </View>
       {browserShown ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("mobile.browser.open")}
-          onPress={() => {
-            void haptics.impact("soft");
-            router.push({ pathname: "/browser/[agentId]", params: { agentId: agent.id, serverId: agent.serverId } });
-          }}
-          className="bg-grouped"
-          style={({ pressed }) => [styles.browser, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <View style={[styles.browserIcon, { backgroundColor: String(field) }]}>
-            <Globe color={iconColor} size={26} strokeWidth={1.8} />
-          </View>
-          <Typography.Paragraph className="font-semibold flex-1" style={styles.browserLabel}>
-            {t("mobile.browser.open")}
-          </Typography.Paragraph>
-          <ChevronRight color={String(muted)} size={18} strokeWidth={2} />
-        </Pressable>
+        <HeroRow
+          label={t("mobile.browser.open")}
+          icon={<Globe color={iconColor} size={26} strokeWidth={1.8} />}
+          field={String(field)}
+          chevron={String(muted)}
+          onPress={() =>
+            router.push({ pathname: "/browser/[agentId]", params: { agentId: agent.id, serverId: agent.serverId } })
+          }
+        />
+      ) : null}
+      {/* Build 16: upstream 1.4.10 pinned messages. The chat header's ••• opens this page with ColorOS ON,
+          so the pins sheet (the More menu of the classic header) opens from here. */}
+      {pinsShown ? (
+        <HeroRow
+          label={t("mobile.chat.pins.title")}
+          icon={<Pin color={iconColor} size={24} strokeWidth={1.8} />}
+          field={String(field)}
+          chevron={String(muted)}
+          onPress={() =>
+            router.push({ pathname: "/pinned-messages", params: { agentId: agent.id, serverId: agent.serverId } })
+          }
+        />
       ) : null}
       <View style={styles.tiles}>
         <Tile
@@ -137,6 +144,39 @@ export function AgentPageHero({
         />
       </View>
     </View>
+  );
+}
+
+function HeroRow({
+  label,
+  icon,
+  field,
+  chevron,
+  onPress,
+}: {
+  label: string;
+  icon: ReactNode;
+  field: string;
+  chevron: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        void haptics.impact("soft");
+        onPress();
+      }}
+      className="bg-grouped"
+      style={({ pressed }) => [styles.browser, { opacity: pressed ? 0.7 : 1 }]}
+    >
+      <View style={[styles.browserIcon, { backgroundColor: field }]}>{icon}</View>
+      <Typography.Paragraph className="font-semibold flex-1" style={styles.browserLabel}>
+        {label}
+      </Typography.Paragraph>
+      <ChevronRight color={chevron} size={18} strokeWidth={2} />
+    </Pressable>
   );
 }
 

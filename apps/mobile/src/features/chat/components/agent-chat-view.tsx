@@ -17,6 +17,7 @@ import {
 import { openTurnActivity } from "@/features/workspace/model/agent-activity";
 import { showsOnline } from "@/features/workspace/model/server-status";
 import { currentText, useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import {
   chatRowIndex,
   latestReadBoundaryMessage,
@@ -73,6 +74,10 @@ export function MobileChatView({
   });
   const isFocused = useIsFocused();
   const firstUnreadMessageId = useAgentFirstUnreadMessageId(agent.id);
+  // OpenBot Local (build 16): with ColorOS ON the chat keeps opening at the latest message (build #102
+  // pin-to-latest); upstream 1.4.10's open-at-the-NEW-line applies with ColorOS OFF. The NEW line shows either way.
+  const colorOS = useColorOSMotion().enabled;
+  const openingUnreadId = colorOS ? null : firstUnreadMessageId;
   const respondToPrompt = useCallback(
     (agentId: string, input: RespondToPromptInput) => workspace().respondToPrompt(agentId, input),
     [workspace],
@@ -162,8 +167,8 @@ export function MobileChatView({
   const [focus, setFocus] = useState<{ messageId: string; loaded: boolean; unread: boolean } | null>(() =>
     focusMessageId
       ? { messageId: focusMessageId, loaded: false, unread: false }
-      : firstUnreadMessageId
-        ? { messageId: firstUnreadMessageId, loaded: false, unread: true }
+      : openingUnreadId
+        ? { messageId: openingUnreadId, loaded: false, unread: true }
         : null,
   );
   const focusRef = useRef(focus);
@@ -249,12 +254,12 @@ export function MobileChatView({
   // The unread state can come after the chat opened, such as on a cold start. Until the chat has
   // messages to show, it still opens at the NEW line.
   useEffect(() => {
-    if (!firstUnreadMessageId || focusRef.current || focusEnded.current || conversation) return;
-    const next = { messageId: firstUnreadMessageId, loaded: false, unread: true };
+    if (!openingUnreadId || focusRef.current || focusEnded.current || conversation) return;
+    const next = { messageId: openingUnreadId, loaded: false, unread: true };
     focusRef.current = next;
     setFocus(next);
     fetchHistory();
-  }, [firstUnreadMessageId, conversation, fetchHistory]);
+  }, [openingUnreadId, conversation, fetchHistory]);
   const detached = conversation?.detached ?? false;
   // A message in the store that the chat shows no row for, such as a thinking step. The NEW line
   // moves to the next row that has one, and the list opens at the latest message when none has.

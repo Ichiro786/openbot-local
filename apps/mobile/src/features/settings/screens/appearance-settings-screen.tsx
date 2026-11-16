@@ -8,6 +8,7 @@ import { Pressable, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { OpenbotUiLevelSection } from "@/features/local-engine/dm-context-section";
 import { readableOn } from "@/features/onboarding/model/onboarding-colors";
+import { AppIconSection } from "@/features/settings/components/app-icon-row";
 import { AvatarSizeSlider } from "@/features/settings/components/avatar-size-slider";
 import { MessageColorPicker } from "@/features/settings/components/message-color-picker";
 import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
@@ -142,6 +143,7 @@ export function AppearanceSettingsScreen() {
           </SettingsRow>
         </SettingsSection>
       ) : null}
+      <AppIconSection />
       <TextSizeSection />
       <SettingsSection footer={messageColorError ?? t("mobile.settings.appearance.messageColorFooter")}>
         <SettingsRow

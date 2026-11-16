@@ -14,6 +14,7 @@ import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-
 import type { MobileAgentActivity, MobileAgentWaitReason } from "@/features/workspace/model/agent-activity";
 import { showsOnline } from "@/features/workspace/model/server-status";
 import { useText } from "@/shared/lib/text";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { useChannels } from "../components/use-channels";
 import { channelTaskActivities, channelTasksNeedingAction } from "../model/channel-task-actions";
 import { firstUnreadChannelMessageId } from "../model/channel-unread";
@@ -161,7 +162,11 @@ function ChannelChat({ channelId, serverId }: { channelId: string; serverId: str
   // while the server connected, does not move to it later, under the reader.
   const [unreadOpening, setUnreadOpening] = useState<"pending" | "done">("pending");
   const placeUnreadLine = useCallback(() => setUnreadOpening("done"), []);
-  const opensAtUnread = unreadOpening === "pending" && online && (readsPage || unreadLineMessageIds !== null);
+  // OpenBot Local (build 16): with ColorOS ON a channel keeps opening at the latest message, as an agent
+  // chat does; upstream 1.4.10's open-at-the-NEW-line applies with ColorOS OFF. The NEW line shows either way.
+  const colorOS = useColorOSMotion().enabled;
+  const opensAtUnread =
+    !colorOS && unreadOpening === "pending" && online && (readsPage || unreadLineMessageIds !== null);
   const [olderLoading, setOlderLoading] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const readThrough = useRef(0);

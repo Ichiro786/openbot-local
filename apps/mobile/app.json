@@ -3,7 +3,7 @@
     "name": "OpenBot Local",
     "slug": "openbot",
     "platforms": ["ios", "android"],
-    "version": "1.4.9",
+    "version": "1.4.10",
     "orientation": "portrait",
     "icon": "./assets/icons/app-icon.png",
     "scheme": "openbotlocal",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "run.openbot.local",
-      "versionCode": 10415,
+      "versionCode": 10416,
       "icon": "./assets/icons/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-foreground.png",
@@ -44,6 +44,7 @@
       "./plugins/with-workspace-bundle-inputs",
       "./plugins/with-high-refresh-rate",
       "./modules/openbot-engine/app.plugin.js",
+      "./plugins/with-app-icons",
       "expo-router",
       "expo-video",
       [
@@ -233,7 +234,9 @@
           "bundleIdentifier": "run.openbot.local.NotificationService",
           "groupIdentifier": "group.run.openbot.local"
         }
-      ]
+      ],
+      "./plugins/with-shortcuts",
+      "./plugins/with-xcode-warning-fixes"
     ],
     "experiments": {
       "typedRoutes": true,
