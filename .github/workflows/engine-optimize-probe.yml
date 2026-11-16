@@ -1,0 +1,100 @@
+name: Engine optimize probe (research)
+
+# Research only: measures the OpenBot Local engine payload's size, unpack speed, boot time and idle cost on a
+# native arm64 runner, the app's way (engine/optim/probe.sh). Runs on pushes to research/engine-optimize only.
+# Publishes nothing: no release, no tag. One step and one artifact per phase.
+
+on:
+  push:
+    branches: [research/engine-optimize]
+    paths: [engine/optim/**, .github/workflows/engine-optimize-probe.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-optimize-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK: /var/ob
+      ENGINE_TAG: engine-0.70.0-3
+    steps:
+      - name: Free disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google || true
+          df -h /
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            engine/optim
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Host tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils zstd jq bc libtalloc-dev
+      - name: Build proot (termux/proot, the phone's proot)
+        run: |
+          git clone -q --depth 1 https://github.com/termux/proot "$RUNNER_TEMP/proot-src"
+          make -s -C "$RUNNER_TEMP/proot-src/src" -j"$(nproc)" HAS_LOADER_32BIT= proot
+          echo "PROOT=$RUNNER_TEMP/proot-src/src/proot" >> "$GITHUB_ENV"
+      - name: Phase setup
+        timeout-minutes: 10
+        run: |
+          mkdir -p out
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            bash engine/optim/probe.sh setup 2>&1 | tee out/log-setup.txt
+          sudo chown -R "$(id -u)" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with: { name: probe-setup, path: out/setup/ }
+      - name: Phase boots
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 80
+        run: |
+          mkdir -p out
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" \
+            bash engine/optim/probe.sh boots 2>&1 | tee out/log-boots.txt
+          sudo chown -R "$(id -u)" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with: { name: probe-boots, path: out/boots/ }
+      - name: Phase slim
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 40
+        run: |
+          mkdir -p out
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" \
+            bash engine/optim/probe.sh slim 2>&1 | tee out/log-slim.txt
+          sudo chown -R "$(id -u)" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with: { name: probe-slim, path: out/slim/ }
+      - name: Phase compress
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 40
+        run: |
+          mkdir -p out
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" \
+            bash engine/optim/probe.sh compress 2>&1 | tee out/log-compress.txt
+          sudo chown -R "$(id -u)" out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with: { name: probe-compress, path: out/compress/ }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: probe-logs, path: out/log-*.txt }
