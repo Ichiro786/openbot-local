@@ -1,4 +1,4 @@
-name: E2E emulator smoke (build 15.3 genlong)
+name: E2E emulator smoke (build 16 genlong + quick113 lanes)
 
 # Reviewer-owned smoke test for OpenBot Local build 10. Lives only on branch build11-review-ci (build 11 reviewer; from build10-review-ci).
 # Build 11.2 builder copy: branch build11-2-ci (from build11-review-ci ed3de711), target build11-2; adds the zoom-close / predictive back and colour picker checks.
@@ -9,7 +9,7 @@ name: E2E emulator smoke (build 15.3 genlong)
 # .github/e2e/apk-run-id (optional) reuses the APK artifact of an earlier run and skips the build.
 on:
   push:
-    branches: [build153-ci]
+    branches: [build16-ci]
 
 permissions:
   contents: read
@@ -41,11 +41,11 @@ jobs:
     needs: plan
     if: needs.plan.outputs.reuse == ''
     runs-on: ubuntu-24.04
-    # Build 15.3: the new build and the old one (15.2, to reproduce Syed's blank chat) with the same harness.
+    # Build 16: the new build only (the 15.3 baseline is run 43760382742).
     strategy:
       fail-fast: false
       matrix:
-        which: [new, old]
+        which: [new]
     timeout-minutes: 120
     env:
       CI: "1"
@@ -162,17 +162,13 @@ jobs:
         with:
           name: e2e-apk-new
           path: apk-new
-      - uses: actions/download-artifact@v4
-        with:
-          name: e2e-apk-old
-          path: apk-old
-      - run: ls -la apk-new apk-old && cat apk-new/target-sha.txt apk-old/target-sha.txt && mkdir -p e2e-out
+      - run: ls -la apk-new && cat apk-new/target-sha.txt && mkdir -p e2e-out
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: GENLONG on the old and the new APK
+      - name: GENLONG + quick113 lanes on the new APK
         id: emu1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
