@@ -45,8 +45,9 @@ def host_env(extra):
 
 
 def chroot_cmd(r, guest):
-    sh = (f"set -e; for d in proc sys dev dev/pts; do mount --bind /$d {r}/$d; done; "
-          f"exec chroot {r} /usr/bin/env -i " + " ".join(f"'{x}'" for x in guest))
+    u = pwd.getpwnam(USER)  # same uid as the rootfs owner, like the app (and XDG_RUNTIME_DIR ownership)
+    sh = (f"set -e; for d in proc sys dev dev/pts; do mount --bind /$d {r}/$d; done; mount --bind {r}/tmp {r}/dev/shm; "
+          f"exec chroot --userspec={u.pw_uid}:{u.pw_gid} {r} /usr/bin/env -i " + " ".join(f"'{x}'" for x in guest))
     return ["unshare", "-m", "--propagation", "private", "/bin/sh", "-c", sh]
 
 
@@ -158,6 +159,21 @@ def idle(root_pid, secs, label):
     return tot, rows
 
 
+def strace_roles(root_pid, label):
+    """Host strace of the busiest Electron processes (chroot mode only: under proot they are already traced)."""
+    got = {}
+    procs = sample(tree(root_pid))
+    for want in ("electron-main", "electron-renderer", "electron-gpu"):
+        pid = next((q for q, v in procs.items() if role(v["cmd"], v["comm"]) == want), None)
+        if not pid: continue
+        f = f"{OUT}/strace-c-{label}-{want}.txt"
+        subprocess.run(["timeout", "-s", "INT", "20", "strace", "-f", "-c", "-S", "calls", "-o", f, "-p", str(pid)], capture_output=True)
+        g = f"{OUT}/strace-tt-{label}-{want}.txt"
+        subprocess.run(["timeout", "-s", "INT", "3", "strace", "-f", "-tt", "-y", "-s", "80", "-o", g, "-p", str(pid)], capture_output=True)
+        got[want] = pid
+    return got
+
+
 def ctl_status(r, n=20):
     path = f"{r}/run/openbot/control.sock"; ts = []
     for _ in range(n):
@@ -192,6 +208,7 @@ def main():
     ap.add_argument("--henv", action="append", default=[]); ap.add_argument("--cold", action="store_true")
     ap.add_argument("--idle", type=int, default=60); ap.add_argument("--settle", type=int, default=30)
     ap.add_argument("--timeout", type=int, default=400); ap.add_argument("--probes", action="store_true")
+    ap.add_argument("--strace", action="store_true")
     a = ap.parse_args()
     r = os.path.realpath(a.rootfs); os.makedirs(OUT, exist_ok=True)
     res = dict(label=a.label, mode=a.mode, genv=a.genv, henv=a.henv)
@@ -254,6 +271,8 @@ def main():
                     d["n"] += 1; d["cpu"] = round(d["cpu"] + x["cpu"], 2); d["ctx"] = round(d["ctx"] + x["ctx"], 1)
                     d["rss_mb"] = round(d["rss_mb"] + x["rss_mb"], 1); d["libs"] = sorted(set(d["libs"]) | set(x["libs"]))
                 print(f"[{a.label}] idle {tot}", flush=True)
+            if a.strace:
+                res["strace"] = strace_roles(p.pid, a.label)
     finally:
         ts = time.time()
         try:

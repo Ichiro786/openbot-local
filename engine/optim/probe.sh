@@ -88,6 +88,40 @@ boots)
   cp "$W/rn/root/.config/OpenBot/logs/"*.log "$OUT/" 2>/dev/null; find "$W/rn/root" -name '*.log' -size -5M -newer "$W/marker" -exec cp {} "$OUT/" \; 2>/dev/null
   ;;
 
+boots2)
+  log "extract like the app"
+  t xextract "$XZ" "$W/rn"
+  B=(--rootfs "$W/rn" --timeout 400)
+  log "warm-up boot (fills userData and downloads bun, like a first start)"
+  boot --label w0-first "${B[@]}" --idle 0
+  log "boot-time repeats: baseline vs NODE_COMPILE_CACHE, warm page cache and cold, interleaved"
+  CC=NODE_COMPILE_CACHE=/root/.cache/node-compile-cache
+  boot --label cc-fill "${B[@]}" --genv "$CC" --idle 0
+  for i in 1 2 3 4 5; do
+    boot --label "rep-base-warm-$i" "${B[@]}" --idle 0
+    boot --label "rep-cc-warm-$i" "${B[@]}" --genv "$CC" --idle 0
+  done
+  for i in 1 2 3; do
+    boot --label "rep-base-cold-$i" "${B[@]}" --cold --idle 0
+    boot --label "rep-cc-cold-$i" "${B[@]}" --cold --genv "$CC" --idle 0
+  done
+  du -sx -B1 "$W/rn/root/.cache/node-compile-cache" | tee -a "$OUT/steps.txt"
+  log "idle variants (proot)"
+  boot --label i1-gpu-off "${B[@]}" --genv OPENBOT_DISABLE_GPU=1 --idle 90 --settle 30
+  boot --label i2-lean "${B[@]}" --genv OPENBOT_DISABLE_GPU=1 --genv "OPENBOT_XVFB_ARGS=-extension GLX" --genv OPENBOT_PROOT_PROFILE=inprocess --idle 90 --settle 30
+  boot --label i3-base-10min "${B[@]}" --idle 600 --settle 60
+  log "chroot (same uid) for the proot overhead, with host strace of the Electron processes"
+  boot --label c1-chroot-strace "${B[@]}" --mode chroot --idle 60 --settle 30 --strace
+  boot --label c2-chroot-gpu-off-strace "${B[@]}" --mode chroot --genv OPENBOT_DISABLE_GPU=1 --idle 60 --settle 30 --strace
+  chown -R runner:runner "$W/rn"
+  topdu "$W/rn/root" 5 40 >"$OUT/du-root-after.txt"
+  for f in "$OUT"/strace-tt-*.txt; do
+    [ -f "$f" ] || continue
+    { echo "== $f"; awk '{print $3}' "$f" | sed 's/(.*//' | sort | uniq -c | sort -rn | head -n 15
+      grep -o '<[^>]*>' "$f" | sort | uniq -c | sort -rn | head -n 25; } >>"$OUT/strace-summary.txt"
+  done
+  ;;
+
 slim)
   [ -d "$W/rn" ] || t xextract "$XZ" "$W/rn"
   B=(--rootfs "$W/rn" --timeout 400)
