@@ -1,14 +1,17 @@
 import {
   type AgentProviderId,
   type AgentProviderStatus,
+  claudeCompactWindowSizes,
   isAgentProvider,
   isInstallerProvider,
   isKeyOnlyProvider,
   PROMPT_CACHE_TTLS,
   type PromptCacheTtl,
+  type ProviderAccountPool,
   type ProviderAccountStatus,
   type ProviderApiKeyStatus,
 } from "@openbot/contracts/ipc";
+import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Chip, Typography } from "heroui-native";
@@ -21,12 +24,14 @@ import KeyRound from "lucide-react-native/icons/key-round";
 import Layers from "lucide-react-native/icons/layers";
 import LogIn from "lucide-react-native/icons/log-in";
 import LogOut from "lucide-react-native/icons/log-out";
+import Minimize2 from "lucide-react-native/icons/minimize-2";
 import Package from "lucide-react-native/icons/package";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import RotateCcw from "lucide-react-native/icons/rotate-ccw";
 import Star from "lucide-react-native/icons/star";
 import UserPlus from "lucide-react-native/icons/user-plus";
 import UserRound from "lucide-react-native/icons/user-round";
+import Users from "lucide-react-native/icons/users";
 import X from "lucide-react-native/icons/x";
 import { useRef, useState } from "react";
 import { Alert, View } from "react-native";
@@ -36,9 +41,11 @@ import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { ProviderMark } from "@/features/servers/components/provider-mark";
 import { TrailingValue } from "@/features/servers/components/trailing-value";
 import {
+  isProviderKeyAccount,
   type ProviderAdmin,
   type ProviderRow,
   providerAccountStateKey,
+  providerAccountsAreKeys,
   providerRuntimeBusy,
   providerSignOutOffered,
 } from "@/features/servers/model/provider-admin";
@@ -198,6 +205,9 @@ export function ServerProviderScreen() {
   // The host lists only a provider that can hold more than one account.
   const providerAccounts = accounts.list.data?.providers.find((entry) => entry.provider === provider)?.accounts;
   const hasAccounts = Boolean(providerAccounts && providerAccounts.length > 0);
+  // The pool shows only where the host has it (`provider-account-pool-v1`). The host lists a pool only while it is on.
+  const setPool = admin.accounts?.setPool ?? null;
+  const pool = setPool ? accounts.list.data?.pools?.find((entry) => entry.provider === provider)?.pool : undefined;
   const message = row.status?.message ?? row.status?.checkError ?? null;
   const signOut = admin.signOut;
   // As on desktop, a saved key keeps the provider connected, and with an accounts list the provider's
@@ -212,8 +222,13 @@ export function ServerProviderScreen() {
   const isDefault = defaultProvider.current.data?.provider === provider;
   const connectOnComputer =
     connectable && !connect && state !== "available" && !(row.apiKey && isKeyOnlyProvider(provider));
-  const signInShown =
-    !hasAccounts && (Boolean(row.status?.email) || (connectable && Boolean(connect)) || disconnectable);
+  // Each account of such a provider after the first is an API key. The first one keeps the provider's
+  // own sign-in, which has no account page of the relay, so its Connect stays on this page.
+  const keyAccounts = providerAccountsAreKeys(provider);
+  const connectKey = admin.accounts?.connectKey ?? null;
+  const signInShown = hasAccounts
+    ? keyAccounts && connectable && Boolean(connect)
+    : Boolean(row.status?.email) || (connectable && Boolean(connect)) || disconnectable;
 
   const providerName = row.name;
   const signedInAs = row.status?.email ?? row.name;
@@ -292,7 +307,7 @@ export function ServerProviderScreen() {
                   : undefined
           }
         >
-          {row.status?.email ? (
+          {row.status?.email && !hasAccounts ? (
             <SettingsRow
               disclosure={false}
               leading={<RowIcon icon={UserRound} />}
@@ -347,9 +362,27 @@ export function ServerProviderScreen() {
           serverId={serverId}
           provider={provider}
           accounts={providerAccounts}
-          canAdd={connectable && admin.accounts?.canSignIn(provider) === true}
+          // A new account is an API key where the host takes one (`provider-account-keys-v1`), and
+          // never the browser sign-in for such a provider.
+          canAdd={connectable && (keyAccounts ? connectKey !== null : admin.accounts?.canSignIn(provider) === true)}
+          keyAccounts={keyAccounts}
           busy={busy}
-          onAdd={() => openSignIn("relay", { add: "1" })}
+          onAdd={() =>
+            keyAccounts
+              ? router.push({ pathname: "/server-settings/provider-key", params: { serverId, provider, add: "1" } })
+              : openSignIn("relay", { add: "1" })
+          }
+          pool={pool}
+          onPoolChange={
+            setPool
+              ? (enabled) =>
+                  void run("pool", async () => {
+                    // The host forgets the accounts left out when the pool is off, as on desktop.
+                    await setPool(provider, enabled, pool?.leftOut ?? []);
+                    await accounts.refresh();
+                  })
+              : null
+          }
         />
       ) : null}
       {!off && (modelsShown || admin.defaultProvider) ? (
@@ -411,6 +444,9 @@ export function ServerProviderScreen() {
       ) : null}
       {provider === "claude" && !off && admin.promptCache ? (
         <PromptCacheSection serverId={serverId} setting={admin.promptCache} />
+      ) : null}
+      {provider === "claude" && !off && admin.compactWindow ? (
+        <CompactWindowSection serverId={serverId} setting={admin.compactWindow} />
       ) : null}
       {row.apiKey ? (
         <SettingsSection
@@ -591,31 +627,157 @@ function PromptCacheSection({
   );
 }
 
-/** The accounts of the provider on the host. Each agent uses one; its settings choose which. */
+/** A picker value: `default` for Claude Code's own size, or a number of tokens as text. */
+type CompactWindowChoice = "default" | `${number}`;
+
+function compactWindowChoice(tokens: number | null): CompactWindowChoice {
+  return tokens === null ? "default" : `${tokens}`;
+}
+
+/**
+ * The size at which Claude Code compacts the chats of the host's agents (`claude-compact-window-v1`),
+ * as the Context section of the desktop Claude page. A change applies to the next Claude process on
+ * the host. A size that another client saved and that is not a choice here still shows.
+ */
+function CompactWindowSection({
+  serverId,
+  setting,
+}: {
+  serverId: string;
+  setting: NonNullable<ProviderAdmin["compactWindow"]>;
+}) {
+  const { t, format, errorMessage } = useText();
+  const { theme } = useUniwind();
+  const queryScope = useQueryScope();
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.providerCompactWindow(queryScope, serverId);
+  const current = useQuery({ queryKey, retry: false, staleTime: 0, queryFn: () => setting.read() });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label = t("mobile.server.providers.compactWindow");
+  const options = claudeCompactWindowSizes(current.data?.tokens ?? null).map((size) => ({
+    value: compactWindowChoice(size),
+    label:
+      size === null
+        ? t("mobile.server.providers.compactWindowDefault")
+        : t("mobile.server.providers.compactWindowTokens", { size: format.compact(size) }),
+  }));
+  return (
+    <SettingsSection
+      footer={
+        error ??
+        (current.isError
+          ? errorMessage(current.error, t("mobile.server.providers.compactWindowLoadFailed"))
+          : t("mobile.server.providers.compactWindowHint"))
+      }
+    >
+      <SettingsRow
+        disclosure={false}
+        leading={<RowIcon icon={Minimize2} />}
+        trailing={
+          current.data ? (
+            <SettingsPicker<CompactWindowChoice>
+              value={compactWindowChoice(current.data.tokens)}
+              options={options}
+              enabled={!saving}
+              dark={theme === "dark"}
+              label={label}
+              onChange={(choice) => {
+                if (choice === compactWindowChoice(current.data?.tokens ?? null)) return;
+                setSaving(true);
+                setError(null);
+                setting
+                  .set(choice === "default" ? null : Number(choice))
+                  .then(async (next) => {
+                    await queryClient.cancelQueries({ queryKey, exact: true });
+                    queryClient.setQueryData(queryKey, next);
+                    void haptics.notification("success");
+                  })
+                  .catch((cause: unknown) => {
+                    setError(errorMessage(cause, t("mobile.server.providers.actionFailed")));
+                    void haptics.notification("error");
+                  })
+                  .finally(() => setSaving(false));
+              }}
+            />
+          ) : null
+        }
+      >
+        <Typography.Paragraph>{label}</Typography.Paragraph>
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+/**
+ * The accounts of the provider on the host. Each agent uses one; its settings choose which. With the
+ * pool on, the agents share the accounts that are in the pool.
+ */
 function ProviderAccountsSection({
   serverId,
   provider,
   accounts,
   canAdd,
+  keyAccounts,
   busy,
   onAdd,
+  pool,
+  onPoolChange,
 }: {
   serverId: string;
   provider: AgentProviderId;
   accounts: readonly ProviderAccountStatus[];
   canAdd: boolean;
+  /** Each account after the first is an API key of the provider. */
+  keyAccounts: boolean;
   busy: boolean;
   onAdd: () => void;
+  /** The pool of the accounts, while it is on. */
+  pool: ProviderAccountPool | undefined;
+  /** Null when the host does not have the pool. */
+  onPoolChange: ((enabled: boolean) => void) | null;
 }) {
   const { t } = useText();
+  const { theme } = useUniwind();
   const accountName = useProviderAccountName();
+  // As on desktop: a saved key has no plan limit, so it is not a pool member. The switch shows when
+  // the provider has a second plan account to use, or the pool is on. An account that is an API key
+  // of the provider, such as a Cursor account after the first, is not a pool member either.
+  const planAccounts = accounts.filter(
+    (account) => account.id !== CLAUDE_API_KEY_ACCOUNT_ID && !isProviderKeyAccount(provider, account.id),
+  );
+  const poolOffered = onPoolChange !== null && (planAccounts.length > 1 || Boolean(pool));
   return (
     <SettingsSection
       title={t("mobile.server.providers.accounts")}
-      footer={t(canAdd ? "mobile.server.providers.accountsHint" : "mobile.server.providers.accountsOnComputer")}
+      footer={t(
+        keyAccounts && canAdd
+          ? "mobile.server.providers.accountsKeyHint"
+          : pool
+            ? canAdd
+              ? "mobile.server.providers.accountsPooledHint"
+              : "mobile.server.providers.accountsPooledOnComputer"
+            : canAdd
+              ? "mobile.server.providers.accountsHint"
+              : "mobile.server.providers.accountsOnComputer",
+      )}
     >
+      {poolOffered ? (
+        <SettingsRow leading={<RowIcon icon={Users} />} supportingText={t("mobile.server.providers.poolHint")}>
+          <SettingsSwitch
+            value={Boolean(pool)}
+            disabled={busy}
+            label={t("mobile.server.providers.pool")}
+            dark={theme === "dark"}
+            onValueChange={(enabled) => onPoolChange?.(enabled)}
+          />
+        </SettingsRow>
+      ) : null}
       {accounts.map((account, index) => {
         const name = accountName(account, index);
+        const member = account.id !== CLAUDE_API_KEY_ACCOUNT_ID && !isProviderKeyAccount(provider, account.id);
+        const leftOut = member && pool?.leftOut.includes(account.id) === true;
+        const inUse = member && !leftOut && pool?.inUse === account.id;
         return (
           <SettingsRow
             key={account.id}
@@ -629,7 +791,24 @@ function ProviderAccountsSection({
               })
             }
           >
-            <Typography.Paragraph numberOfLines={1}>{name}</Typography.Paragraph>
+            <View className="shrink flex-row items-center gap-2">
+              <Typography.Paragraph numberOfLines={1} className="shrink">
+                {name}
+              </Typography.Paragraph>
+              {leftOut || inUse ? (
+                <Chip
+                  size="sm"
+                  variant="soft"
+                  color={inUse ? "success" : "default"}
+                  className="self-center"
+                  accessibilityRole="text"
+                >
+                  <Chip.Label>
+                    {t(inUse ? "mobile.server.providers.inUse" : "mobile.server.providers.notInPool")}
+                  </Chip.Label>
+                </Chip>
+              ) : null}
+            </View>
           </SettingsRow>
         );
       })}
