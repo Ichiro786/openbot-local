@@ -45,6 +45,12 @@
 #   OPENBOT_VERBOSE         1: Chromium logging to the log file (--enable-logging=stderr).
 #   OPENBOT_LOG             Log path (default /root/openbot.log).
 #   OPENBOT_AUTH_API_URL    Passed through to OpenBot (another account server).
+#   OPENBOT_LOCAL_NO_RENDERER  1 (default): the server's hidden window does not load the desktop UI
+#                           (engine patch 0005; that renderer kept the engine busy for nobody). 0 loads it.
+#   OPENBOT_LOCAL_LOOP_REST 1 (default): the main-loop delay histogram (a 20 ms timer that upstream never
+#                           stops in server mode) rests between turns, like an idle desktop app (patch 0005).
+#   OPENBOT_COMPILE_CACHE   1 (default): V8 compile cache in /root/.cache/node-compile-cache, emptied
+#                           when /opt/OpenBot/engine-version changes. 0 turns it off.
 set -uo pipefail
 umask 077
 
@@ -284,31 +290,54 @@ if [ -n "$VA_BITS" ]; then
   log "user address space: ${VA_BITS}-bit"
   echo "$VA_BITS" >"$LOCAL_STATE/va-bits" 2>/dev/null
   if [ "$VA_BITS" -lt 48 ]; then
-    log "Warning: ${VA_BITS}-bit user address space. Google's Gemini (Antigravity) ACP server aborts at start in TCMalloc on such kernels (antigravity-cli#64); its setup ends in \"could not activate the managed CLI\". Other providers are not affected. The Antigravity hybrid runtime (Server settings > Local engine) avoids it."
+    log "Warning: ${VA_BITS}-bit user address space. Google's 1.4.x Antigravity ACP server aborts at start in TCMalloc on such kernels (antigravity-cli#64); the Antigravity CLI that this engine uses does not."
   fi
 fi
 
-# Antigravity hybrid runtime (prepared on the phone by /opt/agy-hybrid/tools/prepare.py, see
-# engine/agy-hybrid/): Google's ACP server Python frontend on stock CPython 3.14 plus Google's own
-# localharness_external, no TCMalloc. Used only once it passed its smoke test (.ready). OpenBot reads
-# the version from dirname(dirname(OPENBOT_ANTIGRAVITY_PATH))/antigravity-package.json (>= 1.4 turns on
-# /usage and per-account GEMINI_HOME) and skips its managed download and hash check for an explicit path.
+# Antigravity (Gemini) runtime, prepared on the phone by /opt/agy-hybrid/tools/prepare.py (see
+# engine/agy-hybrid/), under /root so engine updates keep it. OpenBot 0.69 runs `<path> --version`
+# (bare x.y.z) and `<path> acp --gemini-dir=<abs> --app-data-dir=antigravity-acp`, and skips its managed
+# download for an explicit path. Used only once it passed its smoke test (.ready).
+#  - bin/antigravity: Google's Antigravity CLI (Go, no TCMalloc, so 39-bit kernels are fine).
+#  - bin/agy_acp_server: the older 1.4.x hybrid (Google's ACP server Python frontend on CPython 3.14);
+#    its launcher bridges the 1.5 command line until Set up / Update installs the CLI.
 AGY_CURRENT=/opt/agy-hybrid/current
 unset OPENBOT_ANTIGRAVITY_PATH
-if [ -f "$AGY_CURRENT/.ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ]; then
+agy_ready=$(head -n 1 "$AGY_CURRENT/.ready" 2>/dev/null)
+if [ -n "$agy_ready" ] && [ -x "$AGY_CURRENT/bin/antigravity" ]; then
+  export OPENBOT_ANTIGRAVITY_PATH="$AGY_CURRENT/bin/antigravity"
+  log "Antigravity (Gemini): Antigravity CLI $agy_ready at $OPENBOT_ANTIGRAVITY_PATH."
+  # Nothing runs the older runtimes now (prepare.sh keeps one back for an engine still running).
+  for old in /root/.local/share/agy-hybrid/*; do
+    name=${old##*/}
+    [[ $name =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [ "$name" != "$agy_ready" ] && rm -rf "$old" &&
+      log "Antigravity (Gemini): removed the old runtime $name."
+  done
+elif [ -n "$agy_ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ] && [ ! -x /opt/python3.14/bin/python3.14 ]; then
+  # Engines >= 0.72 ship no CPython, so the 1.4 hybrid cannot run. OpenBot's managed copy of the same
+  # Antigravity CLI takes over until Server settings > Local engine > Antigravity installs the pinned one.
+  log "Antigravity (Gemini): the 1.4 hybrid needs CPython, which this engine no longer ships; using OpenBot's managed Antigravity CLI (Set up installs the pinned one)."
+elif [ -n "$agy_ready" ] && [ -x "$AGY_CURRENT/bin/agy_acp_server" ]; then
   agy_version=$(sed -n "s/^__version__[[:space:]]*=[[:space:]]*['\"]\([0-9.]*\)['\"].*/\1/p" \
     "$AGY_CURRENT/src/google3/cloud/developer_experience/antigravity_extensions/acp_server/_version.py" 2>/dev/null | head -n 1)
-  [ -n "$agy_version" ] || agy_version=$(head -n 1 "$AGY_CURRENT/.ready" 2>/dev/null)
+  [ -n "$agy_version" ] || agy_version=$agy_ready
   if [[ $agy_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf '{"version":"%s"}\n' "$agy_version" >"$AGY_CURRENT/antigravity-package.json.tmp" &&
       mv -f "$AGY_CURRENT/antigravity-package.json.tmp" "$AGY_CURRENT/antigravity-package.json"
+    # The runtime under /root outlives engine updates: keep its bootstrap and launcher in step with this engine.
+    for f in agy_hybrid.py agy_acp_server; do
+      cmp -s "/opt/agy-hybrid/tools/$f" "$AGY_CURRENT/bin/$f" ||
+        { cp -f "/opt/agy-hybrid/tools/$f" "$AGY_CURRENT/bin/$f.tmp" && chmod 0755 "$AGY_CURRENT/bin/$f.tmp" &&
+          mv -f "$AGY_CURRENT/bin/$f.tmp" "$AGY_CURRENT/bin/$f"; } ||
+        log "Antigravity (Gemini): could not refresh the hybrid $f."
+    done
     export OPENBOT_ANTIGRAVITY_PATH="$AGY_CURRENT/bin/agy_acp_server"
-    log "Antigravity (Gemini): hybrid runtime $agy_version at $OPENBOT_ANTIGRAVITY_PATH."
+    log "Antigravity (Gemini): hybrid runtime $agy_version at $OPENBOT_ANTIGRAVITY_PATH (1.4 bridge; Server settings > Local engine > Antigravity updates it to the Antigravity CLI)."
   else
     log "Antigravity (Gemini): hybrid runtime at $AGY_CURRENT has no valid version; using OpenBot's managed copy."
   fi
 elif [ -n "$VA_BITS" ] && [ "$VA_BITS" -lt 48 ]; then
-  log "Antigravity (Gemini): hybrid runtime not set up; Gemini needs it on this kernel."
+  log "Antigravity (Gemini): not set up yet (Server settings > Local engine > Antigravity > Set up)."
 fi
 
 chmod 1777 /tmp 2>/dev/null
@@ -342,6 +371,8 @@ log "D-Bus session bus up at $BUS."
 # ---------------------------------------------------------------- Xvfb :0 (OpenBot) and :1 (agents)
 xvfb_args=(-nolisten tcp)
 [ "${OPENBOT_XVFB_SHM:-0}" = 1 ] || xvfb_args+=(-extension MIT-SHM)
+# No GLX: Electron runs --disable-gpu (SwiftShader), and the payload ships no Mesa for Xvfb to load.
+xvfb_args+=(-extension GLX)
 # shellcheck disable=SC2206
 [ -n "${OPENBOT_XVFB_ARGS:-}" ] && xvfb_args+=($OPENBOT_XVFB_ARGS)
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
@@ -400,6 +431,22 @@ fi
 export OPENBOT_SERVER=1
 export ELECTRON_DISABLE_SANDBOX=1 ELECTRON_OZONE_PLATFORM_HINT=x11 NO_AT_BRIDGE=1 GTK_A11Y=none
 export LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11
+# Engine patch 0005: no desktop UI renderer in the hidden server window, and the count of working agents
+# in $XDG_RUNTIME_DIR/busy (the app holds its wake lock while it is not 0).
+export OPENBOT_LOCAL_NO_RENDERER="${OPENBOT_LOCAL_NO_RENDERER:-1}"
+export OPENBOT_LOCAL_LOOP_REST="${OPENBOT_LOCAL_LOOP_REST:-1}"
+export OPENBOT_LOCAL_BUSY_FILE="$XDG_RUNTIME_DIR/busy"
+rm -f "$OPENBOT_LOCAL_BUSY_FILE"
+# V8 compile cache for the main process (warm start about 1 s faster). Emptied when the engine changes, so
+# an update does not keep the old engine's cache.
+if [ "${OPENBOT_COMPILE_CACHE:-1}" = 1 ]; then
+  cache=/root/.cache/node-compile-cache
+  stamp=$(cksum </opt/OpenBot/engine-version 2>/dev/null)
+  if [ "$(cat "$cache/.engine" 2>/dev/null)" != "$stamp" ]; then
+    rm -rf "$cache" && mkdir -p "$cache" && printf '%s\n' "$stamp" >"$cache/.engine"
+  fi
+  export NODE_COMPILE_CACHE="$cache"
+fi
 [ "${OPENBOT_VERBOSE:-0}" = 1 ] && export ELECTRON_ENABLE_LOGGING=1 ELECTRON_ENABLE_STACK_DUMPING=1
 
 PROFILE=$(choose_profile)
@@ -443,6 +490,7 @@ hint_from_log() {
 
 launch
 deadline=$((SECONDS + READY_TIMEOUT))
+fast_until=$((SECONDS + 15))
 ready=0
 while :; do
   if ! kill -0 "$APP_PID" 2>/dev/null; then
@@ -471,7 +519,7 @@ while :; do
   fi
 
   if [ "$ready" = 0 ]; then
-    if answer=$(control_status) && grep -qx 'status=200' <<<"$answer"; then
+    if [ -S "$SOCKET" ] && answer=$(control_status) && grep -qx 'status=200' <<<"$answer"; then
       ready=1
       echo "$PROFILE" >"$LOCAL_STATE/profile"
       version=$(sed -n 's/^version=//p' <<<"$answer")
@@ -482,7 +530,9 @@ while :; do
         "$version" "$account" "$server" "$PROFILE" "$SOCKET" >>"$LOG"
       log "Ready: OpenBot $version, account=$account, server=$server."
       [ "$account" = signed_in ] || log "Not signed in yet. Run: openbot login (or POST /v1/login/start on the control socket)."
-    else
+    elif [ "$SECONDS" != "${crash_checked:-}" ]; then
+      # The crash count reads the log: once a second is enough, also while the socket is polled fast.
+      crash_checked=$SECONDS
       count=$(crash_count)
       if [ "$count" -ge "$CRASH_THRESHOLD" ]; then
         hint_from_log
@@ -502,8 +552,11 @@ while :; do
         die 16 "OpenBot did not answer on $SOCKET within ${READY_TIMEOUT}s."
       fi
     fi
-    sleep 1
+    # Every 100 ms for the first 15 s (the socket test is a builtin; curl runs only once it exists).
+    if [ "$SECONDS" -lt "$fast_until" ]; then sleep 0.1; else sleep 1; fi
   else
-    sleep 2
+    # Sleep until OpenBot exits or a trapped signal arrives (the trap runs when wait returns); the loop
+    # top then reads the exit code. No polling while the engine runs.
+    wait "$APP_PID" 2>/dev/null
   fi
 done

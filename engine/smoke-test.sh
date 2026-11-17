@@ -36,6 +36,14 @@ envs=(HOME=/root PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 TERM=dumb
 if [ "$MODE" = chroot ]; then
   for d in proc sys dev dev/pts; do mount --bind "/$d" "$M/$d"; mounted+=("$M/$d"); done
   mkdir -p "$M/dev/shm"
+  # Antigravity (Gemini): install the runtime the way the app's Set up does, in the overlay only (Google's
+  # files never reach the payload), so the engine below starts with OPENBOT_ANTIGRAVITY_PATH set.
+  if [ "${SMOKE_ANTIGRAVITY:-1}" = 1 ]; then
+    echo "----- Antigravity: agy-hybrid prepare (overlay only) -----"
+    chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/sh /opt/agy-hybrid/tools/agy-hybrid.sh prepare 2>&1 |
+      grep -v -E 'STAGE (download|verify|extract) [0-9]+$' | tail -n 20
+    chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/sh /opt/agy-hybrid/tools/agy-hybrid.sh status
+  fi
   chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/bash /root/openbot-start.sh &
   runner=$!
 elif [ "$MODE" = proot ]; then
@@ -74,5 +82,63 @@ if [ "$rc" = 0 ]; then
   echo "SMOKE TEST ($MODE): READY"
 else
   echo "SMOKE TEST ($MODE): NOT READY"
+fi
+
+# Antigravity probe (chroot): the engine's own CLI detection (cli.ts resolveAntigravityCli: `--version`,
+# logged as "Resolved a provider CLI."), then the ACP handshake the engine makes, without a sign-in.
+if [ "$MODE" = chroot ] && [ "${SMOKE_ANTIGRAVITY:-1}" = 1 ]; then
+  agy_ok=0
+  echo "----- Antigravity: openbot-start.sh lines -----"
+  grep -a 'Antigravity (Gemini)' "$M/root/openbot.log" | tail -n 3
+  if [ "$rc" = 0 ]; then
+    plog=""
+    for _ in $(seq 1 120); do
+      plog=$(find "$M/root" -path '*/providers/providers.log' 2>/dev/null | head -n 1)
+      if [ -n "$plog" ] && grep -a '"provider":"antigravity"' "$plog" | grep -a -q -v '"to":"checking"'; then break; fi
+      sleep 1
+    done
+    echo "----- Antigravity: engine provider log (${plog:-no providers.log}) -----"
+    [ -n "$plog" ] && grep -a 'antigravity' "$plog" | tail -n 15
+    if [ -n "$plog" ] && grep -a 'Resolved a provider CLI' "$plog" | grep -a '"provider":"antigravity"' |
+      grep -a -q '"version":"[0-9]*\.[0-9]*\.[0-9]*"'; then
+      echo "ENGINE DETECTION: antigravity resolved"
+      agy_ok=1
+    else
+      echo "ENGINE DETECTION: antigravity NOT resolved"
+    fi
+  fi
+  cat >"$M/tmp/agy-acp-probe.sh" <<'SH'
+#!/bin/bash
+# ACP handshake without a sign-in: --version, initialize, session/new (the engine's sign-in probe).
+exe=$1
+home=/tmp/agy-probe-gemini
+mkdir -p "$home"
+export WSL_DISTRO_NAME=OpenBot DISPLAY=:0
+echo "--version -> '$(timeout 60 "$exe" --version 2>/dev/null)'"
+coproc ACP { exec "$exe" acp "--gemini-dir=$home" --app-data-dir=antigravity-acp 2>/dev/null; }
+call() { # call <id> <method> <params json>: prints the answer with that id
+  local line t=$SECONDS
+  printf '{"jsonrpc":"2.0","id":%s,"method":"%s","params":%s}\n' "$1" "$2" "$3" >&"${ACP[1]}"
+  while IFS= read -r -t 120 line <&"${ACP[0]}"; do
+    case $line in *"\"id\":$1,"* | *"\"id\":$1}"*) echo "$2 ($((SECONDS - t))s): ${line:0:700}"; return 0 ;; esac
+  done
+  echo "$2: no answer"
+  return 1
+}
+ok=1
+# Not in a pipeline: bash closes the coproc's descriptors in subshells.
+call 1 initialize '{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"openbot","version":"0.72.0"}}' >/tmp/agy-init.txt
+cat /tmp/agy-init.txt
+grep -q '"agentInfo"' /tmp/agy-init.txt || ok=0
+call 2 session/new '{"cwd":"/root","mcpServers":[]}' || ok=0
+kill "$ACP_PID" 2>/dev/null
+echo "ACP HANDSHAKE: $([ "$ok" = 1 ] && echo OK || echo FAILED)"
+[ "$ok" = 1 ]
+SH
+  agy_path=$(sed -n 's/.*Antigravity (Gemini): .* at \(\/[^ ]*\)[. (].*/\1/p' "$M/root/openbot.log" | tail -n 1)
+  [ -n "$agy_path" ] || agy_path=/opt/agy-hybrid/current/bin/antigravity
+  echo "----- Antigravity: ACP handshake, no sign-in ($agy_path) -----"
+  chroot "$M" /usr/bin/env -i "${envs[@]}" /bin/bash /tmp/agy-acp-probe.sh "$agy_path" || agy_ok=0
+  if [ "$agy_ok" = 1 ]; then echo "ANTIGRAVITY PROBE: PASS"; else echo "ANTIGRAVITY PROBE: FAIL"; rc=1; fi
 fi
 exit "$rc"

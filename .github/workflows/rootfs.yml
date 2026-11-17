@@ -23,6 +23,10 @@ on:
         description: "Start the engine once in a chroot and in proot before publishing"
         type: boolean
         default: true
+      update_latest:
+        description: "Point engine-latest at this payload (off: publish engine-<version> only)"
+        type: boolean
+        default: true
   schedule:
     - cron: "23 4 * * 1" # weekly, Monday 04:23 UTC
 
@@ -84,7 +88,7 @@ jobs:
         if: steps.ver.outputs.build == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils openssl proot shellcheck jq gcc libc6-dev
+          sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils zstd openssl proot shellcheck jq gcc libc6-dev
 
       # engine/patch-engine-main.sh rebuilds the main bundle from source when engine/patches/<version> exists.
       - name: Set up Bun (engine patches)
@@ -131,6 +135,8 @@ jobs:
           path: |
             out/rootfs-arm64.tar.xz
             out/rootfs-arm64.tar.xz.sha256
+            out/rootfs-arm64.tar.zst
+            out/rootfs-arm64.tar.zst.sha256
             out/engine.json
           compression-level: 0
           retention-days: 14
@@ -144,26 +150,35 @@ jobs:
           EXISTS: ${{ steps.ver.outputs.exists }}
           SMOKE_CHROOT: ${{ steps.smoke_chroot.outcome }}
           SMOKE_PROOT: ${{ steps.smoke_proot.outcome }}
+          UPDATE_LATEST: ${{ github.event_name == 'schedule' || inputs.update_latest }}
         run: |
           set -euo pipefail
           size_mb=$(( $(stat -c %s out/rootfs-arm64.tar.xz) / 1048576 ))
+          zst_mb=$(( $(stat -c %s out/rootfs-arm64.tar.zst) / 1048576 ))
           installed_mb=$(( $(sed -n 's/.*"installed_bytes": *\([0-9]*\).*/\1/p' out/engine.json) / 1048576 ))
           cat >notes.md <<EOF
           OpenBot Local engine payload for OpenBot ${VERSION} (Linux arm64), Ubuntu 24.04 base.
 
-          - \`rootfs-arm64.tar.xz\`: ${size_mb} MiB download, about ${installed_mb} MiB unpacked
-          - \`rootfs-arm64.tar.xz.sha256\`, \`engine.json\` (version, sizes, sha256)
+          - \`rootfs-arm64.tar.zst\`: ${zst_mb} MiB (zstd -19 --long=27; what the APK bundles), about ${installed_mb} MiB unpacked
+          - \`rootfs-arm64.tar.xz\`: ${size_mb} MiB, the same tree for apps that only read .tar.xz (kept one release)
+          - \`*.sha256\`, \`engine.json\` (version, sizes, sha256 of both)
           - Smoke test: chroot=${SMOKE_CHROOT:-skipped}, proot=${SMOKE_PROOT:-skipped}
           - Built from ${GITHUB_SHA} by run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
           Start: see README-ENGINE.md (proot command, readiness, exit codes).
           EOF
           if [ "$EXISTS" = true ]; then
-            gh release upload "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json --clobber
+            gh release upload "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 \
+              out/rootfs-arm64.tar.zst out/rootfs-arm64.tar.zst.sha256 out/engine.json --clobber
             gh release edit "$TAG" --notes-file notes.md
           else
-            gh release create "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 out/engine.json \
+            gh release create "$TAG" out/rootfs-arm64.tar.xz out/rootfs-arm64.tar.xz.sha256 \
+              out/rootfs-arm64.tar.zst out/rootfs-arm64.tar.zst.sha256 out/engine.json \
               --title "Engine ${TAG#engine-}" --notes-file notes.md --latest=false
+          fi
+          if [ "$UPDATE_LATEST" != true ]; then
+            echo "::notice::engine-latest left as it is (update_latest off)."
+            exit 0
           fi
           # Pointer for the app: engine-latest/engine.json names the newest versioned payload.
           url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/rootfs-arm64.tar.xz"
