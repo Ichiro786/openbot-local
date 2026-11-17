@@ -19,6 +19,22 @@ HZ = os.sysconf("SC_CLK_TCK")
 LIBS = ("libLLVM", "libgallium", "swiftshader", "libGLX_mesa", "dri/", "libonnxruntime", "libpython3.14")
 
 
+def reap_root(r):
+    """SIGKILLs every process whose root or cwd is inside the rootfs r; returns how many there were."""
+    n = 0
+    for d in os.listdir("/proc"):
+        if not d.isdigit() or int(d) == os.getpid(): continue
+        try:
+            root = os.readlink(f"/proc/{d}/root"); cwd = os.readlink(f"/proc/{d}/cwd")
+        except OSError:
+            continue
+        if root == r or root.startswith(r + "/") or cwd == r or cwd.startswith(r + "/"):
+            try: os.kill(int(d), signal.SIGKILL); n += 1
+            except OSError: pass
+    if n: time.sleep(1)
+    return n
+
+
 def guest_env(extra=()):
     return ["HOME=/root", "USER=root", "TERM=xterm-256color", "LANG=C.UTF-8", "TMPDIR=/tmp", f"PATH={GPATH}"] + list(extra)
 
@@ -307,6 +323,9 @@ def main():
         except Exception: pass
         try: p.wait(timeout=10)
         except Exception: pass
+        # A chroot run's tree can outlive its group (run 3: the next launcher found the lock held, exit 20).
+        left = reap_root(r)
+        if left: res["reaped"] = left
         res["exit"] = p.returncode
         with open(logf, "rb") as f:
             f.seek(off); open(f"{OUT}/boot-{a.label}.log", "wb").write(f.read())

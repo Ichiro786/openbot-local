@@ -13,7 +13,10 @@ W=${WORK:-/var/ob}; mkdir -p "$W"; chmod 755 "$W"
 export PROOT_TMP=$W/prtmp
 XZ=$W/$TAG/rootfs-arm64.tar.xz
 log() { echo "== $(date -u +%H:%M:%S) $* | free $(df --output=avail -BG "$W" | tail -n1 | tr -d ' ') mem $(free -m | awk '/Mem/{print $7}')M" | tee -a "$OUT/steps.txt"; }
-t() { local s; s=$(date +%s.%N); "$@"; local rc=$?; echo "TIME $(echo "$(date +%s.%N) - $s" | bc) rc=$rc :: $*" | tee -a "$OUT/times.txt"; return $rc; }
+# Logs the time of a command. Never the command's values: VAR=value words print as VAR=<set> (tokens).
+t() { local s; s=$(date +%s.%N); "$@"; local rc=$?; local shown=() w
+  for w in "$@"; do if [[ $w =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then shown+=("${w%%=*}=<set>"); else shown+=("$w"); fi; done
+  echo "TIME $(echo "$(date +%s.%N) - $s" | bc) rc=$rc :: ${shown[*]}" | tee -a "$OUT/times.txt"; return $rc; }
 boot() { timeout 900 python3 "$HERE/boot.py" "$@" 2>&1 | tee -a "$OUT/boot-driver.txt"; }
 mounted_under() { findmnt -rn -o TARGET | grep -c "^$1" || true; }
 safe_rm() { # never remove a tree that still has a mount under it
@@ -232,6 +235,29 @@ new17)
     python3 "$HERE/stsum.py" "$f" "$th" 3 >>"$OUT/strace-summary.txt" 2>&1
   done
   cat "$OUT/strace-summary.txt" 2>/dev/null | head -n 120
+  ;;
+fix17)
+  log "Build 17 fix check: patch 0005 + OPENBOT_LOCAL_LOOP_REST (the 20 ms loop histogram rests between turns)"
+  N=$W/out17
+  sync; echo 3 >/proc/sys/vm/drop_caches; t zextract "$N/rootfs-arm64.tar.zst" "$W/rn"
+  { echo "du_B $(du -sx -B1 "$W/rn" | cut -f1)"; echo "entries $(find "$W/rn" -xdev | wc -l)"; ls -l "$N"; } | tee "$OUT/du-new.txt"
+  echo "runner:x:$(id -u runner):$(id -g runner):runner:/root:/bin/bash" >>"$W/rn/etc/passwd"
+  echo "runner:x:$(id -g runner):" >>"$W/rn/etc/group"
+  B=(--rootfs "$W/rn" --timeout 400)
+  boot --label f-first "${B[@]}" --idle 0
+  for i in 1 2 3; do boot --label "f-warm-$i" "${B[@]}" --idle 0; done
+  # The first resource sample (60 s after the start) is where the histogram rests: idle starts after it.
+  boot --label f-idle "${B[@]}" --idle 120 --settle 75
+  boot --label f-idle-norest "${B[@]}" --genv OPENBOT_LOCAL_LOOP_REST=0 --idle 120 --settle 75
+  boot --label f-idle-renderer "${B[@]}" --genv OPENBOT_LOCAL_NO_RENDERER=0 --idle 120 --settle 75
+  boot --label c-idle "${B[@]}" --mode chroot --idle 60 --settle 75 --strace
+  chown -R runner:runner "$W/rn"
+  boot --label d-default "${B[@]}" --genv "OPENBOT_EXTRA_FLAGS=--remote-debugging-port=9222 --inspect=127.0.0.1:9229" --idle 0 --settle 20 --diag
+  for f in "$OUT"/strace-tt-*.txt; do
+    [ -f "$f" ] || continue
+    python3 "$HERE/stsum.py" "$f" "${f/strace-tt-/threads-}" 3 >>"$OUT/strace-summary.txt" 2>&1
+  done
+  head -n 120 "$OUT/strace-summary.txt" 2>/dev/null
   ;;
 esac
 log "phase $PHASE done"

@@ -3,8 +3,9 @@ name: Engine optimize probe (research)
 # Research only: measures the OpenBot Local engine payload's size, unpack speed, boot time and idle cost on a
 # native arm64 runner, the app's way (engine/optim/probe.sh). Runs on pushes to research/engine-optimize only.
 # Publishes nothing: no release, no tag. One step and one artifact per phase.
-# Run 3 (Build 17 trace): builds the 0.72.0 payload from branch engine-0.72 (as rootfs.yml, without publishing),
-# then measures engine-0.71.0-1 (old) against it (new), and traces the idle loop (chroot + strace, CDP).
+# Run 4 (Build 17 fix check): builds the 0.72.0 payload from branch engine-0.72 (as rootfs.yml, without publishing),
+# then checks the idle fix (patch 0005 loop rest): idle with and without it, chroot strace, CDP smoke.
+# Run 3's engine-0.71.0-1 numbers are the baseline. probe.sh's t() never prints VAR=value words.
 
 on:
   push:
@@ -70,32 +71,19 @@ jobs:
         if: always()
         continue-on-error: true
         with: { name: probe-build17, path: out/build17/ }
-      - name: Phase old17
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 40
-        run: |
-          mkdir -p out
-          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-            bash engine/optim/probe.sh old17 2>&1 | tee out/log-old17.txt
-          sudo chown -R "$(id -u)" out
-      - uses: actions/upload-artifact@v4
-        if: always()
-        continue-on-error: true
-        with: { name: probe-old17, path: out/old17/ }
-      - name: Phase new17
+      - name: Phase fix17
         if: always()
         continue-on-error: true
         timeout-minutes: 75
         run: |
           mkdir -p out
           sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" \
-            bash engine/optim/probe.sh new17 2>&1 | tee out/log-new17.txt
+            bash engine/optim/probe.sh fix17 2>&1 | tee out/log-fix17.txt
           sudo chown -R "$(id -u)" out
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
-        with: { name: probe-new17, path: out/new17/ }
+        with: { name: probe-fix17, path: out/fix17/ }
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: probe-logs, path: out/log-*.txt }
