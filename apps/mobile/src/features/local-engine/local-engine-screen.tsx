@@ -44,6 +44,7 @@ import {
   type UpdateCheck,
   useOpenBotEngine,
 } from "../../../modules/openbot-engine";
+import { AlwaysOnSection } from "./always-on-section";
 import { AntigravityRuntimeSection } from "./antigravity-runtime-section";
 import { DmContextSection, OpenbotUiSection } from "./dm-context-section";
 import { StorageSection } from "./storage-section";
@@ -534,6 +535,8 @@ function LocalEngineScreenInner() {
         engineRunning={running}
         onRestart={engine.restart}
       />
+
+      <AlwaysOnSection />
 
       <DmContextSection engineInstalled={status.installedVersion != null && status.phase !== "installing"} />
 
