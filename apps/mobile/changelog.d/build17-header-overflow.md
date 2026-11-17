@@ -1,0 +1,2 @@
+- Android ColorOS header buttons can draw their drag-follow animation outside the native header slot. The native subview, toolbar and app bar allow this only while a ColorOS header wrapper is present; unmarked headers keep clipping. Button masks and touch bounds stay unchanged.
+- This change patches react-native-screens 4.30.0 native Android code. It needs a new APK and runtime fingerprint; a JavaScript-only update cannot fix an installed APK.

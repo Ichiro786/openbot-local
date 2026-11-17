@@ -1,6 +1,7 @@
 import { localeDirection } from "@openbot/i18n/mobile";
 import * as Updates from "expo-updates";
-import { Alert, DevSettings, I18nManager } from "react-native";
+import { DevSettings, I18nManager } from "react-native";
+import { Alert } from "@/shared/lib/alert";
 import { currentLocale, currentText } from "@/shared/lib/text";
 
 /**

@@ -16,7 +16,7 @@ import HardDrive from "lucide-react-native/icons/hard-drive";
 import PackageSearch from "lucide-react-native/icons/package-search";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { PairField } from "@/features/servers/components/repeatable-fields";
 import {
@@ -44,6 +44,7 @@ import {
 import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

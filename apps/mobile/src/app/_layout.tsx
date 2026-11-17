@@ -54,6 +54,8 @@ import { supertonicModel } from "@/features/voice/model/supertonic-model";
 import { loadVoiceServer } from "@/features/voice/model/voice-server";
 import { loadVoiceSettings } from "@/features/voice/model/voice-settings";
 import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
+import { AppDialogBackground } from "@/shared/components/app-dialog-background";
+import { AppDialogHost } from "@/shared/components/app-dialog-host";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
 import { BloubStageProvider, useBloubStageRequest } from "@/shared/components/bloub-stage/bloub-stage-context";
@@ -318,16 +320,19 @@ export default function RootLayout() {
             {animations ? null : <ReducedMotionConfig mode={ReduceMotion.Always} />}
             <ThemeProvider value={colorScheme === "dark" ? darkTheme : lightTheme}>
               <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <BloubStageProvider>
-                <MobileSessionProvider>
-                  <MobileAnalyticsLifecycle />
-                  {__DEV__ ? <DevelopmentConnectLinkHandler /> : null}
-                  <AppLoadingOverlayProvider>
-                    <RootNavigator />
-                  </AppLoadingOverlayProvider>
-                  <LastCrashNotice />
-                </MobileSessionProvider>
-              </BloubStageProvider>
+              <AppDialogBackground>
+                <BloubStageProvider>
+                  <MobileSessionProvider>
+                    <MobileAnalyticsLifecycle />
+                    {__DEV__ ? <DevelopmentConnectLinkHandler /> : null}
+                    <AppLoadingOverlayProvider>
+                      <RootNavigator />
+                    </AppLoadingOverlayProvider>
+                    <LastCrashNotice />
+                  </MobileSessionProvider>
+                </BloubStageProvider>
+              </AppDialogBackground>
+              <AppDialogHost />
             </ThemeProvider>
           </HeroUINativeProvider>
         </QueryClientProvider>

@@ -3,7 +3,6 @@ import { ONEPASSWORD_CONNECTOR_TOKEN_LIMIT } from "@openbot/contracts/team-proto
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
 import { useState } from "react";
-import { Alert } from "react-native";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
 import { useConnectorAction } from "@/features/servers/model/use-server-connectors";
 import {
@@ -15,6 +14,7 @@ import {
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { useText } from "@/shared/lib/text";
 
 const STATUS_KEYS = {

@@ -9,7 +9,7 @@
 // stdout; "Open Google sign-in" hands it to the phone's browser.
 import { Typography } from "heroui-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Alert, Linking, View } from "react-native";
+import { Linking, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -20,6 +20,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 
 import { type CommandHandle, runCommand, startCommand } from "../../../modules/openbot-engine";

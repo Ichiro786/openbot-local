@@ -22,7 +22,6 @@ import Sparkles from "lucide-react-native/icons/sparkles";
 import UserRound from "lucide-react-native/icons/user-round";
 import UsersRound from "lucide-react-native/icons/users-round";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { confirmOwner } from "@/features/app-lock/model/app-lock";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { hostedServerCalls } from "@/features/servers/api/hosted-servers";
@@ -48,6 +47,7 @@ import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { useMobileWorkspace, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { type ServerRowState, serverRowState } from "@/features/workspace/model/server-row-state";
 import type { MobileServer, ServerChecks } from "@/features/workspace/model/workspace-types";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

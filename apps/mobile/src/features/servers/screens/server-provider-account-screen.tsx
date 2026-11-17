@@ -21,7 +21,6 @@ import Trash2 from "lucide-react-native/icons/trash";
 import UserMinus from "lucide-react-native/icons/user-minus";
 import UserPlus from "lucide-react-native/icons/user-plus";
 import { useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useProviderAccountName } from "@/features/agents/components/agent-runtime-fields";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import {
@@ -42,6 +41,7 @@ import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

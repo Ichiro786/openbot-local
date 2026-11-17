@@ -4,7 +4,7 @@ import { Button, Typography } from "heroui-native";
 import Server from "lucide-react-native/icons/server";
 import Square from "lucide-react-native/icons/square";
 import { useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { AgentDefaultsAvatar, AgentDefaultsError } from "@/features/settings/components/agent-defaults-parts";
@@ -14,6 +14,7 @@ import {
   useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

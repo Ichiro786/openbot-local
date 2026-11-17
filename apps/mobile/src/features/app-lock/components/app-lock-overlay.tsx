@@ -5,7 +5,7 @@ import Fingerprint from "lucide-react-native/icons/fingerprint-pattern";
 import LockKeyhole from "lucide-react-native/icons/lock-keyhole";
 import ScanFace from "lucide-react-native/icons/scan-face";
 import { type ReactNode, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Alert, AppState, BackHandler, Modal, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, BackHandler, Modal, StyleSheet, useWindowDimensions, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { type EdgeInsets, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,6 +28,7 @@ import { useMobileSession } from "@/features/auth/context/mobile-session-context
 import { BloubBlock } from "@/shared/components/bloub-stage/bloub-block";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import { Button } from "@/shared/components/button";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { isIOS } from "@/shared/lib/platform";

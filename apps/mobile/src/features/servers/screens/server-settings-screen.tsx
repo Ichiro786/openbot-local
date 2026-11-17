@@ -6,7 +6,7 @@ import { Typography } from "heroui-native";
 import LogOut from "lucide-react-native/icons/log-out";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useRef, useState } from "react";
-import { Alert, Keyboard, View } from "react-native";
+import { Keyboard, View } from "react-native";
 import { LocalEngineSettingsSection } from "@/features/local-engine/local-engine-screen";
 import { ServerAppearancePicker } from "@/features/servers/components/server-appearance-picker";
 import { SERVER_AVATAR_CORNER_RATIO, ServerAvatar } from "@/features/servers/components/server-avatar";
@@ -34,6 +34,7 @@ import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspac
 import { useLiveServerRecovery } from "@/features/workspace/context/server-recovery-countdown";
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { type AvatarPhoto, pickAvatarPhoto } from "@/shared/lib/pick-avatar-photo";
 import { useText } from "@/shared/lib/text";

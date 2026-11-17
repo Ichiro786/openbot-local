@@ -202,11 +202,18 @@ export function GlassFace({
  * its React root at the root's own bounds; a button that follows the finger (up to followMax 0.32 of
  * its size, ~13 dp) out of its 48 dp box lost its far edges flat. The margin hands the space back, so
  * layout and touch target stay where they were while the root, and so the clip, is ROOM dp larger.
+ * The native toolbar patch reads this root's nativeID. Only headers with this marker allow the
+ * moving face to draw beyond the toolbar and AppBarLayout; padding alone cannot remove those clips.
  */
 const HEADER_ROOM = 16;
 export function GlassHeaderRoom({ children }: { children: ReactNode }) {
   return (
-    <View pointerEvents="box-none" style={{ margin: -HEADER_ROOM, padding: HEADER_ROOM }}>
+    <View
+      nativeID="openbot-coloros-header-overflow"
+      collapsable={false}
+      pointerEvents="box-none"
+      style={{ margin: -HEADER_ROOM, padding: HEADER_ROOM, overflow: "visible" }}
+    >
       {children}
     </View>
   );

@@ -5,7 +5,7 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
 import { useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import {
   SettingsContent,
@@ -16,6 +16,7 @@ import {
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 import {

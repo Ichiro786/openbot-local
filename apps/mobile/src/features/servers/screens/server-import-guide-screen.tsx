@@ -13,7 +13,7 @@ import * as Clipboard from "expo-clipboard";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
 import {
   agentContents,
   exportDate,
@@ -32,6 +32,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

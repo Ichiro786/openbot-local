@@ -238,3 +238,112 @@ index e687584..2d53f46 100644
 +    android:interpolator="@android:interpolator/decelerate_quint"
      android:fromXDelta="100%"
      android:toXDelta="0%" />
+
+diff --git a/android/src/main/java/com/swmansion/rnscreens/CustomToolbar.kt b/android/src/main/java/com/swmansion/rnscreens/CustomToolbar.kt
+--- a/android/src/main/java/com/swmansion/rnscreens/CustomToolbar.kt
++++ b/android/src/main/java/com/swmansion/rnscreens/CustomToolbar.kt
+@@ -4,15 +4,19 @@
+ import android.content.Context
+ import android.os.Build
+ import android.view.Choreographer
++import android.view.View
++import android.view.ViewGroup
+ import android.view.WindowInsets
+ import android.view.WindowManager
+ import androidx.appcompat.widget.Toolbar
+ import androidx.core.view.WindowInsetsCompat
+ import com.facebook.react.modules.core.ReactChoreographer
+ import com.facebook.react.uimanager.ThemedReactContext
++import com.google.android.material.appbar.AppBarLayout
+ import com.swmansion.rnscreens.utils.InsetsCompat
+ import com.swmansion.rnscreens.utils.getDecorViewTopInset
+ import com.swmansion.rnscreens.utils.resolveInsetsOrZero
++import java.util.WeakHashMap
+ import kotlin.math.max
+ 
+ /**
+@@ -36,6 +40,8 @@
+     private val shouldApplyTopInset = true
+ 
+     private var lastInsets = InsetsCompat.NONE
++
++    private val colorOSClipState = WeakHashMap<ViewGroup, Pair<Boolean, Boolean>>()
+ 
+     private var isForceShadowStateUpdateOnLayoutRequested = false
+ 
+@@ -112,6 +118,7 @@
+ 
+     override fun onDetachedFromWindow() {
+         super.onDetachedFromWindow()
++        restoreColorOSHeaderClips()
+ 
+         resetInsetsState()
+         clearPaddingIfNeeded()
+@@ -206,12 +213,67 @@
+         b: Int,
+     ) {
+         super.onLayout(hasSizeChanged, l, t, r, b)
++        updateColorOSHeaderOverflow()
+ 
+         config.onNativeToolbarLayout(
+             this,
+             hasSizeChanged || isForceShadowStateUpdateOnLayoutRequested,
+         )
+         isForceShadowStateUpdateOnLayoutRequested = false
++    }
++
++    /**
++     * OpenBot Local: a ColorOS glass face follows the finger beyond its header slot. The React
++     * wrapper reserves space, but the subview, Toolbar and AppBarLayout each clip that space.
++     * Enable drawing outside them only when GlassHeaderRoom supplies its nativeID marker.
++     * Button masks, layout, hit testing and all unmarked headers retain their normal behavior.
++     */
++    private fun updateColorOSHeaderOverflow() {
++        var allowOverflow = false
++        for (index in 0 until childCount) {
++            val subview = getChildAt(index) as? ScreenStackHeaderSubview ?: continue
++            val marked = containsColorOSHeaderRoom(subview)
++            setColorOSHeaderOverflow(subview, marked)
++            allowOverflow = allowOverflow || marked
++        }
++        setColorOSHeaderOverflow(this, allowOverflow)
++        (parent as? AppBarLayout)?.let {
++            setColorOSHeaderOverflow(it, allowOverflow)
++        }
++    }
++
++    private fun setColorOSHeaderOverflow(view: ViewGroup, allow: Boolean) {
++        if (allow) {
++            if (!colorOSClipState.containsKey(view)) {
++                colorOSClipState[view] = Pair(view.clipChildren, view.clipToPadding)
++            }
++            view.clipChildren = false
++            view.clipToPadding = false
++        } else {
++            val original = colorOSClipState.remove(view) ?: return
++            view.clipChildren = original.first
++            view.clipToPadding = original.second
++        }
++    }
++
++    private fun restoreColorOSHeaderClips() {
++        for ((view, original) in colorOSClipState) {
++            view.clipChildren = original.first
++            view.clipToPadding = original.second
++        }
++        colorOSClipState.clear()
++    }
++
++    private fun containsColorOSHeaderRoom(view: View): Boolean {
++        if (view.getTag(com.facebook.react.R.id.view_tag_native_id) == "openbot-coloros-header-overflow") {
++            return true
++        }
++        if (view is ViewGroup) {
++            for (index in 0 until view.childCount) {
++                if (containsColorOSHeaderRoom(view.getChildAt(index))) return true
++            }
++        }
++        return false
+     }
+ 
+     fun updateContentInsets() {

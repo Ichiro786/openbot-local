@@ -2,7 +2,7 @@ import { type AcpRegistryEntry, CUSTOM_AGENT_LIMITS, isNewCustomAgentId } from "
 import { useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import type { ProviderAdmin } from "@/features/servers/model/provider-admin";
 import { useProviderAdmin, useServerCustomAgents } from "@/features/servers/model/use-server-providers";
@@ -13,6 +13,7 @@ import {
   SettingsSection,
 } from "@/features/settings/components/settings-content";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

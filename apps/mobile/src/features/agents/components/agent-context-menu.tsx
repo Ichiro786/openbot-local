@@ -2,7 +2,7 @@ import { agentNotificationLevelMap } from "@openbot/contracts/ipc";
 import * as Clipboard from "expo-clipboard";
 import { Link, router } from "expo-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { useAgentPinTransition } from "@/features/agents/components/agent-pin-transition";
 import { useChatSectionMenu } from "@/features/agents/components/use-chat-section-menu";
@@ -19,6 +19,7 @@ import {
 } from "@/features/workspace/context/mobile-workspace-context";
 import { canToggleAgentPin } from "@/features/workspace/model/agent-pins";
 import { type MenuAction, type MenuComponentRef, MenuView } from "@/shared/components/menu-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

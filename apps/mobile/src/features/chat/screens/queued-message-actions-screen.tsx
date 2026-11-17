@@ -10,7 +10,6 @@ import GitBranch from "lucide-react-native/icons/git-branch";
 import Pencil from "lucide-react-native/icons/pencil";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useState } from "react";
-import { Alert } from "react-native";
 import { useCSSVariable } from "uniwind";
 import {
   SettingsContent,
@@ -18,6 +17,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/features/settings/components/settings-content";
+import { Alert } from "@/shared/lib/alert";
 import { formatUpdatedAt } from "@/shared/lib/format-updated-at";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";

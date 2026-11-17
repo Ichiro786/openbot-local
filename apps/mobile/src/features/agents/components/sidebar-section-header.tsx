@@ -14,7 +14,7 @@ import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Folder from "lucide-react-native/icons/folder";
 import FolderOpen from "lucide-react-native/icons/folder-open";
 import { memo, useRef, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import Animated, { cubicBezier } from "react-native-reanimated";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/features/workspace/context/mobile-workspace-context";
 import { showsOnline } from "@/features/workspace/model/server-status";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { currentText, useText } from "@/shared/lib/text";

@@ -4,7 +4,17 @@ import Check from "lucide-react-native/icons/check";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Plus from "lucide-react-native/icons/plus";
-import { type ReactNode, type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -26,6 +36,7 @@ import { create } from "zustand";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { GlintRim } from "@/shared/glass/GlintRim";
+import { appDialogs } from "@/shared/lib/app-dialog-state";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { currentFrostTarget } from "./frostTarget";
@@ -136,17 +147,25 @@ const useGlassMenuStore = create<{ request: GlassMenuRequest | null; frosted: bo
 }));
 /** Build 10: whether an open glass menu frosts (draws at least one blur), for a screen's blur budget. */
 export function useGlassMenuFrostOpen(): boolean {
-  return useGlassMenuStore((s) => s.request !== null && s.frosted);
+  const dialog = useSyncExternalStore(appDialogs.subscribe, appDialogs.getFrosted);
+  const menuOpen = useGlassMenuStore((s) => s.request !== null && s.frosted);
+  return dialog || menuOpen;
 }
 
 /** Build 15.1: whether an open frosted one-blur menu takes this chat frost's blur (`pauses`). */
 export function useGlassMenuPauses(surface: GlassMenuPauses): boolean {
-  return useGlassMenuStore((s) => s.request !== null && s.frosted && (s.request.pauses ?? "composer") === surface);
+  const dialog = useSyncExternalStore(appDialogs.subscribe, appDialogs.getFrosted);
+  const menuOpen = useGlassMenuStore(
+    (s) => s.request !== null && s.frosted && (s.request.pauses ?? "composer") === surface,
+  );
+  return dialog || menuOpen;
 }
 
 /** Whether an open glass menu draws two blurs (reaction bar + card), so a screen can pause its own. */
 export function useGlassMenuDoubleFrost(): boolean {
-  return useGlassMenuStore((s) => Boolean(s.request?.reactions) && s.frosted);
+  const dialog = useSyncExternalStore(appDialogs.subscribe, appDialogs.getFrosted);
+  const menuOpen = useGlassMenuStore((s) => Boolean(s.request?.reactions) && s.frosted);
+  return dialog || menuOpen;
 }
 
 let nextKey = 1;
@@ -190,6 +209,12 @@ export function closeGlassMenu(key: number): void {
   if (request?.key !== key) return;
   useGlassMenuStore.setState({ request: null });
   request.onClose(false);
+}
+
+/** A dialog takes the overlay from a menu without selecting a menu action. */
+export function dismissActiveGlassMenu(): void {
+  const request = useGlassMenuStore.getState().request;
+  if (request) closeGlassMenu(request.key);
 }
 
 /**

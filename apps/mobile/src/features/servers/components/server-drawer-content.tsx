@@ -28,7 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Alert, Pressable, ScrollView, View, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, View, type ViewStyle } from "react-native";
 import Animated, {
   cubicBezier,
   Easing,
@@ -62,6 +62,7 @@ import { serverRowState } from "@/features/workspace/model/server-row-state";
 import { serverStatusLabel, showsOnline } from "@/features/workspace/model/server-status";
 import { type MenuAction, type MenuComponentRef, MenuView } from "@/shared/components/menu-view";
 import { ProfileAvatar } from "@/shared/components/profile-avatar";
+import { Alert } from "@/shared/lib/alert";
 import { devFeatureOverride } from "@/shared/lib/dev-feature-overrides";
 import { haptics } from "@/shared/lib/haptics";
 import { refreshMobileFeatures, useMobileFeature } from "@/shared/lib/mobile-features";

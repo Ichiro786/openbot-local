@@ -102,8 +102,10 @@ class PowerGovernor(
     visible = appVisible()
     screenOn = pm.isInteractive
     if (job == null) {
-      if (Build.VERSION.SDK_INT >= 29 && thermalListener != null) {
-        runCatching { pm.addThermalStatusListener(context.mainExecutor, thermalListener) }
+      if (Build.VERSION.SDK_INT >= 29) {
+        thermalListener?.let { listener ->
+          runCatching { pm.addThermalStatusListener(context.mainExecutor, listener) }
+        }
       }
       val filter = IntentFilter().apply {
         addAction(Intent.ACTION_SCREEN_OFF)
@@ -139,7 +141,11 @@ class PowerGovernor(
     job = null
     observer?.stopWatching()
     observer = null
-    if (Build.VERSION.SDK_INT >= 29 && thermalListener != null) runCatching { pm.removeThermalStatusListener(thermalListener) }
+    if (Build.VERSION.SDK_INT >= 29) {
+      thermalListener?.let { listener ->
+        runCatching { pm.removeThermalStatusListener(listener) }
+      }
+    }
     runCatching { context.unregisterReceiver(screenReceiver) }
     runCatching { (context.applicationContext as Application).unregisterActivityLifecycleCallbacks(activities) }
     release()

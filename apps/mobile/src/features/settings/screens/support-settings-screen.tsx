@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { Typography } from "heroui-native";
 import { useState, useSyncExternalStore } from "react";
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
 import {
   SettingsContent,
   SettingsNote,
@@ -13,6 +13,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { supportLog } from "@/features/support/model/support-log";
 import { clearSupportLog, phoneFeedback, supportLogFileText } from "@/features/support/model/support-log-capture";
+import { Alert } from "@/shared/lib/alert";
 import { useText } from "@/shared/lib/text";
 
 /** The OpenBot Discord community, the same address as the desktop app. Its tickets get the fastest answer. */

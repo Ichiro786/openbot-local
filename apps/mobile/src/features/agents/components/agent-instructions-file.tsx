@@ -4,13 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Button, Typography } from "heroui-native";
 import { useRef, useState } from "react";
-import { Alert } from "react-native";
 import { InstructionsLimit, instructionsTooLong } from "@/features/agents/components/instructions-limit";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

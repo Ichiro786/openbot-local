@@ -9,7 +9,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import { useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { AccessLevelMenu } from "@/features/servers/components/access-level-menu";
@@ -22,6 +21,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

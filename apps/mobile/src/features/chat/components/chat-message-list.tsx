@@ -78,6 +78,7 @@ import { useActivityPresence } from "@/features/chat/components/use-activity-pre
 import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-chat-motion";
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
+import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
 import {
   type ChatBubbleMessage,
@@ -1660,7 +1661,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   foreground,
   historyState,
   catchingUp = false,
-  messages,
+  messages: incomingMessages,
   messageAliases,
   referenceMessages,
   hasOlder,
@@ -1699,6 +1700,12 @@ export const ChatMessageList = memo(function ChatMessageList({
 }: ChatMessageListProps) {
   const { t, format, sourceText } = useText();
   const isFocused = useIsFocused();
+  const colorOSOn = useColorOSMotion().enabled && isAndroid;
+  const messages = useStreamedMessages(
+    JSON.stringify([target.serverId, target.kind, target.id]),
+    incomingMessages,
+    colorOSOn && isFocused && online && appActive,
+  );
   // How far the bubbles move to show the message times. A swipe on a message bubble sets it.
   const timeOffset = useSharedValue(0);
   const [timesMounted, setTimesMounted] = useState(false);
@@ -1905,12 +1912,14 @@ export const ChatMessageList = memo(function ChatMessageList({
     if (unreadRowMissing || shownWithoutUnread) focusHandlers.current.onFocusPlaced?.();
   }, [unreadRowMissing, shownWithoutUnread]);
   const header = topInset + 84;
-  // The latest user message can always move to the top of the chat: the list adds blank space
-  // under it while the rows after it are shorter than the screen.
+  // ColorOS keeps the exchange at the bottom. A last-user anchor would insert almost a
+  // screen of blank space on Send, then remove it as the reply grows. OFF keeps its anchor.
   const anchoredEndSpace = useMemo<AnchoredEndSpaceConfig | undefined>(
     () =>
-      tailIndex >= 0 ? { anchorIndex: tailIndex, anchorOffset: header, onReady: motion.onAnchorReady } : undefined,
-    [tailIndex, header, motion.onAnchorReady],
+      !colorOSOn && tailIndex >= 0
+        ? { anchorIndex: tailIndex, anchorOffset: header, onReady: motion.onAnchorReady }
+        : undefined,
+    [colorOSOn, tailIndex, header, motion.onAnchorReady],
   );
   const sharedValues = useMemo(
     () => ({ scrollOffset: motion.scrollOffset, isAtEnd: motion.atEnd }),
@@ -2013,7 +2022,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   // One toggle read for the whole list, so a row does not subscribe to the setting itself. With a screen
   // reader on, the build 9 rows stay: TalkBack cannot reach the long-press menu, and the rows are the
   // only other path to React, Reply and Select text.
-  const colorOSOn = useColorOSMotion().enabled && isAndroid;
   const longPressMenu = colorOSOn && !screenReaderEnabled;
   const colorOSEntrance = colorOSOn && !reducedMotion;
   const shownBranchPoints = onBranch ? branchPoints : NO_IDS;

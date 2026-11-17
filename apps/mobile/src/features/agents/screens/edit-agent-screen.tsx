@@ -25,7 +25,7 @@ import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import Table2 from "lucide-react-native/icons/table-2";
 import Upload from "lucide-react-native/icons/upload";
 import { useCallback, useContext, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   AgentAccessFields,
   PERMISSION_LABEL,
@@ -76,6 +76,7 @@ import { showsOnline } from "@/features/workspace/model/server-status";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

@@ -11,7 +11,6 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
 import { useState } from "react";
-import { Alert } from "react-native";
 import { useUniwind } from "uniwind";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
@@ -22,6 +21,7 @@ import {
   useMobileWorkspaceActions,
 } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

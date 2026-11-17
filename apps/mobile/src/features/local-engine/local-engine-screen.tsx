@@ -4,7 +4,7 @@
 import { type Href, router } from "expo-router";
 import { Typography } from "heroui-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -26,6 +26,7 @@ import {
   SettingsSection,
 } from "@/features/settings/components/settings-content";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
 

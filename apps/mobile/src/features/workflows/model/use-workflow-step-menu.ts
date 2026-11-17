@@ -1,10 +1,10 @@
 import type { WorkflowNode } from "@openbot/contracts/ipc";
 import { router } from "expo-router";
-import { Alert } from "react-native";
 import { useWorkflowDraft, type WorkflowDraft } from "@/features/workflows/model/workflow-draft";
 import { type GraphPlace, placeParams } from "@/features/workflows/model/workflow-graph-edit";
 import { canMove, type FlowList, outlineListOf } from "@/features/workflows/model/workflow-outline";
 import type { MenuAction } from "@/shared/components/menu-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

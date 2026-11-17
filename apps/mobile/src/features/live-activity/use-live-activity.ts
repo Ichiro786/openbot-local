@@ -23,7 +23,6 @@ import {
 } from "@openbot/team-client/live-activity-props";
 import { encodeLiveActivityBytes } from "@openbot/team-client/live-activity-seal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { useLiveActivitiesPreference } from "@/features/settings/model/live-activities";
@@ -38,6 +37,7 @@ import {
 } from "@/features/settings/model/push-notifications";
 import type { LiveWorkspaceStore } from "@/features/workspace/model/live-workspace-store";
 import type { MobileAgent, MobileServer } from "@/features/workspace/model/workspace-types";
+import { Alert } from "@/shared/lib/alert";
 import { usePushEnvironment } from "@/shared/lib/push-environment";
 import { currentLocale, currentText } from "@/shared/lib/text";
 import { agentLiveActivity } from "./agent-live-activity";

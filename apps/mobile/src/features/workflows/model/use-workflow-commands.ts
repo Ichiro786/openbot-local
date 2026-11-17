@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Alert } from "react-native";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText } from "@/shared/lib/text";
 

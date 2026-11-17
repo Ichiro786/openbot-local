@@ -7,7 +7,7 @@ import { type ParamListBase, useNavigation } from "expo-router/react-navigation"
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, BackHandler, StyleSheet, View, type ViewInstance } from "react-native";
+import { BackHandler, StyleSheet, View, type ViewInstance } from "react-native";
 import { KeyboardAvoidingView, KeyboardController } from "react-native-keyboard-controller";
 import Animated, { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,6 +47,7 @@ import {
   useHostedServerAvailability,
 } from "@/features/servers/model/hosted-server-availability";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { Alert } from "@/shared/lib/alert";
 import { devFeatureOverride } from "@/shared/lib/dev-feature-overrides";
 import { haptics } from "@/shared/lib/haptics";
 import { refreshMobileFeatures, useMobileFeature } from "@/shared/lib/mobile-features";

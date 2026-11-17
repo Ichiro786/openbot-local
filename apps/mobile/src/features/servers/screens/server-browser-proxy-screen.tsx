@@ -16,7 +16,7 @@ import Monitor from "lucide-react-native/icons/monitor";
 import Plus from "lucide-react-native/icons/plus";
 import Waypoints from "lucide-react-native/icons/waypoints";
 import { useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { type BrowserProfileStack, openBrowserProxyPage } from "@/features/servers/model/browser-profile-pages";
 import { useServerBrowserProfiles } from "@/features/servers/model/use-server-browser-profiles";
@@ -34,6 +34,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

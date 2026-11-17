@@ -11,7 +11,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import { useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { Size, StoredFile } from "@/features/agents/components/agent-files";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
@@ -27,6 +27,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";

@@ -10,7 +10,7 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import Plus from "lucide-react-native/icons/plus";
 import { useMemo, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { HUE_LABELS } from "@/features/agents/components/agent-appearance-picker";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
@@ -33,6 +33,7 @@ import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-
 import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

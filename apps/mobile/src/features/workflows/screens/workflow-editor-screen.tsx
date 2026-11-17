@@ -7,7 +7,7 @@ import Ellipsis from "lucide-react-native/icons/ellipsis";
 import Plus from "lucide-react-native/icons/plus";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import {
@@ -51,6 +51,7 @@ import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { type MenuComponentRef, MenuView } from "@/shared/components/menu-view";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";

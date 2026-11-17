@@ -13,7 +13,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import { Children, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { VaultTwoStepSection } from "@/features/servers/components/vault-two-step-section";
 import { useServerVault } from "@/features/servers/model/use-server-vault";
@@ -43,6 +43,7 @@ import {
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import type { SheetFormFieldProps } from "@/shared/components/sheet-form-field.types";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";

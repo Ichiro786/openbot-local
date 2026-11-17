@@ -7,7 +7,6 @@ import {
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
 import { useState } from "react";
-import { Alert } from "react-native";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
 import { CONNECTOR_STATUS_KEYS } from "@/features/servers/model/connectors";
 import { useConnectorAction } from "@/features/servers/model/use-server-connectors";
@@ -20,6 +19,7 @@ import {
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { useText } from "@/shared/lib/text";
 
 /** The hosted Bitwarden service. A self-hosted Vaultwarden server replaces it in the form. */

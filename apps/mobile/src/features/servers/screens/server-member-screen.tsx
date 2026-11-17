@@ -1,7 +1,7 @@
 import { runTeamEffect } from "@openbot/team-client";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useUniwind } from "uniwind";
 import { SERVER_ROLE_LABEL_KEYS } from "@/features/servers/model/server-role";
 import { useServerMembers } from "@/features/servers/model/use-server-members";
@@ -14,6 +14,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { SettingsPicker } from "@/features/settings/components/settings-controls";
 import { ProfileAvatar } from "@/shared/components/profile-avatar";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

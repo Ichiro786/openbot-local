@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import Square from "lucide-react-native/icons/square";
 import { useMemo, useState } from "react";
-import { Alert, Linking, View } from "react-native";
+import { Linking, View } from "react-native";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { WorkflowFlowView } from "@/features/workflows/components/workflow-flow-view";
 import { WorkflowRunStepRow } from "@/features/workflows/components/workflow-run-step-row";
@@ -25,6 +25,7 @@ import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { Button } from "@/shared/components/button";
 import { LargeTitleScrollView } from "@/shared/components/large-title";
+import { Alert } from "@/shared/lib/alert";
 import { formatUpdatedAt } from "@/shared/lib/format-updated-at";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";

@@ -6,7 +6,6 @@ import FoldVertical from "lucide-react-native/icons/fold-vertical";
 import SquarePen from "lucide-react-native/icons/square-pen";
 import Trash2 from "lucide-react-native/icons/trash";
 import { type ReactNode, useState } from "react";
-import { Alert } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { NOTIFICATION_LEVEL_KEYS } from "@/features/push-notifications/components/server-notification-settings";
 import { SettingsGroupRow, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
@@ -14,6 +13,7 @@ import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { effectiveServerLevel, useSyncedNotificationLevels } from "@/features/settings/model/notification-levels";
 import { serverNotificationSetting, usePushNotificationPreference } from "@/features/settings/model/push-notifications";
 import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

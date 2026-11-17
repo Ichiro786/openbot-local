@@ -8,7 +8,7 @@ import LogOut from "lucide-react-native/icons/log-out";
 import PlugZap from "lucide-react-native/icons/plug-zap";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useUniwind } from "uniwind";
 import { McpAccessSection } from "@/features/servers/components/mcp-access-section";
 import { ListField, PairField } from "@/features/servers/components/repeatable-fields";
@@ -31,6 +31,7 @@ import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { View } from "react-native";
 import Svg, { Defs, FeColorMatrix, Filter, Image as SvgImage } from "react-native-svg";
 import { AgentOrbitRings } from "@/features/agents/components/agent-orbit-rings";
@@ -62,41 +62,57 @@ export function AgentPhoto({
   });
   const uri = imageUrl === undefined ? photo.data : imageUrl;
   const [failed, setFailed] = useState<string | null>(null);
+  const [displayed, setDisplayed] = useState<string | null>(null);
+  const currentUri = useRef(uri);
+  currentUri.current = uri;
   const filterId = `photo-offline-${useId().replaceAll(":", "")}`;
   if (!uri || uri === failed) return children;
   const picture = (
-    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: "hidden" }}>
-      <Image
-        source={{ uri }}
-        contentFit="cover"
-        recyclingKey={uri}
-        style={{ width: size, height: size, opacity: disconnected ? 0 : 1 }}
-        onError={() => setFailed(uri)}
-      />
-      {/* iOS does not support the native saturation style. Keep Expo's error handling
-          and use the same SVG filter as generated avatars for the offline image. */}
-      {disconnected ? (
-        <Svg
-          width={size}
-          height={size}
-          pointerEvents="none"
-          style={{ position: "absolute" }}
-          opacity={DISCONNECTED_APPEARANCE.opacity}
-        >
-          <Defs>
-            <Filter id={filterId}>
-              <FeColorMatrix type="saturate" values={[DISCONNECTED_APPEARANCE.saturation]} />
-            </Filter>
-          </Defs>
-          <SvgImage
-            href={{ uri }}
+    <View style={{ width: size, height: size }}>
+      {/* A URI means the transfer finished, not that the native image is ready. Keep the
+          generated face until this version has actually appeared, also in a recycled row. */}
+      {displayed !== uri ? children : null}
+      <View
+        style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, overflow: "hidden" }}
+      >
+        <Image
+          key={uri}
+          source={{ uri }}
+          contentFit="cover"
+          recyclingKey={uri}
+          style={{ width: size, height: size, opacity: disconnected ? 0 : 1 }}
+          onDisplay={() => {
+            if (currentUri.current === uri) setDisplayed(uri);
+          }}
+          onError={() => {
+            if (currentUri.current === uri) setFailed(uri);
+          }}
+        />
+        {/* iOS does not support the native saturation style. Keep Expo's error handling
+            and use the same SVG filter as generated avatars for the offline image. */}
+        {disconnected ? (
+          <Svg
             width={size}
             height={size}
-            preserveAspectRatio="xMidYMid slice"
-            filter={`url(#${filterId})`}
-          />
-        </Svg>
-      ) : null}
+            pointerEvents="none"
+            style={{ position: "absolute" }}
+            opacity={DISCONNECTED_APPEARANCE.opacity}
+          >
+            <Defs>
+              <Filter id={filterId}>
+                <FeColorMatrix type="saturate" values={[DISCONNECTED_APPEARANCE.saturation]} />
+              </Filter>
+            </Defs>
+            <SvgImage
+              href={{ uri }}
+              width={size}
+              height={size}
+              preserveAspectRatio="xMidYMid slice"
+              filter={`url(#${filterId})`}
+            />
+          </Svg>
+        ) : null}
+      </View>
     </View>
   );
   // The ring wrapper stays mounted when work starts and stops.

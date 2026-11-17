@@ -8,7 +8,6 @@ import * as Clipboard from "expo-clipboard";
 import { openBrowserAsync } from "expo-web-browser";
 import { Typography } from "heroui-native";
 import { useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
 import { CONNECTOR_STATUS_KEYS, CONNECTOR_TITLE_KEYS } from "@/features/servers/model/connectors";
 import {
@@ -28,6 +27,7 @@ import {
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { currentText, useText } from "@/shared/lib/text";
 
 const EXPIRY_FORMAT: Intl.DateTimeFormatOptions = { dateStyle: "medium" };

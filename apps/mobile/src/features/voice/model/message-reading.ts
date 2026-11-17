@@ -1,5 +1,5 @@
-import { Alert } from "react-native";
 import { create } from "zustand";
+import { Alert } from "@/shared/lib/alert";
 import { currentText } from "@/shared/lib/text";
 import { type ReplyReading, readReply, replyVoiceFailureText } from "./reply-voice";
 import { speechNative } from "./speech-native";

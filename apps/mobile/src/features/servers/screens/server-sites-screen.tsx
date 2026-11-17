@@ -2,7 +2,7 @@ import type { HostedSiteSummary } from "@openbot/contracts/ipc";
 import { useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import { useRef, useState } from "react";
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
 import { useServerSites } from "@/features/servers/model/use-server-sites";
 import {
   SettingsContent,
@@ -12,6 +12,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { showsOnline } from "@/features/workspace/model/server-status";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

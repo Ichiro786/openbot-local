@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
-import { Alert } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -41,6 +40,7 @@ import {
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";

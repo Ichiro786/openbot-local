@@ -3,7 +3,6 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
 import { useState } from "react";
-import { Alert } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import {
   readOnlyRelease,
@@ -20,6 +19,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { useMobileWorkspace, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, type MobileText, useText } from "@/shared/lib/text";
 

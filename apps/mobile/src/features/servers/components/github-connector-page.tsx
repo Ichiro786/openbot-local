@@ -4,7 +4,6 @@ import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { openBrowserAsync } from "expo-web-browser";
 import { Typography } from "heroui-native";
-import { Alert } from "react-native";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
 import { TrailingValue } from "@/features/servers/components/trailing-value";
 import { platformPage } from "@/features/servers/model/connectors";
@@ -17,6 +16,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import type { GitHubConnectorRoute, MobileServer } from "@/features/workspace/model/workspace-types";
+import { Alert } from "@/shared/lib/alert";
 import { currentText, useText } from "@/shared/lib/text";
 
 const STATUS_KEYS = {

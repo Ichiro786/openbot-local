@@ -12,7 +12,6 @@ import { useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
 import { useEffect, useState } from "react";
-import { Alert } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { RoutineScheduleFields } from "@/features/agents/components/routine-schedule-fields";
 import { RoutineTriggerPicker } from "@/features/agents/components/routine-trigger-picker";
@@ -43,6 +42,7 @@ import {
   useMobileWorkspaceActions,
   useMobileWorkspaceSelector,
 } from "@/features/workspace/context/mobile-workspace-context";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

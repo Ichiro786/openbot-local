@@ -37,7 +37,7 @@ import Users from "lucide-react-native/icons/users";
 import Variable from "lucide-react-native/icons/variable";
 import X from "lucide-react-native/icons/x";
 import { useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useUniwind } from "uniwind";
 import { useProviderAccountName } from "@/features/agents/components/agent-runtime-fields";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -72,6 +72,7 @@ import { IDENTITY_PICTURE_SIZE, SettingsIdentityHeader } from "@/features/settin
 import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, type MobileText, useText } from "@/shared/lib/text";
 

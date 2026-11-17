@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { Typography } from "heroui-native";
 import { useState } from "react";
-import { Alert, Share, View } from "react-native";
+import { Share, View } from "react-native";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -12,6 +12,7 @@ import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspac
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { Button } from "@/shared/components/button";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, type MobileText, useText } from "@/shared/lib/text";

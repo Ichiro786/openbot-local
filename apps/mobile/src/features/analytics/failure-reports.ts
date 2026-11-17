@@ -11,7 +11,8 @@ import { errorReference } from "@openbot/user-errors";
 import { Effect } from "effect";
 import * as Application from "expo-application";
 import { randomUUID } from "expo-crypto";
-import { Alert, type AlertButton, Platform } from "react-native";
+import { type AlertButton, Platform } from "react-native";
+import { Alert } from "@/shared/lib/alert";
 import { currentText } from "@/shared/lib/text";
 
 const storage: ReportStorage = {

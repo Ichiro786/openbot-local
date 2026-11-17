@@ -4,7 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking, View } from "react-native";
+import { Linking, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
 import { useConnectorAction } from "@/features/servers/model/use-server-connectors";
@@ -24,6 +24,7 @@ import {
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

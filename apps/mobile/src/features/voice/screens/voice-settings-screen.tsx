@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
 import { useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { UsageSegments } from "@/features/agents/components/usage-segments";
 import { modelCaptureAvailable } from "@/features/chat/components/use-model-dictation";
@@ -18,6 +18,7 @@ import {
 } from "@/features/settings/components/settings-content";
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { Button } from "@/shared/components/button";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 import { DictationLanguageSection } from "../components/dictation-language-section";

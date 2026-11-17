@@ -10,7 +10,7 @@ import Link from "lucide-react-native/icons/link";
 import Mail from "lucide-react-native/icons/mail";
 import Repeat from "lucide-react-native/icons/repeat";
 import { useState } from "react";
-import { Alert, Share } from "react-native";
+import { Share } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { SERVER_ROLE_KEYS, SERVER_ROLE_LABEL_KEYS } from "@/features/servers/model/server-role";
@@ -24,6 +24,7 @@ import {
 import { SettingsPicker } from "@/features/settings/components/settings-controls";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";

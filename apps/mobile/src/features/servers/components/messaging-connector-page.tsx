@@ -8,7 +8,7 @@ import type { MessagingConnectorPage as HostPage } from "@openbot/team-client/te
 import type { UseQueryResult } from "@tanstack/react-query";
 import { openAuthSessionAsync } from "expo-web-browser";
 import { Typography } from "heroui-native";
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
 import { useUniwind } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
@@ -36,6 +36,7 @@ import {
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
 import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgent, MobileServer } from "@/features/workspace/model/workspace-types";
+import { Alert } from "@/shared/lib/alert";
 import { currentText, type MobileText, useText } from "@/shared/lib/text";
 
 const KIND_KEYS = {

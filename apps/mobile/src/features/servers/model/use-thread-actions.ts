@@ -3,12 +3,12 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MenuAction } from "@/shared/components/menu-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

@@ -364,6 +364,7 @@ export function useChatMotion(
   const lastRequiredInputId = useRef(requiredInputId);
   const requiredInputFrame = useRef<number | null>(null);
   const sendScrollFrame = useRef<number | null>(null);
+  const sendGeneration = useRef(0);
   const measurements = useRef({ viewport: 0, content: 0, composer: 0 });
   // Whether the list had rows when it last finished its first position. Null until it does once.
   const [placedWithRows, setPlacedWithRows] = useState<boolean | null>(null);
@@ -503,6 +504,7 @@ export function useChatMotion(
     () => () => {
       if (requiredInputFrame.current !== null) cancelAnimationFrame(requiredInputFrame.current);
       if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+      sendGeneration.current += 1;
     },
     [],
   );
@@ -563,6 +565,44 @@ export function useChatMotion(
       if (settled && previous === false) scheduleOnRN(landHeldComposer);
     },
   );
+  // ColorOS has no last-user spacer. Wait for the new row and the keyboard to settle,
+  // scroll once to the real end, then let the list keep that end as the reply grows.
+  useLayoutEffect(() => {
+    const send = pending.current;
+    if (!isAndroid || !colorOS || !send || lastUserId === null || lastUserId === send.baseline) return;
+    pending.current = null;
+    reveal();
+    const generation = sendGeneration.current;
+    if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+    const started = Date.now();
+    let lastSizes = "";
+    let stillFrames = 0;
+    const finish = () => {
+      if (generation === sendGeneration.current) setPinnedToLatest(true);
+    };
+    const step = () => {
+      if (generation !== sendGeneration.current) return;
+      const sizes = `${content.get()}:${composerHeight.get()}`;
+      stillFrames = sizes === lastSizes ? stillFrames + 1 : 0;
+      lastSizes = sizes;
+      if ((keyboardMoving.get() || stillFrames < 2) && Date.now() - started < KEYBOARD_SETTLE_MS) {
+        sendScrollFrame.current = requestAnimationFrame(step);
+        return;
+      }
+      sendScrollFrame.current = null;
+      const scroll = listRef.current?.scrollToEnd({ animated: send.fromLatest && !reducedMotion });
+      if (scroll) void scroll.then(finish, finish);
+      else finish();
+    };
+    sendScrollFrame.current = requestAnimationFrame(step);
+    return () => {
+      if (generation !== sendGeneration.current) return;
+      sendGeneration.current += 1;
+      if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+      sendScrollFrame.current = null;
+    };
+  }, [lastUserId, colorOS, content, composerHeight, keyboardMoving, reducedMotion, reveal]);
+
   /**
    * The rows from the latest user message to the end have their sizes, so the blank space under that
    * message is known. A sent message now moves to the top of the chat.
@@ -701,6 +741,10 @@ export function useChatMotion(
   const responseStyle = useAnimatedStyle(() => ({ opacity: responseOpacity.get() }));
 
   const beginSend = useCallback(() => {
+    sendGeneration.current += 1;
+    if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+    sendScrollFrame.current = null;
+    openingFollowNow.current = false;
     // A sent message takes its own place in the list.
     setOpeningFollow(false);
     setPinnedToLatest(false);
@@ -709,13 +753,19 @@ export function useChatMotion(
     const baseline = current.current.lastUserId;
     const first = baseline === null;
     pending.current = { baseline, first, fromLatest: atLatestNow.current };
-    if (first) {
+    if (isAndroid && colorOS) {
+      // No header anchor: even the first reply stays visible beside its sent message.
+      firstOpacity.set(1);
+      responseOpacity.set(1);
+      setResponseVisible(true);
+    } else if (first) {
       firstOpacity.set(0);
       responseOpacity.set(0);
       setResponseVisible(false);
     }
-  }, [firstOpacity, responseOpacity]);
+  }, [colorOS, firstOpacity, responseOpacity]);
   const cancelSend = useCallback(() => {
+    sendGeneration.current += 1;
     pending.current = null;
     if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
     sendScrollFrame.current = null;
@@ -727,6 +777,9 @@ export function useChatMotion(
   }, [firstOffset, firstOpacity, responseOpacity]);
   /** The reader, not the chat, now chooses the position. */
   const leaveLatest = useCallback(() => {
+    sendGeneration.current += 1;
+    if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+    sendScrollFrame.current = null;
     openingFollowNow.current = false;
     setOpeningFollow(false);
     setUserScrolled(true);

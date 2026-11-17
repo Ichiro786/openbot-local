@@ -3,7 +3,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useFocusEffect } from "expo-router";
 import { Typography } from "heroui-native";
 import { useCallback, useRef } from "react";
-import { Alert } from "react-native";
 import {
   listMobileAccountSessions,
   type MobileAccountSession,
@@ -18,6 +17,7 @@ import {
   SettingsSection,
 } from "@/features/settings/components/settings-content";
 import { queryKeys } from "@/features/workspace/model/query-keys";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 

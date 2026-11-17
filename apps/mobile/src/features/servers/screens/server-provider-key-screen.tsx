@@ -5,7 +5,6 @@ import { Typography } from "heroui-native";
 import KeyRound from "lucide-react-native/icons/key-round";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { PasteButton } from "@/features/servers/components/paste-button";
 import { type ProviderAdmin, providerAccountsAreKeys } from "@/features/servers/model/provider-admin";
@@ -24,6 +23,7 @@ import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

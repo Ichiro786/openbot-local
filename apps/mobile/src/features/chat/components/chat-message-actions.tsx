@@ -11,7 +11,7 @@ import Square from "lucide-react-native/icons/square";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Volume2 from "lucide-react-native/icons/volume-2";
 import { type PropsWithChildren, type RefObject, useMemo, useState } from "react";
-import { type AccessibilityState, Alert, Pressable, View } from "react-native";
+import { type AccessibilityState, Pressable, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -25,6 +25,7 @@ import { useMotionPreferences } from "@/features/settings/model/motion";
 import { toggleReadAloud, useReadingAloud } from "@/features/voice/model/message-reading";
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
 import { Button } from "@/shared/components/button";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { currentText, useText } from "@/shared/lib/text";

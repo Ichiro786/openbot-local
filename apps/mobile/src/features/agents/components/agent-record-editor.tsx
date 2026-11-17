@@ -30,7 +30,7 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import Check from "lucide-react-native/icons/check";
 import { useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import {
@@ -43,6 +43,7 @@ import { queryKeys } from "@/features/workspace/model/query-keys";
 import { AppSwitch } from "@/shared/components/app-switch";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useNativeLabelFont } from "@/shared/lib/native-label-font";
 import { useText } from "@/shared/lib/text";

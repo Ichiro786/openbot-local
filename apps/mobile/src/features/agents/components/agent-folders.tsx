@@ -26,7 +26,7 @@ import Plus from "lucide-react-native/icons/plus";
 import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import X from "lucide-react-native/icons/x";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { PERMISSION_LABEL, useAgentAdminSettings } from "@/features/agents/components/agent-access-fields";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
@@ -41,6 +41,7 @@ import {
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { Button } from "@/shared/components/button";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";

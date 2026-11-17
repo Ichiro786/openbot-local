@@ -4,12 +4,13 @@ import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useState } from "react";
-import { Alert, Pressable } from "react-native";
+import { Pressable } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { AttachmentThumbnail, showsAsImage, useAttachmentFile } from "@/features/chat/components/attachment-preview";
 import { useAttachmentPreview } from "@/features/chat/components/use-attachment-preview";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 

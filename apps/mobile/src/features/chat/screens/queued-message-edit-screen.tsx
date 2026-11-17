@@ -8,7 +8,7 @@ import ImagePlus from "lucide-react-native/icons/image-plus";
 import Paperclip from "lucide-react-native/icons/paperclip";
 import X from "lucide-react-native/icons/x";
 import { type PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import {
   SettingsContent,
   SettingsNote,
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import {

@@ -19,7 +19,7 @@ import FolderPlus from "lucide-react-native/icons/folder-plus";
 import UserX from "lucide-react-native/icons/user-x";
 import X from "lucide-react-native/icons/x";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { AgentProviderAvatar } from "@/features/agents/components/agent-provider-avatar";
 import {
@@ -45,6 +45,7 @@ import { type MenuAction, type MenuComponentRef, MenuView } from "@/shared/compo
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
+import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
