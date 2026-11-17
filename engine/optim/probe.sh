@@ -1,7 +1,7 @@
 #!/bin/bash
 # research/engine-optimize: size, unpack speed, boot time and idle cost of the OpenBot Local engine on a native
 # arm64 runner, the app's way (termux/proot, unprivileged owner of the rootfs, ProotCommand.kt argv).
-#   probe.sh setup|compress|boots|slim
+#   probe.sh setup|compress|boots|slim|boots2|build17|old17|new17
 # Each phase writes $OUT/<phase>/ and the workflow uploads it right after. Chroot runs live in `unshare -m`,
 # so no bind mount can outlive them; trees are only ever removed by this script after the engine is stopped.
 set -uo pipefail
@@ -22,6 +22,23 @@ safe_rm() { # never remove a tree that still has a mount under it
 xextract() { safe_rm "$2" || return 1; mkdir -p "$2"; xz -T1 -dc "$1" | tar -C "$2" -x -m --no-same-owner && chown -R runner:runner "$2"; }
 zextract() { safe_rm "$2" || return 1; mkdir -p "$2"; zstd -q -T1 -dc --long=27 "$1" | tar -C "$2" -x -m --no-same-owner && chown -R runner:runner "$2"; }
 topdu() { du -x -B1M -d"${2:-3}" "$1" 2>/dev/null | sort -rn | head -n "${3:-50}" | sed "s|$1||"; }
+getjars() {
+  mkdir -p "$W/jars"
+  for u in org/tukaani/xz/1.10/xz-1.10.jar org/apache/commons/commons-compress/1.27.1/commons-compress-1.27.1.jar \
+    commons-io/commons-io/2.16.1/commons-io-2.16.1.jar org/apache/commons/commons-lang3/3.16.0/commons-lang3-3.16.0.jar \
+    commons-codec/commons-codec/1.17.1/commons-codec-1.17.1.jar com/github/luben/zstd-jni/1.5.7-6/zstd-jni-1.5.7-6.jar; do
+    [ -f "$W/jars/$(basename $u)" ] || curl -sfL -o "$W/jars/$(basename $u)" "https://repo1.maven.org/maven2/$u"; done
+}
+lddscan() { # unresolved shared libraries of the engine's binaries (a slimming that broke a dependency shows here)
+  local r=$1 f
+  for f in "$r"/opt/OpenBot/app/openbot "$r"/opt/OpenBot/app/*.so* $(find "$r/opt/OpenBot/app/resources" -type f \( -name '*.node' -o -name '*.so*' -o -perm -u+x \) 2>/dev/null) \
+    "$r"/usr/bin/Xvfb "$r"/usr/bin/dbus-daemon "$r"/usr/bin/gnome-keyring-daemon "$r"/usr/bin/git; do
+    [ -f "$f" ] && head -c 4 "$f" | grep -q ELF || continue
+    out=$(chroot "$r" /usr/bin/ldd "${f#$r}" 2>&1 | grep 'not found')
+    [ -n "$out" ] && echo "${f#$r}: $out"
+  done
+  echo "lddscan done"
+}
 
 case $PHASE in
 setup)
@@ -148,6 +165,73 @@ PY
   boot --label s4-launcher-wait "${B[@]}" --idle 60 --settle 30
   cp -p "$W/start.bak" "$W/rn/root/openbot-start.sh"
   safe_rm "$W/rn"
+  ;;
+build17)
+  log "build the 0.72.0 payload from branch engine-0.72 the way rootfs.yml does (build-rootfs.sh)"
+  t env OUT_DIR="$W/out17" WORK_DIR="$W/b17" OPENBOT_VERSION=0.72.0 ENGINE_REVISION=1 GIT_SHA="${ENG_SHA:-}" \
+    BUN_BIN="${BUN_BIN:-}" GH_TOKEN="${GH_TOKEN:-}" bash "$ENG/engine/build-rootfs.sh" >"$OUT/build.log" 2>&1
+  tail -n 40 "$OUT/build.log" | tee -a "$OUT/steps.txt"
+  grep -E "applying|rebuilt with|rootfs:|Antigravity CLI pin|Packages:" "$OUT/build.log" | cut -c1-400 | tee -a "$OUT/steps.txt"
+  cp "$W/out17/engine.json" "$OUT/" 2>/dev/null; ls -l "$W/out17" | tee -a "$OUT/sizes.txt"
+  safe_rm "$W/b17"
+  ;;
+
+old17)
+  log "OLD: engine-0.71.0-1 (build 16 / 16.1 payload)"
+  gh release download engine-0.71.0-1 --repo "$GITHUB_REPOSITORY" -D "$W/old" -p 'rootfs-arm64.tar.xz*' -p engine.json &&
+    (cd "$W/old" && sha256sum -c rootfs-arm64.tar.xz.sha256) | tee -a "$OUT/steps.txt"
+  getjars
+  for i in 1 2; do timeout 900 java -Xmx512m -cp "$W/jars/*" "$HERE/Bench.java" xz "$W/old/rootfs-arm64.tar.xz" tar 2>&1 | tail -n 1 | tee -a "$OUT/java-bench.txt"; done
+  sync; echo 3 >/proc/sys/vm/drop_caches; t xextract "$W/old/rootfs-arm64.tar.xz" "$W/ro"
+  { echo "du_B $(du -sx -B1 "$W/ro" | cut -f1)"; echo "entries $(find "$W/ro" -xdev | wc -l)"; } | tee "$OUT/du-old.txt"
+  lddscan "$W/ro" >"$OUT/ldd-old.txt"
+  B=(--rootfs "$W/ro" --timeout 400)
+  boot --label o-first "${B[@]}" --idle 0
+  for i in 1 2 3; do boot --label "o-warm-$i" "${B[@]}" --idle 0; done
+  boot --label o-idle "${B[@]}" --idle 120 --settle 30
+  du -sx -B1 "$W/ro" | tee -a "$OUT/du-old.txt"
+  safe_rm "$W/ro"
+  ;;
+
+new17)
+  log "NEW: the engine-0.72 payload built above"
+  N=$W/out17
+  getjars
+  for i in 1 2; do timeout 900 java -Xmx512m -cp "$W/jars/*" "$HERE/Bench.java" zstd "$N/rootfs-arm64.tar.zst" tar 2>&1 | tail -n 1 | tee -a "$OUT/java-bench.txt"; done
+  timeout 900 java -Xmx512m -cp "$W/jars/*" "$HERE/Bench.java" xz "$N/rootfs-arm64.tar.xz" tar 2>&1 | tail -n 1 | tee -a "$OUT/java-bench.txt"
+  sync; echo 3 >/proc/sys/vm/drop_caches; t zextract "$N/rootfs-arm64.tar.zst" "$W/rn"
+  { echo "du_B $(du -sx -B1 "$W/rn" | cut -f1)"; echo "entries $(find "$W/rn" -xdev | wc -l)"; ls -l "$N"; } | tee "$OUT/du-new.txt"
+  topdu "$W/rn" 4 60 >"$OUT/du-new-top.txt"
+  lddscan "$W/rn" >"$OUT/ldd-new.txt"
+  # chroot runs as the runner uid: dbus needs a passwd entry for it (run 2 failed there).
+  echo "runner:x:$(id -u runner):$(id -g runner):runner:/root:/bin/bash" >>"$W/rn/etc/passwd"
+  echo "runner:x:$(id -g runner):" >>"$W/rn/etc/group"
+  B=(--rootfs "$W/rn" --timeout 400)
+  R0=(--genv OPENBOT_LOCAL_NO_RENDERER=0)
+  DBG=(--genv "OPENBOT_EXTRA_FLAGS=--remote-debugging-port=9222 --inspect=127.0.0.1:9229")
+  boot --label n-first "${B[@]}" --idle 0
+  cat "$W/rn/run/openbot/busy" 2>&1 | tee -a "$OUT/steps.txt"
+  for i in 1 2 3; do
+    boot --label "n-warm-$i" "${B[@]}" --idle 0
+    boot --label "n-nocc-$i" "${B[@]}" --genv OPENBOT_COMPILE_CACHE=0 --idle 0
+  done
+  du -sx -B1 "$W/rn/root/.cache/node-compile-cache" 2>&1 | tee -a "$OUT/steps.txt"
+  log "idle: the renderer loaded (the old behaviour) vs not (patch 0005, the default)"
+  boot --label n-idle-renderer "${B[@]}" "${R0[@]}" --idle 120 --settle 30
+  boot --label n-idle "${B[@]}" --idle 180 --settle 30
+  log "chroot + host strace (passwd fixed), renderer on and off"
+  boot --label c-renderer "${B[@]}" "${R0[@]}" --mode chroot --idle 60 --settle 30 --strace
+  boot --label c-norenderer "${B[@]}" --mode chroot --idle 60 --settle 30 --strace
+  chown -R runner:runner "$W/rn"
+  log "inside Electron (CDP + node inspector): renderer on, then off (+ agent browser smoke on the slim tree)"
+  boot --label d-renderer "${B[@]}" "${R0[@]}" "${DBG[@]}" --idle 0 --settle 20 --diag
+  boot --label d-norenderer "${B[@]}" "${DBG[@]}" --idle 0 --settle 20 --diag
+  for f in "$OUT"/strace-tt-*.txt; do
+    [ -f "$f" ] || continue
+    th=${f/strace-tt-/threads-}
+    python3 "$HERE/stsum.py" "$f" "$th" 3 >>"$OUT/strace-summary.txt" 2>&1
+  done
+  cat "$OUT/strace-summary.txt" 2>/dev/null | head -n 120
   ;;
 esac
 log "phase $PHASE done"

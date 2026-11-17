@@ -2,7 +2,9 @@ name: Engine optimize probe (research)
 
 # Research only: measures the OpenBot Local engine payload's size, unpack speed, boot time and idle cost on a
 # native arm64 runner, the app's way (engine/optim/probe.sh). Runs on pushes to research/engine-optimize only.
-# Publishes nothing: no release, no tag. One step and one artifact per phase. Run 2: boots2 only (run 1 did boots/slim/compress).
+# Publishes nothing: no release, no tag. One step and one artifact per phase.
+# Run 3 (Build 17 trace): builds the 0.72.0 payload from branch engine-0.72 (as rootfs.yml, without publishing),
+# then measures engine-0.71.0-1 (old) against it (new), and traces the idle loop (chroot + strace, CDP).
 
 on:
   push:
@@ -23,7 +25,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       WORK: /var/ob
-      ENGINE_TAG: engine-0.70.0-3
+      ENG_REF: engine-0.72
     steps:
       - name: Free disk
         run: |
@@ -34,41 +36,66 @@ jobs:
         with:
           sparse-checkout: |
             engine/optim
+      - name: Check out the engine branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.ENG_REF }}
+          path: eng
+      - name: Set up Bun (engine patches)
+        uses: ./eng/.github/actions/setup-bun
+        with:
+          install: none
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
       - name: Host tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils zstd jq bc libtalloc-dev strace
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends curl ca-certificates xz-utils zstd jq bc libtalloc-dev strace openssl gcc libc6-dev python3-websocket
+          echo "ENG_SHA=$(git -C eng rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Build proot (termux/proot, the phone's proot)
         run: |
           git clone -q --depth 1 https://github.com/termux/proot "$RUNNER_TEMP/proot-src"
           make -s -C "$RUNNER_TEMP/proot-src/src" -j"$(nproc)" HAS_LOADER_32BIT= proot
           echo "PROOT=$RUNNER_TEMP/proot-src/src/proot" >> "$GITHUB_ENV"
-      - name: Phase setup
-        timeout-minutes: 10
+      - name: Phase build17
+        timeout-minutes: 60
         run: |
           mkdir -p out
-          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-            bash engine/optim/probe.sh setup 2>&1 | tee out/log-setup.txt
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" WORK="$WORK" ENG="$PWD/eng" ENG_SHA="$ENG_SHA" BUN_BIN="$(command -v bun)" \
+            GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" bash engine/optim/probe.sh build17 2>&1 | tee out/log-build17.txt
+          sudo chown -R "$(id -u)" out
+          test -s "$WORK/out17/rootfs-arm64.tar.zst"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with: { name: probe-build17, path: out/build17/ }
+      - name: Phase old17
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 40
+        run: |
+          mkdir -p out
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            bash engine/optim/probe.sh old17 2>&1 | tee out/log-old17.txt
           sudo chown -R "$(id -u)" out
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
-        with: { name: probe-setup, path: out/setup/ }
-      - name: Phase boots2
+        with: { name: probe-old17, path: out/old17/ }
+      - name: Phase new17
         if: always()
         continue-on-error: true
         timeout-minutes: 75
         run: |
           mkdir -p out
-          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" ENGINE_TAG="$ENGINE_TAG" \
-            bash engine/optim/probe.sh boots2 2>&1 | tee out/log-boots2.txt
+          sudo -E env "PATH=$PATH" OUT_ROOT="$PWD/out" PROOT="$PROOT" WORK="$WORK" \
+            bash engine/optim/probe.sh new17 2>&1 | tee out/log-new17.txt
           sudo chown -R "$(id -u)" out
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
-        with: { name: probe-boots2, path: out/boots2/ }
+        with: { name: probe-new17, path: out/new17/ }
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: probe-logs, path: out/log-*.txt }

@@ -166,10 +166,17 @@ def strace_roles(root_pid, label):
     for want in ("electron-main", "electron-renderer", "electron-gpu"):
         pid = next((q for q, v in procs.items() if role(v["cmd"], v["comm"]) == want), None)
         if not pid: continue
+        try:
+            with open(f"{OUT}/threads-{label}-{want}.txt", "w") as tf:
+                for t in sorted(os.listdir(f"/proc/{pid}/task"), key=int):
+                    tf.write(f"{t}\t{open(f'/proc/{pid}/task/{t}/comm').read().strip()}\n")
+        except Exception:
+            pass
         f = f"{OUT}/strace-c-{label}-{want}.txt"
-        subprocess.run(["timeout", "-s", "INT", "20", "strace", "-f", "-c", "-S", "calls", "-o", f, "-p", str(pid)], capture_output=True)
+        tids = [x for t in os.listdir(f"/proc/{pid}/task") for x in ("-p", t)]  # every thread, not only the leader
+        subprocess.run(["timeout", "-s", "INT", "20", "strace", "-f", "-c", "-S", "calls", "-o", f] + tids, capture_output=True)
         g = f"{OUT}/strace-tt-{label}-{want}.txt"
-        subprocess.run(["timeout", "-s", "INT", "3", "strace", "-f", "-tt", "-y", "-s", "80", "-o", g, "-p", str(pid)], capture_output=True)
+        subprocess.run(["timeout", "-s", "INT", "3", "strace", "-f", "-tt", "-T", "-y", "-s", "80", "-o", g] + tids, capture_output=True)
         got[want] = pid
     return got
 
@@ -209,6 +216,7 @@ def main():
     ap.add_argument("--idle", type=int, default=60); ap.add_argument("--settle", type=int, default=30)
     ap.add_argument("--timeout", type=int, default=400); ap.add_argument("--probes", action="store_true")
     ap.add_argument("--strace", action="store_true")
+    ap.add_argument("--diag", action="store_true", help="run cdp.py after settle (needs the debug ports in OPENBOT_EXTRA_FLAGS)")
     a = ap.parse_args()
     r = os.path.realpath(a.rootfs); os.makedirs(OUT, exist_ok=True)
     res = dict(label=a.label, mode=a.mode, genv=a.genv, henv=a.henv)
@@ -262,6 +270,12 @@ def main():
                         rc, s, o = run_guest(r, a.mode, argv); ts.append(round(s, 3))
                     pr[name] = dict(rc=rc, secs=ts, tail=o.strip()[-160:])
                 res["probes"] = pr
+            if a.diag:
+                time.sleep(a.settle)
+                d = subprocess.run(["python3", os.path.join(os.path.dirname(os.path.abspath(__file__)), "cdp.py"), a.label],
+                                   capture_output=True, text=True, timeout=400, env=dict(os.environ, OUT=OUT))
+                print(d.stdout[-6000:], d.stderr[-2000:], flush=True)
+                res["diag_rc"] = d.returncode
             if a.idle:
                 time.sleep(a.settle)
                 tot, rows = idle(p.pid, a.idle, a.label); res["idle"] = tot
