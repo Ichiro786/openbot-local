@@ -17,8 +17,8 @@
 #   XZ_LEVEL          xz preset (default 9)
 #   GIT_SHA           recorded in engine-version (default: unknown)
 #   ENGINE_REVISION   payload revision for the same OpenBot version: tag engine-<version>-<n> (default: none)
-#   PBS_RELEASE       python-build-standalone release for /opt/python3.14 (default 20261026)
-#   GH_TOKEN          optional, for the GitHub API lookup of that release
+#   SIZE_GATE_MIB     fail when the unpacked rootfs is larger (default 1050)
+#   ZSTD_LEVEL        zstd preset for rootfs-arm64.tar.zst (default 19, with --long=27)
 set -euo pipefail
 export LC_ALL=C DEBIAN_FRONTEND=noninteractive
 
@@ -39,7 +39,7 @@ fetch() { curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1
 
 [ "$(id -u)" -eq 0 ] || fail "run as root"
 [ "$(uname -m)" = aarch64 ] || fail "run on an arm64 host (the chroot runs arm64 binaries natively)"
-for c in curl tar xz sha256sum openssl chroot cc jq; do command -v "$c" >/dev/null || fail "missing $c"; done
+for c in curl tar xz zstd sha256sum openssl chroot cc jq; do command -v "$c" >/dev/null || fail "missing $c"; done
 [[ -z $ENGINE_REVISION || $ENGINE_REVISION =~ ^[1-9][0-9]*$ ]] || fail "ENGINE_REVISION must be a positive number"
 
 MOUNTS=()
@@ -133,8 +133,11 @@ bind_mount /sys "$ROOTFS/sys"
 bind_mount /dev "$ROOTFS/dev"
 bind_mount /dev/pts "$ROOTFS/dev/pts"
 
-# The release's own list (as docker/Dockerfile) without apparmor, which only a host kernel loads.
-release_pkgs=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' -e '/^apparmor$/d' "$APP_SRC/resources/hosting/packages.txt")
+# The release's own list (as docker/Dockerfile) without apparmor, which only a host kernel loads, and
+# without the agent-display desktop (openbox, lxterminal, pcmanfm, hsetroot: upstream's container starts
+# it for remote desktop; this launcher does not, and nothing on the phone views that display).
+release_pkgs=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' -e '/^apparmor$/d' \
+  -e '/^\(openbox\|lxterminal\|pcmanfm\|hsetroot\)$/d' "$APP_SRC/resources/hosting/packages.txt")
 # The task's list (overlaps the release list) and docker/Dockerfile's extra tools.
 extra_pkgs="ca-certificates curl openssl dbus dbus-x11 gnome-keyring libsecret-1-0 x11-utils xauth xvfb
 libasound2t64 libgbm1 libgtk-3-0t64 libnss3 libxss1 git
@@ -204,57 +207,26 @@ cc -O2 -Wall -shared -fPIC -o "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.
 chmod 0755 "$ROOTFS/opt/openbot-local/lib/libopenbot-nonroot.so"
 
 # Antigravity (Gemini) runtime tools. OpenBot >= 0.69 uses Google's Antigravity CLI (Go, 39-bit safe),
-# which prepare.py downloads on the phone (pinned below). Older engines used the hybrid: Google's 1.4.x
-# ACP server aborts in TCMalloc on 39-bit VA kernels (antigravity-cli#64), so the hybrid ran its Python
-# frontend on a stock CPython 3.14 instead (kept for the 1.4 bridge and rollback). Only the
-# PSF-licensed interpreter and our scripts ship here: prepare.py downloads Google's files from
-# dl.google.com on the phone, checks the registry sha256 and builds the runtime under /root (kept on
-# engine updates). /opt/agy-hybrid/current points at it; openbot-start.sh uses it once it is .ready.
-PBS_RELEASE="${PBS_RELEASE:-20261026}"
-PBS_PYTHON="${PBS_PYTHON:-3.14}"
-pbs_auth=()
-if [ -n "${GH_TOKEN:-}" ]; then pbs_auth=(-H "Authorization: Bearer $GH_TOKEN"); fi
-pbs_json=$(fetch -H "Accept: application/vnd.github+json" "${pbs_auth[@]}" \
-  "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/$PBS_RELEASE")
-pbs_asset=$(jq -c --arg v "$PBS_PYTHON" '[.assets[] | select(.name | test("^cpython-" + ($v | gsub("\\."; "\\.")) +
-  "\\.[0-9]+\\+[0-9]+-aarch64-unknown-linux-gnu-install_only_stripped\\.tar\\.gz$"))] | first // empty' <<<"$pbs_json")
-[ -n "$pbs_asset" ] || fail "python-build-standalone $PBS_RELEASE has no CPython $PBS_PYTHON aarch64 install_only_stripped asset"
-pbs_name=$(jq -r .name <<<"$pbs_asset")
-pbs_sha=$(jq -r '.digest // empty' <<<"$pbs_asset" | sed 's/^sha256://')
-if ! [[ $pbs_sha =~ ^[0-9a-f]{64}$ ]]; then
-  pbs_sha=$(fetch "https://github.com/astral-sh/python-build-standalone/releases/download/$PBS_RELEASE/SHA256SUMS" |
-    awk -v f="$pbs_name" '$2 == f {print $1}')
-fi
-[[ $pbs_sha =~ ^[0-9a-f]{64}$ ]] || fail "no sha256 for $pbs_name"
-echo "CPython: $pbs_name ($pbs_sha)"
-fetch --output "$WORK_DIR/$pbs_name" "https://github.com/astral-sh/python-build-standalone/releases/download/$PBS_RELEASE/$pbs_name"
-echo "$pbs_sha  $WORK_DIR/$pbs_name" | sha256sum -c -
-install -d -m 0755 "$ROOTFS/opt/python$PBS_PYTHON"
-tar -xzf "$WORK_DIR/$pbs_name" -C "$ROOTFS/opt/python$PBS_PYTHON" --strip-components=1 --no-same-owner
-rm -f "$WORK_DIR/$pbs_name"
-# Tests, IDLE and tkinter are dead weight on the phone (no Tcl/Tk, no display for the user).
-rm -rf "$ROOTFS/opt/python$PBS_PYTHON/lib/python$PBS_PYTHON"/{test,idlelib,tkinter,turtledemo} \
-  "$ROOTFS/opt/python$PBS_PYTHON/lib"/{libtcl,libtk}* "$ROOTFS/opt/python$PBS_PYTHON/lib"/{tcl,tk}[0-9]* 2>/dev/null || true
-chown -R 0:0 "$ROOTFS/opt/python$PBS_PYTHON"
-ln -sfn "/opt/python$PBS_PYTHON/bin/python$PBS_PYTHON" "$ROOTFS/usr/local/bin/python$PBS_PYTHON"
-"$ROOTFS/opt/python$PBS_PYTHON/bin/python$PBS_PYTHON" -c 'import ssl, sqlite3, zlib, venv, ensurepip; print("cpython ok")' ||
-  fail "the bundled CPython does not start"
+# which prepare.sh downloads on the phone (pinned below), checks (sha256) and smoke-tests under /root (kept
+# on engine updates). /opt/agy-hybrid/current points at it; openbot-start.sh uses it once it is .ready.
+# Only our scripts ship here, nothing from Google. No CPython since 0.72: prepare.sh is bash, and the 1.4
+# Python hybrid of engines <= 0.61 is gone (see agy-hybrid/README.md).
 install -d -m 0755 "$ROOTFS/opt/agy-hybrid/tools"
-for f in prepare.py agy_hybrid.py; do install -m 0644 "$SCRIPT_DIR/agy-hybrid/$f" "$ROOTFS/opt/agy-hybrid/tools/$f"; done
-for f in agy_acp_server open-url agy-hybrid.sh; do install -m 0755 "$SCRIPT_DIR/agy-hybrid/$f" "$ROOTFS/opt/agy-hybrid/tools/$f"; done
+install -m 0644 "$SCRIPT_DIR/agy-hybrid/prepare.sh" "$ROOTFS/opt/agy-hybrid/tools/prepare.sh"
+for f in open-url agy-hybrid.sh; do install -m 0755 "$SCRIPT_DIR/agy-hybrid/$f" "$ROOTFS/opt/agy-hybrid/tools/$f"; done
 ln -sfn /root/.local/share/agy-hybrid/current "$ROOTFS/opt/agy-hybrid/current"
 ln -sfn /opt/agy-hybrid/tools/agy-hybrid.sh "$ROOTFS/usr/local/bin/agy-hybrid"
-printf 'python=%s\npbs_release=%s\n' "$pbs_name" "$PBS_RELEASE" >"$ROOTFS/opt/agy-hybrid/tools/versions"
-# prepare.py pins the Antigravity CLI that this OpenBot build was tested with (native-runtime.lock.json,
+# prepare.sh pins the Antigravity CLI that this OpenBot build was tested with (native-runtime.lock.json,
 # bundled in app.asar). A different pin would hand the engine a CLI it does not expect.
-agy_cli_sha=$(sed -n 's/^CLI_SHA256 = "\([0-9a-f]\{64\}\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.py")
-agy_cli_ver=$(sed -n 's/^CLI_VERSION = "\([0-9.]*\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.py")
-if [ -n "$agy_cli_sha" ] && grep -q -a -F "$agy_cli_sha" "$ROOTFS/opt/OpenBot/app/resources/app.asar"; then
+agy_cli_sha=$(sed -n 's/^CLI_SHA256="\([0-9a-f]\{64\}\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.sh")
+agy_cli_ver=$(sed -n 's/^CLI_VERSION="\([0-9.]*\)".*/\1/p' "$SCRIPT_DIR/agy-hybrid/prepare.sh")
+[ -n "$agy_cli_sha" ] && [ -n "$agy_cli_ver" ] || fail "no CLI_VERSION / CLI_SHA256 in agy-hybrid/prepare.sh"
+if grep -q -a -F "$agy_cli_sha" "$ROOTFS/opt/OpenBot/app/resources/app.asar"; then
   echo "Antigravity CLI pin $agy_cli_ver matches this OpenBot's native-runtime.lock.json"
 else
-  echo "::warning::prepare.py pins Antigravity CLI $agy_cli_ver ($agy_cli_sha), which this OpenBot's app.asar does not name; update CLI_* in engine/agy-hybrid/prepare.py"
+  echo "::warning::prepare.sh pins Antigravity CLI $agy_cli_ver ($agy_cli_sha), which this OpenBot's app.asar does not name; update CLI_* in engine/agy-hybrid/prepare.sh"
 fi
-printf 'antigravity_cli=%s\n' "$agy_cli_ver" >>"$ROOTFS/opt/agy-hybrid/tools/versions"
+printf 'antigravity_cli=%s\n' "$agy_cli_ver" >"$ROOTFS/opt/agy-hybrid/tools/versions"
 
 # Static DNS and identity. Android has no readable /etc/resolv.conf; the app may overwrite this file
 # with the device's DNS servers before each start.
@@ -295,30 +267,51 @@ rm -rf "$ROOTFS"/usr/share/{man,info,groff,lintian,linda,bug,doc-base,gtk-doc,he
 find "$ROOTFS/usr/share/locale" -mindepth 1 -maxdepth 1 ! -name locale.alias -exec rm -rf {} + 2>/dev/null || true
 find "$ROOTFS/usr/share/i18n/locales" -mindepth 1 -maxdepth 1 ! -name 'C' ! -name 'en_US' ! -name 'en_GB' \
   ! -name 'i18n*' ! -name 'iso14651_t1*' ! -name 'translit_*' -exec rm -rf {} + 2>/dev/null || true
-# The bundled CPython keeps its compiled stdlib: the hybrid runs with PYTHONDONTWRITEBYTECODE=1.
-find "$ROOTFS" -xdev -path "$ROOTFS/opt/python*" -prune -o -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "$ROOTFS" -xdev -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 # Chromium UI translations of the Electron shell; OpenBot's own UI strings live in app.asar.
 if [ -d "$ROOTFS/opt/OpenBot/app/locales" ]; then
   keep_expr=()
   for l in $KEEP_APP_LOCALES; do keep_expr+=(! -name "$l.pak"); done
   find "$ROOTFS/opt/OpenBot/app/locales" -name '*.pak' "${keep_expr[@]}" -delete
 fi
+# Files that nothing maps on the phone (research/engine-optimize, measured: same boot and idle without them).
+# Mesa (LLVM, gallium, DRI, GBM, GLX/EGL/Vulkan drivers): Electron runs --disable-gpu with its own
+# SwiftShader, and Xvfb runs -extension GLX. The packages stay installed for their dependants.
+L="$ROOTFS/usr/lib/aarch64-linux-gnu"
+rm -rf "$L"/libLLVM* "$L"/libgallium* "$L/dri" "$L/gbm" "$L"/libGLX_mesa* "$L"/libEGL_mesa* "$L"/libvulkan_*.so
+# Icon themes other than the GTK fallbacks (Adwaita, hicolor); GTK 4 (pulled by gcr4, Electron loads GTK 3);
+# the second copy of Chromium's licence (the app folder keeps LICENSES.chromium.html).
+find "$ROOTFS/usr/share/icons" -mindepth 1 -maxdepth 1 ! -name Adwaita ! -name hicolor ! -name default -exec rm -rf {} +
+rm -f "$L"/libgtk-4.so*
+rm -f "$ROOTFS/opt/OpenBot/app/resources/licenses/LICENSES.chromium.html"
 mkdir -p "$ROOTFS/tmp" "$ROOTFS/var/tmp" "$ROOTFS/var/log" "$ROOTFS/var/lib/apt/lists/partial" "$ROOTFS/var/cache/apt/archives/partial"
 chmod 1777 "$ROOTFS/tmp" "$ROOTFS/var/tmp"
 # Nothing of a test run may ship: no keyring, no session, no log.
 rm -rf "$ROOTFS/root/.config" "$ROOTFS/root/.local" "$ROOTFS/root/openbot.log"* "$ROOTFS/run/openbot"/* "$ROOTFS/run/openbot-start.lock"
 size_after=$(du -sm "$ROOTFS" | cut -f1)
 echo "rootfs: ${size_before} MiB -> ${size_after} MiB"
+# Size gate: a dependency that drags in a toolkit or a driver stack should fail here, not on the phone.
+[ "$size_after" -le "${SIZE_GATE_MIB:-1050}" ] ||
+  fail "the rootfs is ${size_after} MiB, over the ${SIZE_GATE_MIB:-1050} MiB gate (SIZE_GATE_MIB)"
 endstep
 
 # ------------------------------------------------------------------ 6. Pack
-step "Pack rootfs-arm64.tar.xz"
+step "Pack rootfs-arm64.tar.zst and rootfs-arm64.tar.xz"
 # --hard-dereference: Android's app domain cannot create hard links, so every hard link is stored as
 # a regular file. /dev, /proc and /sys stay empty: proot binds the host's.
+# zstd (decodes about 9x faster than xz on the phone's one-thread path) is what the APK bundles; xz stays
+# one more release for apps that update from the network and only know .tar.xz.
 tar -C "$ROOTFS" --numeric-owner --owner=0 --group=0 --hard-dereference --sort=name \
-  --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' \
-  -cf - . | xz -T0 "-$XZ_LEVEL" --check=crc64 >"$OUT_DIR/rootfs-arm64.tar.xz"
-(cd "$OUT_DIR" && sha256sum rootfs-arm64.tar.xz >rootfs-arm64.tar.xz.sha256)
+  --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' -cf "$WORK_DIR/rootfs.tar" .
+xz -T0 "-$XZ_LEVEL" --check=crc64 -c "$WORK_DIR/rootfs.tar" >"$OUT_DIR/rootfs-arm64.tar.xz" &
+xz_pid=$!
+zstd -q -T0 "-${ZSTD_LEVEL:-19}" --long=27 -c "$WORK_DIR/rootfs.tar" >"$OUT_DIR/rootfs-arm64.tar.zst"
+wait "$xz_pid" || fail "xz failed"
+rm -f "$WORK_DIR/rootfs.tar"
+(cd "$OUT_DIR" && sha256sum rootfs-arm64.tar.xz >rootfs-arm64.tar.xz.sha256 &&
+  sha256sum rootfs-arm64.tar.zst >rootfs-arm64.tar.zst.sha256)
+zst_sha=$(cut -d' ' -f1 "$OUT_DIR/rootfs-arm64.tar.zst.sha256")
+zst_bytes=$(stat -c %s "$OUT_DIR/rootfs-arm64.tar.zst")
 sha=$(cut -d' ' -f1 "$OUT_DIR/rootfs-arm64.tar.xz.sha256")
 compressed=$(stat -c %s "$OUT_DIR/rootfs-arm64.tar.xz")
 uncompressed=$(xz --robot --list "$OUT_DIR/rootfs-arm64.tar.xz" | awk '$1 == "totals" {print $5}')
@@ -335,6 +328,9 @@ cat >"$OUT_DIR/engine.json" <<EOF
   "asset": "rootfs-arm64.tar.xz",
   "sha256": "$sha",
   "compressed_bytes": $compressed,
+  "zst_asset": "rootfs-arm64.tar.zst",
+  "zst_sha256": "$zst_sha",
+  "zst_bytes": $zst_bytes,
   "tar_bytes": ${uncompressed:-0},
   "installed_bytes": $installed,
   "files": $files,
