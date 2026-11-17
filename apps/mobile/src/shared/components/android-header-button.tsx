@@ -114,7 +114,7 @@ export function AndroidStackBackButton({ glass: hasGlass, onPress }: { glass: bo
             // GlassButton gives the one press-in tick (review R2-2).
             onPress={onPress}
           >
-            <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} />
+            <ArrowLeft color={String(foreground)} size={22} strokeWidth={2} style={MIRROR_IN_RTL} />
           </GlassButton>
         </View>
       </GlassHeaderRoom>

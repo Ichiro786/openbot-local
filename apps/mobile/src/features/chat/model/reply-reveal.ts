@@ -168,7 +168,20 @@ export function createReplyReveal(tokens: Token[]) {
     }
     return visit(tokens);
   }
-  return { words, at: (count: number) => (count >= words.length ? tokens : clip(count)) };
+  // The same word count gives the same tokens, so a render with no new word keeps its blocks memoized.
+  let lastCount = -1;
+  let lastTokens: Token[] = tokens;
+  return {
+    words,
+    at(count: number): Token[] {
+      if (count >= words.length) return tokens;
+      if (count !== lastCount) {
+        lastTokens = clip(count);
+        lastCount = count;
+      }
+      return lastTokens;
+    },
+  };
 }
 
 const finishedReveals = new WeakMap<Token[], ReturnType<typeof createReplyReveal>>();

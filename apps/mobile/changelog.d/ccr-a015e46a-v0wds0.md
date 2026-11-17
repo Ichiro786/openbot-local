@@ -1,0 +1,6 @@
+- Streaming replies render less work for each update. The composer no longer renders again on each streamed chunk, and a render with no new revealed word keeps its Markdown blocks.
+- The cancelled-back-gesture return and the chat drag lift use springs with an explicit mass. They no longer wobble.
+- Grabbing the drawer while it still moves continues from its current place and no longer jumps to open.
+- The Android header blur covers only the bar, and its mask is hardware rendered. Each header has its own mask id.
+- The ColorOS back arrows mirror in right-to-left languages. The Send button has a 48 dp touch target.
+- These changes are not yet checked on a phone. The typecheck of the mobile project is left to CI.

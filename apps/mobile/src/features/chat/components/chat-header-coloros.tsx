@@ -23,6 +23,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
+import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { useGlassMenuDoubleFrost, useGlassMenuPauses } from "@/shared/motion/GlassMenu";
 import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -253,7 +254,7 @@ export function ColorOSChatHeader({
               press={backPress}
               onPress={onBack}
             >
-              <ArrowLeft color={iconColor} size={24} strokeWidth={2} />
+              <ArrowLeft color={iconColor} size={24} strokeWidth={2} style={MIRROR_IN_RTL} />
             </ChatGlassIconButton>
           ) : null}
         </View>
