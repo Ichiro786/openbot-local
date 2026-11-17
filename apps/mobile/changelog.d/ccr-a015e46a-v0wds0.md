@@ -7,3 +7,4 @@
 - A streamed chunk redraws only the chat row that changed. The other rows keep their render.
 - The Android home capsule, edge blur and glass menu blur only their own region of the list.
 - Code blocks keep their memoized highlight runs while the text does not change.
+- The ColorOS press of home list rows starts on the UI thread in the frame of the touch. A busy JS thread no longer delays it.
