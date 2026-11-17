@@ -287,6 +287,8 @@ jobs:
           APK: ${{ steps.apk.outputs.path }}
         run: |
           set -euo pipefail
+          trap 'rc=$?; for file in /tmp/previous-cert.txt /tmp/current-cert.txt /tmp/previous-digest.txt /tmp/current-digest.txt; do if [ -f "$file" ]; then echo "=== $file ==="; cat "$file"; fi; done; exit "$rc"' ERR
+          set -x
           mkdir -p /tmp/openbot-previous
           gh run download 43945578236 --repo "$GITHUB_REPOSITORY" --name openbot-local-apk-115 --dir /tmp/openbot-previous
           previous=$(find /tmp/openbot-previous -name '*.apk' -print -quit)
