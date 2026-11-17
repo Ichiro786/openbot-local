@@ -37,8 +37,8 @@ import { GestureDetector, type PanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   type EntryAnimationsValues,
-  FadeIn,
   Extrapolation,
+  FadeIn,
   FadeInDown,
   interpolate,
   Keyframe,
@@ -61,8 +61,8 @@ import { ChatAppSuggestion } from "@/features/chat/components/chat-app-suggestio
 import { type ApprovalDecision, approvalTitle, ChatApprovalCard } from "@/features/chat/components/chat-approval-card";
 import { ChatExchangeGroup, ChatExchangeMarker } from "@/features/chat/components/chat-exchange-marker";
 import { ChatMarkdown, chatMarkdownHasTable } from "@/features/chat/components/chat-markdown";
-import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
 import { ChatMemoryChanges } from "@/features/chat/components/chat-memory-changes";
+import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
 import { ChatPlan } from "@/features/chat/components/chat-plan";
 import { ChatQuestionPrompt } from "@/features/chat/components/chat-question-prompt";
 import {
@@ -78,8 +78,8 @@ import { useActivityPresence } from "@/features/chat/components/use-activity-pre
 import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-chat-motion";
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
-import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
+import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import {
   type ChatBubbleMessage,
   type ChatMarkerGroup,
@@ -1396,66 +1396,143 @@ function ChatRow({ item }: { item: VisibleMessage }) {
   const timeReveal = useContext(ChatTimeRevealContext);
   if (!row) return null;
   const message = row.rowsById.get(item.id) ?? item;
-  const response = row.responseIds.has(message.id);
-  const turn = row.turnSummaries?.get(message.id);
-  const openTurn = row.onOpenTurn;
-  const day = row.dayLabels.get(message.id);
+  // The context changes on each streamed chunk. This function only reads it: the row below draws
+  // again only when one of the values of this row changed.
+  return (
+    <ChatRowView
+      message={message}
+      response={row.responseIds.has(message.id)}
+      responseStyle={row.responseStyle}
+      responseVisible={row.responseVisible}
+      day={row.dayLabels.get(message.id)}
+      turn={row.turnSummaries?.get(message.id)}
+      onOpenTurn={row.onOpenTurn}
+      isFirstUser={message.id === row.firstUserId}
+      source={
+        message.kind === "message" && message.replyToMessageId
+          ? row.messagesById.get(message.replyToMessageId)
+          : undefined
+      }
+      questionForm={message.id === row.promptController?.messageId ? row.promptController : undefined}
+      upload={row.upload?.messageId === message.id ? row.upload : undefined}
+      outbox={row.outboxStatuses?.get(message.id)}
+      selecting={message.id === row.selectingMessageId}
+      arriving={row.arrivals.has(message.id)}
+      revealed={row.revealedIds.has(message.id)}
+      shared={row.shared}
+      highlighted={message.id === row.highlightedRowId}
+      highlightColor={row.highlightColor}
+      highlightShown={row.highlightShown}
+      unreadLine={message.id === row.unreadLineRowId}
+      unreadLineColor={row.unreadLineColor}
+      unreadLineAnimated={row.unreadLineAnimated}
+      branchDivider={row.branchDivider?.rowId === message.id ? row.branchDivider : null}
+      timeOffset={timeReveal?.offset}
+    />
+  );
+}
+
+interface ChatRowViewProps {
+  message: VisibleMessage;
+  response: boolean;
+  responseStyle: RowContextValue["responseStyle"];
+  responseVisible: boolean;
+  day: string | undefined;
+  turn: TurnStepsSummary | undefined;
+  onOpenTurn: RowContextValue["onOpenTurn"];
+  isFirstUser: boolean;
+  source: ChatMessage | undefined;
+  questionForm: QuestionPromptController | undefined;
+  upload: ChatUpload | null | undefined;
+  outbox: OutboxRowStatus | undefined;
+  selecting: boolean;
+  arriving: boolean;
+  revealed: boolean;
+  shared: MessageRowShared;
+  highlighted: boolean;
+  highlightColor: string;
+  highlightShown: Set<string>;
+  unreadLine: boolean;
+  unreadLineColor: string | undefined;
+  unreadLineAnimated: Set<string>;
+  branchDivider: RowContextValue["branchDivider"];
+  timeOffset: SharedValue<number> | undefined;
+}
+
+const ChatRowView = memo(function ChatRowView({
+  message,
+  response,
+  responseStyle,
+  responseVisible,
+  day,
+  turn,
+  onOpenTurn,
+  isFirstUser,
+  source,
+  questionForm,
+  upload,
+  outbox,
+  selecting,
+  arriving,
+  revealed,
+  shared,
+  highlighted,
+  highlightColor,
+  highlightShown,
+  unreadLine,
+  unreadLineColor,
+  unreadLineAnimated,
+  branchDivider,
+  timeOffset,
+}: ChatRowViewProps) {
   const messageRow =
     message.kind === "thinking" ? null : (
       <MessageRow
         message={message}
-        isFirstUser={message.id === row.firstUserId}
-        source={
-          message.kind === "message" && message.replyToMessageId
-            ? row.messagesById.get(message.replyToMessageId)
-            : undefined
-        }
-        questionForm={message.id === row.promptController?.messageId ? row.promptController : undefined}
-        upload={row.upload?.messageId === message.id ? row.upload : undefined}
-        outbox={row.outboxStatuses?.get(message.id)}
-        selecting={message.id === row.selectingMessageId}
-        arriving={row.arrivals.has(message.id)}
-        revealed={row.revealedIds.has(message.id)}
-        shared={row.shared}
+        isFirstUser={isFirstUser}
+        source={source}
+        questionForm={questionForm}
+        upload={upload}
+        outbox={outbox}
+        selecting={selecting}
+        arriving={arriving}
+        revealed={revealed}
+        shared={shared}
       />
     );
   return (
     <Animated.View
-      style={[ROW_STYLE, response ? row.responseStyle : undefined]}
-      accessibilityElementsHidden={response && !row.responseVisible}
-      importantForAccessibility={response && !row.responseVisible ? "no-hide-descendants" : "auto"}
+      style={[ROW_STYLE, response ? responseStyle : undefined]}
+      accessibilityElementsHidden={response && !responseVisible}
+      importantForAccessibility={response && !responseVisible ? "no-hide-descendants" : "auto"}
     >
-      {message.id === row.highlightedRowId ? (
-        <FocusHighlight rowId={message.id} color={row.highlightColor} shown={row.highlightShown} />
-      ) : null}
+      {highlighted ? <FocusHighlight rowId={message.id} color={highlightColor} shown={highlightShown} /> : null}
       {day ? (
         <Typography.Paragraph type="body-xs" align="center" className="pb-3 pt-1 text-muted">
           {day}
         </Typography.Paragraph>
       ) : null}
-      {message.id === row.unreadLineRowId ? (
-        <UnreadLineRow rowId={message.id} color={row.unreadLineColor} animated={row.unreadLineAnimated} />
-      ) : null}
+      {unreadLine ? <UnreadLineRow rowId={message.id} color={unreadLineColor} animated={unreadLineAnimated} /> : null}
       {turn ? (
         <ChatTurnStepsRow
           summary={turn}
-          muted={row.shared.themeMuted}
-          onPress={openTurn ? () => openTurn(turn.turnId) : undefined}
+          muted={shared.themeMuted}
+          onPress={onOpenTurn ? () => onOpenTurn(turn.turnId) : undefined}
         />
       ) : null}
-      {message.kind === "message" && timeReveal ? (
-        <MessageWithTime createdAt={message.createdAt} reveal={timeReveal.offset}>
+      {message.kind === "message" && timeOffset ? (
+        <MessageWithTime createdAt={message.createdAt} reveal={timeOffset}>
           {messageRow}
         </MessageWithTime>
       ) : (
         messageRow
       )}
-      {row.branchDivider?.rowId === message.id ? (
-        <BranchDividerRow label={row.branchDivider.label} onOpen={row.branchDivider.onOpen} muted={row.shared.muted} />
+      {branchDivider ? (
+        <BranchDividerRow label={branchDivider.label} onOpen={branchDivider.onOpen} muted={shared.muted} />
       ) : null}
     </Animated.View>
   );
-}
+});
 
 function renderRow({ item }: { item: VisibleMessage }) {
   return <ChatRow item={item} />;

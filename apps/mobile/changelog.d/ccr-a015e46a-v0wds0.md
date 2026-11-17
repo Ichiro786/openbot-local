@@ -4,3 +4,4 @@
 - The Android header blur covers only the bar, and its mask is hardware rendered. Each header has its own mask id.
 - The ColorOS back arrows mirror in right-to-left languages. The Send button has a 48 dp touch target.
 - These changes are not yet checked on a phone. The typecheck of the mobile project is left to CI.
+- A streamed chunk redraws only the chat row that changed. The other rows keep their render.
