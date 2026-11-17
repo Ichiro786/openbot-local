@@ -8,3 +8,5 @@
 - The Android home capsule, edge blur and glass menu blur only their own region of the list.
 - Code blocks keep their memoized highlight runs while the text does not change.
 - The ColorOS press of home list rows starts on the UI thread in the frame of the touch. A busy JS thread no longer delays it.
+- The chat list renders each streamed update once. The second per-frame step on ColorOS is gone, because the workspace store already publishes once per frame.
+- The Android APK workflow installs the NDK first, with licenses and retries. Two builds on main failed on the NDK download.

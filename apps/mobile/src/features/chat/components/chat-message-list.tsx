@@ -79,7 +79,6 @@ import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-ch
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
-import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import {
   type ChatBubbleMessage,
   type ChatMarkerGroup,
@@ -1778,11 +1777,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   const { t, format, sourceText } = useText();
   const isFocused = useIsFocused();
   const colorOSOn = useColorOSMotion().enabled && isAndroid;
-  const messages = useStreamedMessages(
-    JSON.stringify([target.serverId, target.kind, target.id]),
-    incomingMessages,
-    colorOSOn && isFocused && online && appActive,
-  );
+  // The workspace store already publishes streamed chunks once per frame, so the list renders the
+  // messages as they come. A second per-frame step rendered each flush twice and added a frame.
+  const messages = incomingMessages;
   // How far the bubbles move to show the message times. A swipe on a message bubble sets it.
   const timeOffset = useSharedValue(0);
   const [timesMounted, setTimesMounted] = useState(false);
