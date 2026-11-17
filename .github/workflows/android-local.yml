@@ -9,7 +9,7 @@ name: Build OpenBot Local (Android APK)
 # that first with the "Engine rootfs" workflow (rootfs.yml). A finished rootfs run triggers this one.
 on:
   push:
-    branches: [main]
+    branches: [main, codex/build17-continuation]
     # Engine changes reach the APK through rootfs.yml -> workflow_run.
     paths-ignore:
       - "engine/**"
@@ -36,6 +36,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-local-${{ github.ref }}-${{ github.event_name }}
@@ -278,6 +279,42 @@ jobs:
             grep -o 'android:extractNativeLibs="[a-z]*"' "$MANIFEST" || echo "::warning::extractNativeLibs not in $MANIFEST"
             grep -q 'run.openbot.engine.EngineService' "$MANIFEST" || { echo "::error::EngineService not in the merged manifest"; exit 1; }
           fi
+
+
+      - name: Verify upgrade compatibility with build 16.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/openbot-previous
+          gh run download 43945578236 --repo "$GITHUB_REPOSITORY" --name openbot-local-apk-115 --dir /tmp/openbot-previous
+          previous=$(find /tmp/openbot-previous -name '*.apk' -print -quit)
+          [ -n "$previous" ] || { echo "::error::Previous APK is missing"; exit 1; }
+          tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)
+          "$tools/apksigner" verify --print-certs "$previous" > /tmp/previous-cert.txt
+          "$tools/apksigner" verify --print-certs "$APK" > /tmp/current-cert.txt
+          grep '^Signer #[0-9]* certificate SHA-256 digest:' /tmp/previous-cert.txt > /tmp/previous-digest.txt
+          grep '^Signer #[0-9]* certificate SHA-256 digest:' /tmp/current-cert.txt > /tmp/current-digest.txt
+          test -s /tmp/previous-digest.txt
+          diff -u /tmp/previous-digest.txt /tmp/current-digest.txt
+          "$tools/aapt" dump badging "$previous" > /tmp/previous-badging.txt
+          "$tools/aapt" dump badging "$APK" > /tmp/current-badging.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def package(path):
+              text = Path(path).read_text()
+              match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)'", text, re.M)
+              if not match:
+                  raise SystemExit("Cannot read APK package or version code")
+              return match.group(1), int(match.group(2))
+          old_name, old_code = package("/tmp/previous-badging.txt")
+          new_name, new_code = package("/tmp/current-badging.txt")
+          assert old_name == new_name == "run.openbot.local", (old_name, new_name)
+          assert new_code > old_code, (old_code, new_code)
+          print(f"Upgrade metadata passed: {new_name}, {old_code} -> {new_code}; signing certificate matches")
+          PY
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
