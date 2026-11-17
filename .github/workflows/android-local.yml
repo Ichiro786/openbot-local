@@ -296,9 +296,10 @@ jobs:
           tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)
           "$tools/apksigner" verify --print-certs "$previous" > /tmp/previous-cert.txt
           "$tools/apksigner" verify --print-certs "$APK" > /tmp/current-cert.txt
-          grep '^Signer #[0-9]* certificate SHA-256 digest:' /tmp/previous-cert.txt > /tmp/previous-digest.txt
-          grep '^Signer #[0-9]* certificate SHA-256 digest:' /tmp/current-cert.txt > /tmp/current-digest.txt
+          sed -nE 's/^.*certificate SHA-256 digest: ([[:xdigit:]]{64})$/\1/p' /tmp/previous-cert.txt | sort -u > /tmp/previous-digest.txt
+          sed -nE 's/^.*certificate SHA-256 digest: ([[:xdigit:]]{64})$/\1/p' /tmp/current-cert.txt | sort -u > /tmp/current-digest.txt
           test -s /tmp/previous-digest.txt
+          test -s /tmp/current-digest.txt
           diff -u /tmp/previous-digest.txt /tmp/current-digest.txt
           "$tools/aapt" dump badging "$previous" > /tmp/previous-badging.txt
           "$tools/aapt" dump badging "$APK" > /tmp/current-badging.txt
