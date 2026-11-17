@@ -9,7 +9,7 @@ name: Build OpenBot Local (Android APK)
 # that first with the "Engine rootfs" workflow (rootfs.yml). A finished rootfs run triggers this one.
 on:
   push:
-    branches: [main, codex/build17-continuation]
+    branches: [main]
     # Engine changes reach the APK through rootfs.yml -> workflow_run.
     paths-ignore:
       - "engine/**"
