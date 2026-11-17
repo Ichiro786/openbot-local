@@ -25,6 +25,10 @@ on:
         description: "Compile-check only: build without the engine payload (APK cannot install the engine)"
         type: boolean
         default: false
+      source_ref:
+        description: "Commit or branch of the app code to build (blank = the ref this run was started on). The workflow file still comes from the started ref; use it to A/B an older commit"
+        required: false
+        default: ""
       clear_cache:
         description: "Skip restoring the Gradle, ccache and Bun caches (escape hatch for stale-cache errors); fresh caches are still saved"
         type: boolean
@@ -73,6 +77,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
 
       # A React Native release build needs more disk than the runner leaves free.
