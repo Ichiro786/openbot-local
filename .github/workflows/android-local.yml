@@ -43,7 +43,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: android-local-${{ github.ref }}-${{ github.event_name }}
+  # A dispatch gets its own group, so two builds (such as an A/B pair) can run at once.
+  group: android-local-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:

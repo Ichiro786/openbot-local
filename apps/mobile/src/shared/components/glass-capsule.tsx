@@ -119,8 +119,6 @@ export function GlassCapsule({
               // Downsample before blurring: the capsule is 52 dp tall, so full-resolution blur of the
               // whole list on every scroll frame only spends RenderThread time nobody sees.
               blurReductionFactor={4}
-              // Only the capsule's part of the list, not the whole list, on each scroll frame.
-              blurRegion
               tint={theme === "dark" ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />

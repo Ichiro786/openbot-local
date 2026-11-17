@@ -106,8 +106,6 @@ export const HomeEdgeBlur = memo(function HomeEdgeBlur({
           blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
           intensity={edges.homeIntensity}
           blurReductionFactor={4}
-          // Only the edge's part of the list, not the whole list, on each scroll frame.
-          blurRegion
           tint={dark ? "dark" : "light"}
           style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
         />

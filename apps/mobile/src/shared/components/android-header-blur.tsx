@@ -86,8 +86,6 @@ export function AndroidHeaderBlur({
   const maskId = `android-header-mask-${useId().replaceAll(":", "")}`;
   return (
     <MaskedView
-      // The same hardware mask as the glass band, so a blur that changes each scroll frame does not redraw the mask bitmap.
-      androidRenderingMode="hardware"
       pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
@@ -112,8 +110,6 @@ export function AndroidHeaderBlur({
         blurTarget={target}
         blurMethod="dimezisBlurViewSdk31Plus"
         intensity={BLUR_INTENSITY}
-        // Blur only the bar's part of the content, not the whole scroll view, on each frame.
-        blurRegion
         tint={theme === "dark" ? "dark" : "light"}
         style={StyleSheet.absoluteFill}
       />
