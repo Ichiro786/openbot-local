@@ -19,4 +19,5 @@ class EngineConfigInput : Record {
   @Field var syncDns: Boolean? = null
   @Field var persistPaths: List<String>? = null
   @Field var updateCheckIntervalMs: Double? = null
+  @Field var keepAwake: Boolean? = null
 }

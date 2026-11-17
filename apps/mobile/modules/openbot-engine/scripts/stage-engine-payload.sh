@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Stages the engine payload into the APK assets, where EngineInstaller.kt reads it:
 #
-#   android/src/main/assets/engine/rootfs-arm64.tar.xz         (EngineConfig.BUNDLED_ASSET)
-#   android/src/main/assets/engine/rootfs-arm64.tar.xz.sha256  (EngineConfig.BUNDLED_SHA256)
+#   android/src/main/assets/engine/rootfs-arm64.tar.zst         (EngineConfig.BUNDLED_ASSETS; engines >= 0.72)
+#     or rootfs-arm64.tar.xz when the release has no .zst (older engines)
+#   android/src/main/assets/engine/<that asset>.sha256
 #   android/src/main/assets/engine/engine.json                 (EngineConfig.BUNDLED_MANIFEST)
 #
 # Usage: stage-engine-payload.sh [engine-<version>]
@@ -22,7 +23,7 @@ DEST="$MODULE_DIR/android/src/main/assets/engine"
 REPO="${ENGINE_REPO:-${GITHUB_REPOSITORY:-Ichiro786/openbot-local}}"
 TAG="${1:-${ENGINE_TAG:-}}"
 API="${GITHUB_API_URL:-https://api.github.com}"
-ASSET=rootfs-arm64.tar.xz
+ASSET=rootfs-arm64.tar.xz # what selects a release; the .zst next to it is preferred below
 
 fail() { echo "stage-engine-payload: $*" >&2; exit 1; }
 for c in curl jq sha256sum; do command -v "$c" >/dev/null || fail "missing $c"; done
@@ -59,6 +60,8 @@ else
 fi
 TAG=$(jq -r .tag_name "$WORK/release.json")
 echo "==> $REPO $TAG"
+# zstd unpacks about 9x faster on the phone than xz (research/engine-optimize); bundle it when published.
+if jq -e '.assets[] | select(.name == "rootfs-arm64.tar.zst")' "$WORK/release.json" >/dev/null; then ASSET=rootfs-arm64.tar.zst; fi
 
 download() { # asset-name dest
   local id
@@ -71,7 +74,7 @@ download() { # asset-name dest
 }
 
 mkdir -p "$DEST"
-rm -f "$DEST/$ASSET" "$DEST/$ASSET.sha256" "$DEST/engine.json"
+rm -f "$DEST"/rootfs-arm64.tar.* "$DEST/engine.json"
 download "$ASSET.sha256" "$WORK/$ASSET.sha256"
 download engine.json "$WORK/engine.json"
 download "$ASSET" "$DEST/$ASSET.part"
@@ -80,7 +83,7 @@ want=$(awk '{print tolower($1); exit}' "$WORK/$ASSET.sha256")
 [[ $want =~ ^[0-9a-f]{64}$ ]] || fail "malformed $ASSET.sha256"
 have=$(sha256sum "$DEST/$ASSET.part" | cut -d' ' -f1)
 [ "$have" = "$want" ] || { rm -f "$DEST/$ASSET.part"; fail "$ASSET sha256 $have, expected $want"; }
-json_sha=$(jq -r '.sha256 // empty' "$WORK/engine.json")
+json_sha=$(jq -r --arg a "$ASSET" 'if $a == "rootfs-arm64.tar.zst" then .zst_sha256 else .sha256 end // empty' "$WORK/engine.json")
 [ -z "$json_sha" ] || [ "$json_sha" = "$want" ] || fail "engine.json sha256 $json_sha differs from $ASSET.sha256"
 
 # engine.json as published; make sure it names its tag so the app compares versions by tag.

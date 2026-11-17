@@ -3,6 +3,7 @@ package run.openbot.engine
 import android.content.Context
 import android.content.res.AssetManager
 import android.os.StatFs
+import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -34,6 +35,8 @@ data class EngineRelease(
   val installedBytes: Long,
   /** engine.json as published, written to `$R/.engine-version`. */
   val manifest: String?,
+  /** The payload's file name: `.tar.zst` decodes with zstd, `.tar.xz` with xz. */
+  val asset: String = EngineConfig.DEFAULT_ASSET,
 )
 
 data class InstalledEngine(val tag: String, val sha256: String, val source: String)
@@ -76,12 +79,15 @@ class EngineInstaller(
   // Sources
   // ---------------------------------------------------------------------------------------------
 
-  /** The payload packed into the APK, or null when this build has none. Cheap: reads only the side files. */
+  /**
+   * The payload packed into the APK, or null when this build has none. Cheap: reads only the side files.
+   * Builds from 17 on pack `rootfs-arm64.tar.zst` (about 9x faster to unpack); older ones `.tar.xz`.
+   */
   fun bundled(): EngineRelease? {
     val packed = runCatching { assets.list("engine")?.toList() }.getOrNull() ?: return null
-    if (EngineConfig.BUNDLED_ASSET.substringAfter('/') !in packed) return null
+    val asset = EngineConfig.BUNDLED_ASSETS.firstOrNull { it in packed } ?: return null
     val sha = try {
-      assets.open(EngineConfig.BUNDLED_SHA256).bufferedReader().use { it.readText() }
+      assets.open("engine/$asset.sha256").bufferedReader().use { it.readText() }
         .trim().split(Regex("\\s+")).firstOrNull()?.lowercase()
     } catch (_: IOException) {
       return null
@@ -94,8 +100,8 @@ class EngineInstaller(
     }
     val manifest = manifestText?.let { runCatching { JSONObject(it) }.getOrNull() }
     val size = try {
-      // Works only when the asset is stored uncompressed (noCompress "xz"), which we require.
-      assets.openFd(EngineConfig.BUNDLED_ASSET).use { it.length }
+      // Works only when the asset is stored uncompressed (noCompress "xz", "zst"), which we require.
+      assets.openFd("engine/$asset").use { it.length }
     } catch (_: FileNotFoundException) {
       -1L
     } catch (_: IOException) {
@@ -111,6 +117,7 @@ class EngineInstaller(
       size = size.takeIf { it > 0 } ?: manifest?.optLong("compressed_bytes", -1L) ?: -1L,
       installedBytes = manifest?.optLong("installed_bytes", -1L) ?: -1L,
       manifest = manifestText,
+      asset = asset,
     )
   }
 
@@ -168,6 +175,7 @@ class EngineInstaller(
       size = asset.optLong("size", -1),
       installedBytes = -1,
       manifest = null,
+      asset = config.assetName,
     )
   }
 
@@ -319,8 +327,9 @@ class EngineInstaller(
     when (release.source) {
       "bundled" -> {
         val expected = release.sha256!!
-        verify(release.tag, release.size, expected) { assets.open(EngineConfig.BUNDLED_ASSET, AssetManager.ACCESS_STREAMING) }
-        unpackAndSwap(release, expected, release.size) { assets.open(EngineConfig.BUNDLED_ASSET, AssetManager.ACCESS_STREAMING) }
+        val path = "engine/${release.asset}"
+        verify(release.tag, release.size, expected) { assets.open(path, AssetManager.ACCESS_STREAMING) }
+        unpackAndSwap(release, expected, release.size) { assets.open(path, AssetManager.ACCESS_STREAMING) }
       }
       else -> {
         val archive = download(release)
@@ -368,16 +377,21 @@ class EngineInstaller(
     NativeFs.deleteTree(paths.staging)
     EngineState.installing(InstallStep.EXTRACTING, 0.0, message = "Unpacking ${release.tag}")
     val ctx = currentCoroutineContext()
+    val started = SystemClock.elapsedRealtime()
     val result = open().use { input ->
       TarXzExtractor.extract(
         input,
         size,
         paths.staging,
+        zstd = TarXzExtractor.isZstd(release.asset),
         onProgress = { EngineState.installing(InstallStep.EXTRACTING, it, message = "Unpacking ${release.tag}") },
         shouldContinue = { ctx.isActive },
       )
     }
-    log.system("Unpacked ${result.files} files, ${result.symlinks} symlinks (${result.bytes / (1024 * 1024)} MiB)")
+    log.system(
+      "Unpacked ${result.files} files, ${result.symlinks} symlinks (${result.bytes / (1024 * 1024)} MiB) from ${release.asset} " +
+        "in ${(SystemClock.elapsedRealtime() - started) / 1000.0} s",
+    )
     if (!File(paths.staging, EngineConfig.START_SCRIPT.trimStart('/')).exists()) {
       NativeFs.deleteTree(paths.staging)
       throw EngineInstallException("Payload ${release.tag} has no ${EngineConfig.START_SCRIPT}")

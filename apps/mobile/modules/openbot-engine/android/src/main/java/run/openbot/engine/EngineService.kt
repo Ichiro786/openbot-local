@@ -11,7 +11,6 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.os.SystemClock
 import android.system.ErrnoException
 import android.system.Os
@@ -44,7 +43,8 @@ import java.io.File
 /**
  * Foreground service (type specialUse) that keeps the OpenBot engine alive:
  *  1. installs/updates the payload when needed (bundled APK asset first, network as fallback);
- *  2. runs `proot ... /bin/bash /root/openbot-start.sh` with a partial wake lock;
+ *  2. runs `proot ... /bin/bash /root/openbot-start.sh`; the partial wake lock follows [PowerGovernor]
+ *     (agents working, starting, app on screen, "Always on"), which also handles heat;
  *  3. reports RUNNING when `$R/run/openbot/engine.state` says `state=ready` with a live
  *     `engine_pid` (or the log prints OPENBOT_LOCAL_READY);
  *  4. restarts on a crash with backoff 1 s .. 60 s (reset after a minute up), except for launcher
@@ -65,7 +65,6 @@ class EngineService : Service() {
 
     private const val MAX_BACKOFF_MS = 60_000L
     private const val STABLE_AFTER_MS = 60_000L
-    private const val WAKE_LOCK_TIMEOUT_MS = 12L * 60 * 60 * 1000
 
     @Volatile var isRunning = false
       private set
@@ -92,7 +91,8 @@ class EngineService : Service() {
   @Volatile private var stopRequested = false
   /** An update was just swapped in; the first ready commits it, an exit before ready rolls it back. */
   @Volatile private var awaitingConfirm = false
-  private var wakeLock: PowerManager.WakeLock? = null
+  private lateinit var governor: PowerGovernor
+  @Volatile private var tooHot = false
   private lateinit var log: EngineLog
   private lateinit var paths: EnginePaths
 
@@ -103,6 +103,7 @@ class EngineService : Service() {
     isRunning = true
     log = EngineLog.get(this)
     paths = EnginePaths(this)
+    governor = PowerGovernor(this, scope, paths, log) { onTooHot() }
     createChannel()
     scope.launch {
       EngineState.status
@@ -136,8 +137,8 @@ class EngineService : Service() {
     stopRequested = true
     // Last resort when the system tears the service down: try the graceful path briefly.
     process?.let { p -> Thread { gracefulStopBlocking(p, 5_000) }.start() }
+    governor.stop()
     scope.cancel()
-    releaseWakeLock()
     super.onDestroy()
   }
 
@@ -164,7 +165,7 @@ class EngineService : Service() {
       supervisor = null
       CommandRunner.cancelAll()
       EngineState.update { it.copy(phase = EnginePhase.STOPPED, pid = null, nextRestartAtMs = null, installStep = null, progress = null, message = null) }
-      releaseWakeLock()
+      governor.stop()
     }
     if (stopService) {
       withContext(Dispatchers.Main) {
@@ -297,12 +298,12 @@ class EngineService : Service() {
       if (exit == 0) {
         // A clean stop we did not ask for (e.g. `openbot-start.sh --stop` from a terminal).
         EngineState.update { it.copy(phase = EnginePhase.STOPPED, pid = null, lastExitCode = 0, message = null) }
-        releaseWakeLock()
+        governor.stop()
         return
       }
       if (LauncherExit.isFatal(exit)) {
         EngineState.update { it.copy(phase = EnginePhase.ERROR, pid = null, lastExitCode = exit, message = description) }
-        releaseWakeLock()
+        governor.stop()
         notifyStatus()
         return
       }
@@ -310,7 +311,7 @@ class EngineService : Service() {
       restarts++
       if (!config.autoRestart) {
         EngineState.update { it.copy(phase = EnginePhase.CRASHED, pid = null, lastExitCode = exit, restartCount = restarts, message = description) }
-        releaseWakeLock()
+        governor.stop()
         return
       }
       val next = System.currentTimeMillis() + backoff
@@ -342,7 +343,8 @@ class EngineService : Service() {
     log.system("Starting ${EngineConfig.START_SCRIPT} (profile ${config.profile ?: "remembered"})")
     val p = ProotCommand.processBuilder(paths, config, ProotCommand.launcher()).start()
     process = p
-    acquireWakeLock()
+    tooHot = false
+    governor.start(config)
     EngineState.update { it.copy(pid = p.pidCompat(), startedAtMs = System.currentTimeMillis()) }
 
     val reader = launch {
@@ -398,6 +400,7 @@ class EngineService : Service() {
     if (EngineState.current.phase == EnginePhase.RUNNING) return
     EngineState.update { it.copy(phase = EnginePhase.RUNNING, message = null, nextRestartAtMs = null) }
     log.system("Engine is up: $detail")
+    governor.onReady()
     if (awaitingConfirm) {
       awaitingConfirm = false
       runCatching { EngineInstaller(this, paths).commitUpdate() }
@@ -439,29 +442,24 @@ class EngineService : Service() {
 
   private fun fail(message: String) {
     EngineState.update { it.copy(phase = EnginePhase.ERROR, message = message, installStep = null, progress = null, pid = null) }
-    releaseWakeLock()
+    governor.stop()
     notifyStatus()
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Wake lock
+  // Heat
   // ---------------------------------------------------------------------------------------------
 
-  @Synchronized
-  private fun acquireWakeLock() {
-    val lock = wakeLock ?: (getSystemService(Context.POWER_SERVICE) as PowerManager)
-      .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenBotLocal:engine")
-      .also {
-        it.setReferenceCounted(false)
-        wakeLock = it
-      }
-    // The timeout caps a leaked lock; each (re)start renews it.
-    lock.acquire(WAKE_LOCK_TIMEOUT_MS)
-  }
-
-  @Synchronized
-  private fun releaseWakeLock() {
-    wakeLock?.let { if (it.isHeld) it.release() }
+  /** Thermal SEVERE with no agent working ([PowerGovernor]): stop the engine and say why. */
+  private fun onTooHot() {
+    if (tooHot || stopRequested) return
+    tooHot = true
+    scope.launch {
+      stopAll(stopService = false)
+      EngineState.update { it.copy(message = "Stopped because the phone is too hot. Start it again when it has cooled down.") }
+      stopRequested = false
+      notifyStatus()
+    }
   }
 
   // ---------------------------------------------------------------------------------------------

@@ -2,6 +2,7 @@ package run.openbot.engine
 
 import android.system.ErrnoException
 import android.system.Os
+import com.github.luben.zstd.ZstdInputStreamNoFinalizer
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.tukaani.xz.XZInputStream
 import java.io.BufferedInputStream
@@ -11,13 +12,16 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Streams a .tar.xz rootfs to disk (never into memory), as README-ENGINE.md asks:
+ * Streams a .tar.zst (engine >= 0.72, what the APK bundles) or .tar.xz rootfs to disk (never into
+ * memory), as README-ENGINE.md asks:
  *  - symlinks are created exactly as stored with Os.symlink; absolute targets are right, proot
  *    resolves them inside the rootfs;
  *  - mode bits are applied with Os.chmod; owners (all 0) are ignored, proot -0 fakes root;
  *  - the payload is packed with --hard-dereference, so there are no hard links; one that appears
  *    anyway is copied, since the app's SELinux domain cannot link();
- *  - device nodes and fifos are skipped (/dev, /proc, /sys are bound from the host).
+ *  - device nodes and fifos are skipped (/dev, /proc, /sys are bound from the host);
+ *  - file and directory times are restored (symlinks keep the unpack time), so caches keyed on mtimes
+ *    (Python's .pyc checks, make-style tools) stay valid.
  */
 internal object TarXzExtractor {
   private const val MODE_MASK = 0xFFF // 07777
@@ -27,24 +31,30 @@ internal object TarXzExtractor {
 
   class Result(val files: Int, val symlinks: Int, val bytes: Long)
 
+  /** Decoder by asset name: `.zst` is zstd, anything else xz. */
+  fun isZstd(assetName: String): Boolean = assetName.endsWith(".zst")
+
   /** [compressedSize] drives progress; pass -1 when unknown (progress then stays null-ish at 0). */
   fun extract(
     source: InputStream,
     compressedSize: Long,
     dest: File,
+    zstd: Boolean,
     onProgress: (fraction: Double) -> Unit,
     shouldContinue: () -> Boolean,
   ): Result {
     dest.mkdirs()
     val counting = CountingInputStream(BufferedInputStream(source, 1 shl 16))
-    val dirModes = ArrayList<Pair<File, Int>>()
+    val dirModes = ArrayList<Triple<File, Int, Long>>()
     var files = 0
     var symlinks = 0
     var bytes = 0L
     var lastReported = -1
-    // xz -9 uses a 64 MiB dictionary; -1 = no memory limit (the decoder needs ~65 MiB).
-    XZInputStream(counting, -1).use { xz ->
-      TarArchiveInputStream(BufferedInputStream(xz, 1 shl 16)).use { tar ->
+    // xz -9 uses a 64 MiB dictionary; -1 = no memory limit (the decoder needs ~65 MiB). The zstd payload
+    // is packed with --long=27 (128 MiB window), which the decoder must be allowed to use.
+    val decoded: InputStream = if (zstd) ZstdInputStreamNoFinalizer(counting).setLongMax(27) else XZInputStream(counting, -1)
+    decoded.use { plain ->
+      TarArchiveInputStream(BufferedInputStream(plain, 1 shl 16)).use { tar ->
         while (true) {
           if (!shouldContinue()) throw InterruptedException("extraction cancelled")
           @Suppress("DEPRECATION")
@@ -52,10 +62,11 @@ internal object TarXzExtractor {
           val relative = sanitize(entry.name) ?: continue
           val target = File(dest, relative)
           val mode = entry.mode and MODE_MASK
+          val modified = entry.modTime.time
           when {
             entry.isDirectory -> {
               mkdirsNoFollow(target)
-              dirModes.add(target to mode)
+              dirModes.add(Triple(target, mode, modified))
             }
             entry.isSymbolicLink -> {
               target.parentFile?.let { mkdirsNoFollow(it) }
@@ -75,6 +86,7 @@ internal object TarXzExtractor {
               replace(target)
               target.outputStream().use { out -> bytes += tar.copyTo(out, 1 shl 16) }
               Os.chmod(target.path, mode or OWNER_RW)
+              if (modified > 0) target.setLastModified(modified)
               files++
             }
             else -> Unit
@@ -89,12 +101,14 @@ internal object TarXzExtractor {
         }
       }
     }
-    // Directory modes last, so read-only directories did not block their own entries.
-    for ((dir, mode) in dirModes.asReversed()) {
+    // Directory modes and times last, so read-only directories did not block their own entries and
+    // writing the entries did not move the directory times again.
+    for ((dir, mode, modified) in dirModes.asReversed()) {
       try {
         Os.chmod(dir.path, mode or OWNER_RWX)
       } catch (_: ErrnoException) {
       }
+      if (modified > 0) dir.setLastModified(modified)
     }
     onProgress(1.0)
     return Result(files, symlinks, bytes)

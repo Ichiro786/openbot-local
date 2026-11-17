@@ -200,6 +200,7 @@ class OpenBotEngineModule : Module() {
 
     AsyncFunction("setConfig") { input: EngineConfigInput ->
       EngineConfig.save(context, input)
+      input.keepAwake?.let { PowerGovernor.keepAwakeChanged(it) }
       EngineConfig.load(context).toMap()
     }
 

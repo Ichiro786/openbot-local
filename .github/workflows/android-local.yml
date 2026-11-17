@@ -264,9 +264,13 @@ jobs:
           if [ "$SKIP_PAYLOAD" = true ]; then
             echo "::warning::built without the engine payload (compile check only)"
           else
-            grep -E 'assets/engine/rootfs-arm64\.tar\.xz$' /tmp/apk-list.txt | grep -q ' Stored ' ||
-              { echo "::error::assets/engine/rootfs-arm64.tar.xz missing or compressed"; exit 1; }
-            grep -q 'assets/engine/rootfs-arm64.tar.xz.sha256' /tmp/apk-list.txt || { echo "::error::payload sha256 missing"; exit 1; }
+            # Build 17 on: rootfs-arm64.tar.zst (engines >= 0.72); older engines: .tar.xz.
+            payload=$(grep -oE 'assets/engine/rootfs-arm64\.tar\.(zst|xz)$' /tmp/apk-list.txt | head -n1)
+            [ -n "$payload" ] || { echo "::error::no assets/engine/rootfs-arm64.tar.(zst|xz) in the APK"; exit 1; }
+            grep -E "${payload//./\\.}$" /tmp/apk-list.txt | grep -q ' Stored ' ||
+              { echo "::error::$payload is compressed (noCompress missing)"; exit 1; }
+            grep -q "$payload.sha256" /tmp/apk-list.txt || { echo "::error::payload sha256 missing"; exit 1; }
+            unzip -l "$APK" | grep -q 'lib/arm64-v8a/libzstd-jni' || { echo "::error::zstd-jni native library missing"; exit 1; }
           fi
           MANIFEST=$(find apps/mobile/android/app/build/intermediates -path '*release*' -name AndroidManifest.xml -path '*merged_manifest*' | head -n1)
           echo "merged manifest: $MANIFEST"

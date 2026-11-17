@@ -9,8 +9,8 @@ import org.json.JSONObject
  * override them with `setConfig`, and overrides persist in private SharedPreferences.
  *
  * Payload sources, in order:
- *  1. **Bundled** (primary): `assets/engine/rootfs-arm64.tar.xz` + `.sha256` (+ optional
- *     `engine.json`) packed into the APK by the build workflow, stored uncompressed.
+ *  1. **Bundled** (primary): `assets/engine/rootfs-arm64.tar.zst` (build 17 on) or `.tar.xz`, + `.sha256`
+ *     (+ optional `engine.json`) packed into the APK by the build workflow, stored uncompressed.
  *  2. **Remote** (fallback, or when [preferRemote]):
  *     - [manifestUrl]: a public `engine.json` with `tag`, `url`, `sha256`, `compressed_bytes`
  *       (the `engine-latest` release format), or
@@ -41,10 +41,12 @@ data class EngineConfig(
   /** Paths under [persistPaths] where the NEW payload's copy wins (launcher scripts). */
   val keepNewPaths: List<String>,
   val updateCheckIntervalMs: Long,
+  /** "Always on": hold the wake lock the whole time the engine runs (before build 17, always). */
+  val keepAwake: Boolean,
 ) {
   companion object {
-    const val BUNDLED_ASSET = "engine/rootfs-arm64.tar.xz"
-    const val BUNDLED_SHA256 = "engine/rootfs-arm64.tar.xz.sha256"
+    /** Under `assets/engine/`, in order of preference; each with its `.sha256`. */
+    val BUNDLED_ASSETS = listOf("rootfs-arm64.tar.zst", "rootfs-arm64.tar.xz")
     const val BUNDLED_MANIFEST = "engine/engine.json"
 
     /** The fork's releases; private today, so remote install needs a token or a public mirror. */
@@ -90,6 +92,7 @@ data class EngineConfig(
         persistPaths = lines(p.getString("persistPaths", null)) ?: DEFAULT_PERSIST,
         keepNewPaths = DEFAULT_KEEP_NEW,
         updateCheckIntervalMs = p.getLong("updateCheckIntervalMs", DEFAULT_UPDATE_INTERVAL_MS),
+        keepAwake = p.getBoolean("keepAwake", false),
       )
     }
 
@@ -142,6 +145,7 @@ data class EngineConfig(
         input.syncDns?.let { putBoolean("syncDns", it) }
         input.persistPaths?.let { putString("persistPaths", it.joinToString("\n")) }
         input.updateCheckIntervalMs?.let { putLong("updateCheckIntervalMs", it.toLong()) }
+        input.keepAwake?.let { putBoolean("keepAwake", it) }
       }.apply()
     }
   }
@@ -162,5 +166,6 @@ data class EngineConfig(
     "syncDns" to syncDns,
     "persistPaths" to persistPaths,
     "updateCheckIntervalMs" to updateCheckIntervalMs.toDouble(),
+    "keepAwake" to keepAwake,
   )
 }

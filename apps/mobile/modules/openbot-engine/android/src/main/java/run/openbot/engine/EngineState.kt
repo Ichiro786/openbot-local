@@ -47,6 +47,8 @@ data class EngineStatus(
   val updateError: String? = null,
   /** True while a freshly installed update has not reached ready yet (a failure rolls it back). */
   val updatePendingConfirm: Boolean = false,
+  /** Why the wake lock is held ("Working", "App open", "Always on", ...), or null: the phone may sleep. */
+  val awake: String? = null,
 ) {
   fun toMap(): Map<String, Any?> = mapOf(
     "phase" to phase.js,
@@ -66,6 +68,7 @@ data class EngineStatus(
     "latestBytes" to latestBytes.toDouble(),
     "updateError" to updateError,
     "updatePendingConfirm" to updatePendingConfirm,
+    "awake" to awake,
   )
 }
 

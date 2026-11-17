@@ -37,6 +37,9 @@ dependencies {
   implementation 'org.apache.commons:commons-compress:1.27.1'
   // Pure-Java xz decoder (also what commons-compress uses for .xz).
   implementation 'org.tukaani:xz:1.10'
+  // zstd decoder for rootfs-arm64.tar.zst (build 17 on; about 9x faster to unpack than xz). The aar
+  // carries the arm64 JNI library.
+  implementation 'com.github.luben:zstd-jni:1.5.7-6@aar'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
   implementation 'androidx.core:core-ktx:1.13.1'
 }

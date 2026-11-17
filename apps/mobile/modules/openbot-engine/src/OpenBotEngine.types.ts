@@ -36,6 +36,8 @@ export interface EngineStatus {
   updateError?: string | null;
   /** A new engine was swapped in and has not reached ready yet; a failure rolls it back. */
   updatePendingConfirm?: boolean;
+  /** Why the engine keeps the phone awake ("Working", "App open", "Always on", ...); null: it may sleep. Build 17+. */
+  awake?: string | null;
 }
 
 /** What getConfig/setConfig answer (EngineConfig.toMap in Kotlin). The token itself is never returned. */
@@ -55,6 +57,8 @@ export interface EngineConfig {
   syncDns: boolean;
   persistPaths: string[];
   updateCheckIntervalMs: number;
+  /** "Always on": the wake lock is held the whole time the engine runs. Build 17+; older native builds omit it. */
+  keepAwake?: boolean;
 }
 
 /** Fields to change (EngineConfigInput in Kotlin). An empty string resets a string field to its default. */
@@ -79,6 +83,7 @@ export interface EngineConfigInput {
   syncDns?: boolean;
   persistPaths?: string[];
   updateCheckIntervalMs?: number;
+  keepAwake?: boolean;
 }
 
 /** An answer of OpenBot's control socket: HTTP status plus the parsed `key=value` body. */

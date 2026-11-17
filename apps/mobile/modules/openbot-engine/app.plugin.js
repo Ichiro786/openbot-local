@@ -9,7 +9,7 @@
 //     targetSdk 29+ may exec binaries from;
 //   - reactNativeArchitectures=arm64-v8a plus an abiFilters block, since only arm64 proot ships;
 //   - keepDebugSymbols for the proot executables so AGP never strips them;
-//   - noCompress "xz", so assets/engine/rootfs-arm64.tar.xz is stored and AssetManager.openFd works.
+//   - noCompress "xz" and "zst", so assets/engine/rootfs-arm64.tar.{zst,xz} is stored and AssetManager.openFd works.
 const {
   AndroidConfig,
   createRunOncePlugin,
@@ -86,7 +86,7 @@ android {
         }
     }
     androidResources {
-        noCompress += ["xz"]
+        noCompress += ["xz", "zst"]
     }
     packagingOptions {
         jniLibs {
