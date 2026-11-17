@@ -882,6 +882,8 @@ function GlassFill({
           blurMethod="dimezisBlurViewSdk31Plus"
           intensity={FROST_INTENSITY}
           blurReductionFactor={4}
+          // Only the menu's part of the target, not the whole target.
+          blurRegion
           tint={dark ? "dark" : "light"}
           style={StyleSheet.absoluteFill}
         />
