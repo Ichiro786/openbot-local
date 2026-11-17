@@ -333,6 +333,10 @@ export function useChatMotion(
   const content = useSharedValue(0);
   // The list writes its scroll position here on the UI thread, so scrolling runs no JavaScript here.
   const scrollOffset = useSharedValue(0);
+  /** The reader's finger is on the list: from the start of a drag to its release. */
+  const dragging = useSharedValue(false);
+  /** Legend List writes here whether the list is at its end, within a point, on the UI thread. */
+  const atEnd = useSharedValue(false);
   const lowestOffset = useSharedValue(0);
   const scrolledUp = useSharedValue(false);
   const firstOffset = useSharedValue(0);
@@ -750,11 +754,12 @@ export function useChatMotion(
     // A drag is the reader's choice. A move of the list while rows get their sizes is not.
     openingFollowNow.current = false;
     drags.current += 1;
+    dragging.set(true);
     setOpeningFollow(false);
     leaveLatest();
     reveal();
     cancelSend();
-  }, [leaveLatest, reveal, cancelSend]);
+  }, [leaveLatest, reveal, cancelSend, dragging]);
   /**
    * Opens the chat with row `index` under the header, instead of at the latest message. A message
    * from search is the reader's choice of place. The NEW line (`unread`) is not: as on desktop, the
@@ -799,8 +804,11 @@ export function useChatMotion(
   // Only a user scroll can resume following. Keyboard dismissal can make the
   // reply visible without the user choosing to return to it.
   const onScrollEndDrag = useCallback(
-    (event: { nativeEvent: Pick<NativeScrollEvent, "contentOffset"> }) => followFrom(event.nativeEvent.contentOffset.y),
-    [followFrom],
+    (event: { nativeEvent: Pick<NativeScrollEvent, "contentOffset"> }) => {
+      dragging.set(false);
+      followFrom(event.nativeEvent.contentOffset.y);
+    },
+    [followFrom, dragging],
   );
   const scrollToLatest = useCallback(() => {
     followLatest.current = true;
@@ -839,6 +847,8 @@ export function useChatMotion(
         (openingFollow && !holdOpening) ||
         pinnedToLatest,
       scrollOffset,
+      dragging,
+      atEnd,
       historyStyle,
       revealed,
       firstMessageStyle,
@@ -876,6 +886,8 @@ export function useChatMotion(
       openingFollow,
       pinnedToLatest,
       scrollOffset,
+      dragging,
+      atEnd,
       historyStyle,
       revealed,
       firstMessageStyle,

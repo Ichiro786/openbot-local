@@ -1,6 +1,11 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { BrowserTakeoverRequest, RespondToBrowserSecretInput } from "@openbot/contracts/ipc";
+import type {
+  BrowserTakeoverRequest,
+  BrowserVaultSkipReason,
+  RespondToBrowserSecretInput,
+} from "@openbot/contracts/ipc";
 import { markdownInlinePlainText } from "@openbot/contracts/markdown-preview-text";
+import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { GlassView } from "expo-glass-effect";
 import { Spinner, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
@@ -16,6 +21,15 @@ import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { useText } from "@/shared/lib/text";
+
+/** Why a saved login that fits the site was not filled, as the user reads it. */
+const VAULT_SKIP_TEXT = {
+  "agent-script": "mobile.chat.browserSecret.vaultSkip.agentScript",
+  "field-kind": "mobile.chat.browserSecret.vaultSkip.fieldKind",
+  "login-choice": "mobile.chat.browserSecret.vaultSkip.loginChoice",
+  "no-secret": "mobile.chat.browserSecret.vaultSkip.noPassword",
+  "vault-unreadable": "mobile.chat.browserSecret.vaultSkip.vaultUnreadable",
+} as const satisfies Record<BrowserVaultSkipReason, MobileTextKey>;
 
 /**
  * The surface of a browser request above the composer: one opaque gray, as the chat scrolls under
@@ -110,11 +124,19 @@ export function BrowserTakeoverCard({
     }
   };
   const reload = request.secret?.requiresReload ? ` ${t("mobile.chat.browserSecret.takeoverReload")}` : "";
+  // The site refused the server's address. Only the desktop app sends a sign-in from the user's own device (#9783).
+  const signInBlocked = request.reason === "sign-in-blocked";
   return (
     <BrowserRequestCard
       icon={<Globe color={String(muted)} size={14} strokeWidth={2.2} />}
-      title={t("mobile.chat.browserSecret.takeoverTitle")}
-      body={`${t("mobile.chat.browserSecret.takeoverBody")}${reload}`}
+      title={t(
+        signInBlocked ? "mobile.chat.browserSecret.signInBlockedTitle" : "mobile.chat.browserSecret.takeoverTitle",
+      )}
+      body={
+        signInBlocked
+          ? t("mobile.chat.browserSecret.signInBlockedBody")
+          : `${t("mobile.chat.browserSecret.takeoverBody")}${reload}`
+      }
       busy={pending}
       onCancel={() => void finish("cancel")}
     >
@@ -192,6 +214,11 @@ export function BrowserSecretComposer({
     : request.secret?.method === "authenticator"
       ? t("mobile.chat.browserSecret.authenticatorCode")
       : t("mobile.chat.browserSecret.oneTimeCode");
+  const vaultSkip = request.vaultSkip
+    ? request.vaultSkip === "no-secret" && !password
+      ? t("mobile.chat.browserSecret.vaultSkip.noAuthenticatorKey")
+      : t(VAULT_SKIP_TEXT[request.vaultSkip])
+    : null;
   const ready = !pending && (password ? Boolean(value) : value.length === digits);
   const send = async (decision: "submit" | "cancel" | "takeover") => {
     if (pending) return;
@@ -221,6 +248,11 @@ export function BrowserSecretComposer({
         busy={pending}
         onCancel={() => void send("cancel")}
       >
+        {vaultSkip ? (
+          <Typography.Paragraph type="body-xs" className="text-text-secondary">
+            {vaultSkip}
+          </Typography.Paragraph>
+        ) : null}
         <Button
           size="sm"
           variant="ghost"

@@ -40,6 +40,7 @@ import {
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { FOCUS_USE_CAPABILITY, FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
 import { HOST_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/host-admin-v1";
+import { HOST_APPEARANCE_CAPABILITY } from "@openbot/contracts/team-protocol/host-appearance-v1";
 import { HOST_KEY_ROTATION_CAPABILITY } from "@openbot/contracts/team-protocol/host-key-rotation-v1";
 import { HOST_MEMBER_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/host-member-update-v1";
 import { HOST_PERSONALITY_CAPABILITY } from "@openbot/contracts/team-protocol/host-personality-v1";
@@ -52,12 +53,14 @@ import { INSTANCE_TRANSFER_CAPABILITY } from "@openbot/contracts/team-protocol/i
 import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "@openbot/contracts/team-protocol/live-activity-push-v1";
 import { LIVE_VOICE_EVENT } from "@openbot/contracts/team-protocol/live-voice-v1";
 import { LOCAL_SERVERS_CAPABILITY } from "@openbot/contracts/team-protocol/local-servers-v1";
+import { MAC_APPS_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/mac-apps-limit-v1";
 import { MACHINE_RESOURCES_CAPABILITY } from "@openbot/contracts/team-protocol/machine-resources-v1";
 import { MCP_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-access-v1";
 import { MEMORY_REVIEW_CAPABILITY } from "@openbot/contracts/team-protocol/memory-review-v1";
 import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
 import { PASSWORD_MANAGERS_CAPABILITY } from "@openbot/contracts/team-protocol/password-managers-v1";
 import { PENDING_APPROVAL_CAPABILITY } from "@openbot/contracts/team-protocol/pending-approval-v1";
+import { PHONE_FEEDBACK_CAPABILITY } from "@openbot/contracts/team-protocol/phone-feedback-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/providers-v1";
 import { PUSH_NOTIFICATION_THREADS_CAPABILITY } from "@openbot/contracts/team-protocol/push-notification-threads-v1";
@@ -75,6 +78,7 @@ import { SIDEBAR_PINS_CAPABILITY } from "@openbot/contracts/team-protocol/sideba
 import { SIGN_IN_RELAY_CAPABILITY } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 import { SKILL_LEARNING_CAPABILITY } from "@openbot/contracts/team-protocol/skill-learning-v1";
 import { SKILLS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/skills-admin-v1";
+import { UI_BLOCK_PREVIEW_EDIT_CAPABILITY } from "@openbot/contracts/team-protocol/ui-block-preview-edit-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { TEAM_PROTOCOL_V3 } from "@openbot/contracts/team-protocol/v3";
 import { decodeTeamProtocolSupportV9 } from "@openbot/contracts/team-protocol/v9";
@@ -100,9 +104,15 @@ import {
   runTeamEffect,
 } from "@openbot/team-client";
 import { verifyEd25519Base64Url } from "@openbot/team-client/ed25519";
+import { feedbackApproval } from "@openbot/team-client/feedback-approval";
 import { createFocusUsePing } from "@openbot/team-client/focus-use";
 import { createHostedServerWake, WAKE_RECONNECT_DELAY_MS } from "@openbot/team-client/hosted-server-wake";
-import type { RemoteFileUpload, RemoteLargeDownload, RemoteTeamEvent } from "@openbot/team-client/remote-peer";
+import type {
+  RemoteDownloadWatch,
+  RemoteFileUpload,
+  RemoteLargeDownload,
+  RemoteTeamEvent,
+} from "@openbot/team-client/remote-peer";
 import { withWholeApproval } from "@openbot/team-client/runtime-attention";
 import {
   createHostLocalServer,
@@ -112,6 +122,7 @@ import {
   readSidebarPins,
   rotateHostKey,
   seedSidebarPins,
+  setHostAppearance,
   setSidebarPins,
   updateHostIdentity,
 } from "@openbot/team-client/team-admin-requests";
@@ -123,6 +134,7 @@ import {
   respondToApproval,
   respondToBrowserSecret,
   respondToBrowserTakeover,
+  sendPhoneFeedback,
   type TeamApiRequest,
   uploadAttachmentDraft,
 } from "@openbot/team-client/team-api-requests";
@@ -149,6 +161,7 @@ import { ShareExtensionSync } from "@/features/share/share-extension-sync";
 import { ShortcutsSync } from "@/features/shortcuts/shortcuts-sync";
 import { fetch } from "@/features/support/model/logged-fetch";
 import { supportLog } from "@/features/support/model/support-log";
+import { forgetPhoneFeedback, shownPhoneFeedback } from "@/features/support/model/support-log-capture";
 import type { RemoteTeamTransportRef } from "@/features/workspace/components/remote-team-transport";
 import {
   ServerConnection,
@@ -192,6 +205,7 @@ import {
   withPhoneSidebarPins,
 } from "@/features/workspace/model/agent-pins";
 import { ConnectionWaits } from "@/features/workspace/model/connection-waits";
+import { NO_CONTEXT_STATES, reduceContextStates } from "@/features/workspace/model/context-states";
 import { conversationMessageId, decodeConversationPage } from "@/features/workspace/model/conversation";
 import { MobileConversationStore } from "@/features/workspace/model/conversation-store";
 import {
@@ -206,6 +220,7 @@ import { LiveWorkspaceStore } from "@/features/workspace/model/live-workspace-st
 import {
   dropApproval,
   InactiveRequestError,
+  type PendingApproval,
   reducePendingApprovals,
 } from "@/features/workspace/model/pending-approvals";
 import { type QueryScope, queryKeys } from "@/features/workspace/model/query-keys";
@@ -601,6 +616,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       liveState.update("unreadCounts", (current) => withoutKeys(current, removedAgentIds));
       liveState.update("firstUnreadMessageIds", (current) => withoutKeys(current, removedAgentIds));
       liveState.update("activityByServer", (current) => withoutKeys(current, serverIds));
+      liveState.update("contextByServer", (current) => withoutKeys(current, serverIds));
       liveState.update("threadWaitsByServer", (current) => withoutKeys(current, serverIds));
       liveState.update("turnLinesByServer", (current) => withoutKeys(current, serverIds));
       liveState.update("approvalRequests", (current) => withoutKeys(current, serverIds));
@@ -722,11 +738,12 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       upload?: RemoteFileUpload,
       onUploadProgress?: (fraction: number) => void,
       largeDownload?: RemoteLargeDownload,
+      download?: RemoteDownloadWatch,
     ): Promise<T> => {
       if (serverId) await connectionWaits.whenConnected(serverId);
       const client = serverId ? connections.current.get(serverId)?.client : null;
       if (!client) throw new Error(currentText().t("mobile.workspace.error.transportNotReady"));
-      return client.request(method, path, decode, body, upload, onUploadProgress, largeDownload);
+      return client.request(method, path, decode, body, upload, onUploadProgress, largeDownload, download);
     },
     [connectionWaits],
   );
@@ -1054,10 +1071,51 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     channelStore,
   ]);
 
+  /** The reads of loaded open requests that a latest page left out. A change during a read reads it again. */
+  const openExchangeReads = useRef(new Map<string, { again: boolean }>());
+  const refreshOpenExchanges = useCallback(
+    (agentId: string, serverId = activeServerIdRef.current) => {
+      for (const messageId of conversationStore.openExchangesBeforeLatest(agentId)) {
+        const key = `${agentId}\0${messageId}`;
+        const running = openExchangeReads.current.get(key);
+        if (running) {
+          running.again = true;
+          continue;
+        }
+        const read = { again: true };
+        openExchangeReads.current.set(key, read);
+        const generation = loadGeneration.current;
+        const isCurrent = () =>
+          generation === loadGeneration.current && Boolean(serverId) && !removedServers.current.has(serverId ?? "");
+        void (async () => {
+          try {
+            while (read.again && isCurrent()) {
+              read.again = false;
+              // The page around the request holds its whole turn at least, with the request as the host has it.
+              const page = await request(
+                "GET",
+                `${TEAM_API_ROUTES.agent.conversationPage(agentId)}?limit=1&around=${encodeURIComponent(messageId)}`,
+                decodeConversationPage,
+                undefined,
+                serverId,
+              );
+              if (isCurrent() && page.agentId === agentId) conversationStore.replaceMessage(page, messageId);
+            }
+          } finally {
+            // In the same step as the last check, so a later page starts a new read and is not lost.
+            openExchangeReads.current.delete(key);
+          }
+        })()
+          // The next latest page reads it again.
+          .catch(() => undefined);
+      }
+    },
+    [request, conversationStore],
+  );
   const loadConversation = useCallback(
     async (agentId: string, serverId = activeServerIdRef.current, refresh = false, attach = false) => {
       const generation = loadGeneration.current;
-      return conversationStore.loadLatest(
+      const page = await conversationStore.loadLatest(
         agentId,
         () =>
           request(
@@ -1071,8 +1129,10 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         refresh,
         attach,
       );
+      refreshOpenExchanges(agentId, serverId);
+      return page;
     },
-    [request, conversationStore],
+    [request, conversationStore, refreshOpenExchanges],
   );
   // A stable function: an open chat reloads its history when this changes.
   const loadLatestMessages = useCallback(
@@ -1347,11 +1407,27 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
   );
   const foregroundRef = useRef(foreground);
   foregroundRef.current = foreground;
-  /** Sends an answer to a request that the host waits on. */
+  /**
+   * Sends an answer to a request that the host waits on. A Send of a bug report about the phone app
+   * goes with this phone's version, system, network and support log, as its card showed them: the
+   * host takes no other Send of it. Without a card that showed them, the phone sends a plain answer,
+   * which the host refuses with a message to open the chat.
+   */
   const sendApproval = useCallback(
-    async (serverId: string, input: RespondToApprovalInput) => {
+    async (serverId: string, input: RespondToApprovalInput, approval: PendingApproval) => {
+      const phone =
+        input.decision === "accept" &&
+        feedbackApproval(approval)?.phone === true &&
+        hasCapability(serverCapabilities.current, serverId, PHONE_FEEDBACK_CAPABILITY)
+          ? shownPhoneFeedback(approval)
+          : null;
       try {
-        await runTeamRequest(respondToApproval(teamApi(serverId), input));
+        await runTeamRequest(
+          phone
+            ? sendPhoneFeedback(teamApi(serverId), { requestId: input.requestId, phone })
+            : respondToApproval(teamApi(serverId), input),
+        );
+        forgetPhoneFeedback(approval);
       } catch (error) {
         // Another device answered first, or the turn ended. The request is gone on the host too.
         if (error instanceof InactiveRequestError)
@@ -1623,6 +1699,11 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           return next === previous ? current : { ...current, [serverId]: next };
         });
       }
+      liveState.update("contextByServer", (current) => {
+        const previous = current[serverId] ?? NO_CONTEXT_STATES;
+        const next = reduceContextStates(previous, event);
+        return next === previous ? current : { ...current, [serverId]: next };
+      });
       // What the chat leaves out: the waits of the side threads, which the home list shows on the agent.
       liveState.update("threadWaitsByServer", (current) => {
         const previous = current[serverId] ?? [];
@@ -1672,7 +1753,10 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           readRefresh.invalidate(serverId);
           applyConversationReads({ [event.page.agentId]: readState });
         } else void refreshConversationReads(serverId).catch(() => undefined);
-        if (conversationStore.get(event.page.agentId)) conversationStore.applyPage(event.page);
+        if (conversationStore.get(event.page.agentId)) {
+          conversationStore.applyPage(event.page);
+          refreshOpenExchanges(event.page.agentId, serverId);
+        }
       } else if (event.type === "conversation-invalidated") {
         // A read cursor change sends the revision that the phone already has.
         if (
@@ -1693,6 +1777,10 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
             server.id === serverId ? { ...server, name: event.serverName, logoKey: event.logoVersion } : server,
           ),
         );
+      } else if (event.type === "host-appearance") {
+        // The host sends its plush when the phone connects and after each change.
+        const { appearance } = event;
+        setServers((current) => current.map((server) => (server.id === serverId ? { ...server, appearance } : server)));
       }
     },
     [
@@ -1703,6 +1791,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       applyHostHidden,
       applyHostColors,
       loadConversation,
+      refreshOpenExchanges,
       replaceServerAgents,
       conversationStore,
       refreshConversationReads,
@@ -1890,11 +1979,11 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       respondToApproval: async (serverId, input) => {
         const pending = liveState
           .get()
-          .approvalRequests[serverId]?.some((item) => String(item.requestId) === String(input.requestId));
+          .approvalRequests[serverId]?.find((item) => String(item.requestId) === String(input.requestId));
         if (!pending) throw new InactiveRequestError(currentText().t("mobile.workspace.error.approvalInactive"));
         if (!showsOnline(serversRef.current.find((server) => server.id === serverId)))
           throw new Error(currentText().t("mobile.workspace.error.approvalOffline"));
-        await sendApproval(serverId, input);
+        await sendApproval(serverId, input, pending);
       },
       readsWholeApprovals: (serverId) =>
         hasCapability(serverCapabilities.current, serverId, PENDING_APPROVAL_CAPABILITY),
@@ -1962,6 +2051,22 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         // A new generation drops a directory read that started before the save, and the refresh
         // reads again after it. The change is saved, so a failed read must not report a failure.
         await refreshMemberships().catch(() => undefined);
+      },
+      setServerAppearance: async (serverId, appearance) => {
+        const server = serversRef.current.find((candidate) => candidate.id === serverId);
+        if (!server || !canAdministerServer(server.role))
+          throw new Error(currentText().t("mobile.server.settings.identityNotAllowed"));
+        requireCapability(
+          serverCapabilities.current,
+          serverId,
+          HOST_APPEARANCE_CAPABILITY,
+          "mobile.server.settings.identityUnsupported",
+        );
+        await runTeamRequest(setHostAppearance(teamApi(serverId), appearance));
+        // The host also sends `host-appearance`; this shows the choice at once.
+        setServers((current) =>
+          current.map((candidate) => (candidate.id === serverId ? { ...candidate, appearance } : candidate)),
+        );
       },
       rotateServerKey: async (serverId) => {
         const server = serversRef.current.find((candidate) => candidate.id === serverId);
@@ -2469,6 +2574,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       return {
         ...createHostRequestChecks(capabilities),
         canEditServerIdentity: (serverId) => administers(serverId, HOST_ADMIN_CAPABILITY),
+        canEditServerAppearance: (serverId) => administers(serverId, HOST_APPEARANCE_CAPABILITY),
         canRotateServerKey: (serverId) =>
           servers.find((candidate) => candidate.id === serverId)?.role === "owner" &&
           administers(serverId, HOST_KEY_ROTATION_CAPABILITY),
@@ -2537,6 +2643,8 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         canManageMcpServers: managesMcp,
         canRelayMcpSignIn: (serverId) =>
           managesMcp(serverId) && hasCapability(capabilities, serverId, SIGN_IN_RELAY_CAPABILITY),
+        macAppsUnavailable: (serverId) => hasCapability(capabilities, serverId, MAC_APPS_LIMIT_CAPABILITY),
+        canEditUiBlockPreview: (serverId) => hasCapability(capabilities, serverId, UI_BLOCK_PREVIEW_EDIT_CAPABILITY),
         canManageMcpAccess: (serverId) => administers(serverId, MCP_ACCESS_CAPABILITY),
         canAddMarketplaceAgents: (serverId) => administers(serverId, AGENT_INSTALL_CAPABILITY),
         canUpdateMarketplaceAgents: (serverId) => administers(serverId, AGENT_UPDATE_CAPABILITY),

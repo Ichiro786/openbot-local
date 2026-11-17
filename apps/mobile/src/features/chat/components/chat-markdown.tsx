@@ -36,7 +36,6 @@ import {
   type ColorValue,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   type TextStyle,
@@ -56,6 +55,7 @@ import { useCSSVariable } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { ChatLinkIcon } from "@/features/chat/components/chat-link-icon";
+import { ChatHorizontalScrollView } from "@/features/chat/components/chat-swipe-gesture";
 import {
   StreamingBlock,
   StreamingTailText,
@@ -844,8 +844,7 @@ function MarkdownTable({ token, presentation }: { token: Tokens.Table; presentat
           <View style={[StyleSheet.absoluteFill, { backgroundColor: rowsBackground }]} />
         </View>
       ) : null}
-      <ScrollView
-        horizontal
+      <ChatHorizontalScrollView
         alwaysBounceHorizontal={false}
         style={{
           flexGrow: 0,
@@ -877,7 +876,7 @@ function MarkdownTable({ token, presentation }: { token: Tokens.Table; presentat
             ),
           )}
         </View>
-      </ScrollView>
+      </ChatHorizontalScrollView>
     </View>
   );
   return (

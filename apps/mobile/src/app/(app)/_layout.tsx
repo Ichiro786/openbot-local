@@ -25,6 +25,7 @@ import { HomeOnboardingProvider, useHomeOnboarding } from "@/features/onboarding
 import type { NotificationTarget } from "@/features/push-notifications/push-notifications-native.types";
 import { useNotificationTaps } from "@/features/push-notifications/use-notification-taps";
 import type { QuickActionTarget } from "@/features/quick-actions/model/quick-action-items";
+import { shareOpenBot } from "@/features/quick-actions/model/share-app";
 import { setQuickActionNavigator } from "@/features/quick-actions/quick-actions-native";
 import { requestHomeSearch } from "@/features/search/model/home-search-request";
 import { AppDrawerShell, useAppDrawer } from "@/features/servers/components/app-drawer-shell";
@@ -218,10 +219,16 @@ function AuthenticatedStack() {
         return;
       }
       whenUnlocked(() => {
+        // The share sheet opens over the current screen, so the user keeps their place.
+        if (target.type === "share") {
+          shareOpenBot();
+          return;
+        }
         closeDrawer();
         if (router.canDismiss()) router.dismissAll();
         if (target.type === "routines")
           router.push({ pathname: "/server-routines", params: { serverId: target.serverId } });
+        else if (target.type === "support") router.push("/settings/support");
         else requestHomeSearch();
       });
     },
@@ -384,6 +391,18 @@ function AuthenticatedStack() {
         })}
       >
         <Stack.Screen name="connected" options={{ animation: "fade", gestureEnabled: false, title: "" }} />
+        {/* Upstream 1.4.11's rating ask (off in OpenBot Local, see use-rating-ask-gate.ts). It shows over
+            home: the route must stay inside the navigation container, below the stage. */}
+        <Stack.Screen
+          name="rate-app"
+          options={{
+            presentation: "containedTransparentModal",
+            animation: "none",
+            gestureEnabled: false,
+            headerShown: false,
+            contentStyle: { backgroundColor: "transparent" },
+          }}
+        />
         <Stack.Screen name="chat/[agentId]" options={chatRouteOptions} listeners={liveZoomListeners} />
         <Stack.Screen
           name="task/[taskId]"
@@ -493,6 +512,18 @@ function AuthenticatedStack() {
             scrollEdgeEffects: { top: "hidden", bottom: "soft" },
             presentation: "formSheet",
             sheetAllowedDetents: [0.85],
+            sheetGrabberVisible: true,
+          }}
+        />
+        <Stack.Screen
+          name="context-usage/[agentId]"
+          // The context ring of the composer opens it. The header comes from the route's `_layout.tsx`.
+          options={{
+            contentStyle: { backgroundColor: sheetBackground },
+            headerShown: false,
+            scrollEdgeEffects: { top: "hidden", bottom: "soft" },
+            presentation: "formSheet",
+            sheetAllowedDetents: [0.6, 0.85],
             sheetGrabberVisible: true,
           }}
         />
@@ -730,14 +761,14 @@ function AuthenticatedStack() {
         <Stack.Screen name="server-workflows/github-events" options={largeTitlePage} />
         <Stack.Screen
           name="workflow-editor"
-          // One sheet for the editor: its pages are in the stack of `workflow-editor/_layout.tsx`.
+          // The editor is a page (upstream 1.4.11): it comes in from the right, so a wide flow and a long
+          // list have room. Its pages are in the stack of `workflow-editor/_layout.tsx`.
           options={{
+            animation: pageAnimation,
             contentStyle: { backgroundColor: sheetBackground },
             headerShown: false,
             scrollEdgeEffects: { top: "hidden", bottom: "soft" },
-            presentation: "formSheet",
-            sheetAllowedDetents: [0.85],
-            sheetGrabberVisible: true,
+            presentation: "card",
           }}
         />
         <Stack.Screen name="server-usage/index" options={largeTitlePage} />
@@ -815,6 +846,28 @@ function AuthenticatedStack() {
         />
         <Stack.Screen
           name="turn-thinking"
+          options={{
+            contentStyle: { backgroundColor: sheetBackground },
+            headerShown: false,
+            scrollEdgeEffects: { top: "hidden", bottom: "soft" },
+            presentation: "formSheet",
+            sheetAllowedDetents: [0.85],
+            sheetGrabberVisible: true,
+          }}
+        />
+        <Stack.Screen
+          name="subagent"
+          options={{
+            contentStyle: { backgroundColor: sheetBackground },
+            headerShown: false,
+            scrollEdgeEffects: { top: "hidden", bottom: "soft" },
+            presentation: "formSheet",
+            sheetAllowedDetents: [0.85],
+            sheetGrabberVisible: true,
+          }}
+        />
+        <Stack.Screen
+          name="memory-changes"
           options={{
             contentStyle: { backgroundColor: sheetBackground },
             headerShown: false,

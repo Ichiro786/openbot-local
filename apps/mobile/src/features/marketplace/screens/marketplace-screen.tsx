@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
+import Plus from "lucide-react-native/icons/plus";
 import { type ReactNode, useRef, useState } from "react";
 import { Pressable, ScrollView, View, type ViewInstance } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ConnectorLogo } from "@/features/servers/components/connector-logo";
-import { SettingsNote, SettingsSection } from "@/features/settings/components/settings-content";
+import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
+import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { AndroidBlurTarget } from "@/shared/components/android-header-blur";
 import { Button } from "@/shared/components/button";
@@ -48,6 +50,7 @@ export function MarketplaceScreen() {
   const { t } = useText();
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const server = useMobileWorkspaceSelector((workspace) => workspace.servers.find((item) => item.id === serverId));
+  const canManageMcp = useMobileWorkspaceSelector((workspace) => workspace.canManageMcpServers(serverId));
   const scroll = useLargeTitleScroll();
   const blurTarget = useRef<ViewInstance>(null);
   const insets = useSafeAreaInsets();
@@ -90,7 +93,8 @@ export function MarketplaceScreen() {
   };
   const listMode = isMarketplaceFiltered(filter) || catalog.search.length > 0;
 
-  // The agents and skills did not load. The bundled apps still show under it, with a way to retry.
+  // The agents, the skills or the custom MCP servers did not load. The bundled apps still show under it,
+  // with a way to retry.
   const loadFailed =
     server && catalog.failed ? (
       <View className="items-center gap-3 px-6 py-4">
@@ -113,6 +117,15 @@ export function MarketplaceScreen() {
         more={catalog}
         installed={installed}
         onOpen={listing}
+        // Add custom adds an MCP server, as on the desktop. The host refuses it to a user who cannot manage them.
+        onAddCustom={
+          canManageMcp
+            ? () => {
+                void haptics.selection();
+                router.push({ pathname: "/server-settings/mcp-server", params: { serverId } });
+              }
+            : undefined
+        }
         onClear={() => {
           void haptics.selection();
           setFilter(NO_MARKETPLACE_FILTER);
@@ -320,6 +333,7 @@ function FilteredList({
   more,
   installed,
   onOpen,
+  onAddCustom,
   onClear,
 }: {
   listings: MarketplaceListing[];
@@ -329,6 +343,8 @@ function FilteredList({
   more: Pick<MarketplaceCatalog, "hasMore" | "loadingMore" | "loadMoreFailed" | "loadMore">;
   installed: MarketplaceInstalled;
   onOpen: (listing: MarketplaceListing) => void;
+  /** Opens the form of a new MCP server. The Apps list shows it. */
+  onAddCustom?: () => void;
   onClear: () => void;
 }) {
   const { t } = useText();
@@ -354,6 +370,13 @@ function FilteredList({
             </Typography.Paragraph>
           </Pressable>
         </View>
+      ) : null}
+      {filter.kind === "app" && onAddCustom ? (
+        <SettingsSection>
+          <SettingsRow disclosure={false} leading={<RowIcon icon={Plus} tone="accent" />} onPress={onAddCustom}>
+            <Typography.Paragraph className="text-accent">{t("mobile.marketplace.app.addCustom")}</Typography.Paragraph>
+          </SettingsRow>
+        </SettingsSection>
       ) : null}
       {listings.length > 0 ? (
         <SettingsSection>

@@ -3,7 +3,7 @@
     "name": "OpenBot Local",
     "slug": "openbot",
     "platforms": ["ios", "android"],
-    "version": "1.4.10",
+    "version": "1.4.11",
     "orientation": "portrait",
     "icon": "./assets/icons/app-icon.png",
     "scheme": "openbotlocal",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "run.openbot.local",
-      "versionCode": 10417,
+      "versionCode": 10418,
       "icon": "./assets/icons/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-foreground.png",

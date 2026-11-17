@@ -33,11 +33,14 @@ import {
   type ViewInstance,
   type ViewStyle,
 } from "react-native";
+import { GestureDetector, type PanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   type EntryAnimationsValues,
   FadeIn,
+  Extrapolation,
   FadeInDown,
+  interpolate,
   Keyframe,
   ReduceMotion,
   type SharedValue,
@@ -59,6 +62,7 @@ import { type ApprovalDecision, approvalTitle, ChatApprovalCard } from "@/featur
 import { ChatExchangeGroup, ChatExchangeMarker } from "@/features/chat/components/chat-exchange-marker";
 import { ChatMarkdown, chatMarkdownHasTable } from "@/features/chat/components/chat-markdown";
 import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
+import { ChatMemoryChanges } from "@/features/chat/components/chat-memory-changes";
 import { ChatPlan } from "@/features/chat/components/chat-plan";
 import { ChatQuestionPrompt } from "@/features/chat/components/chat-question-prompt";
 import {
@@ -68,6 +72,7 @@ import {
   RoutineRunGroupRow,
   routineGroupKind,
 } from "@/features/chat/components/chat-routine-marker";
+import { ChatSubagents } from "@/features/chat/components/chat-subagents";
 import { ChatTurnStepsRow } from "@/features/chat/components/chat-turn-steps-row";
 import { useActivityPresence } from "@/features/chat/components/use-activity-presence";
 import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-chat-motion";
@@ -87,6 +92,7 @@ import {
 } from "@/features/chat/model/chat-messages";
 import type { TurnStepsSummary } from "@/features/chat/model/turn-thinking";
 import { readableOn } from "@/features/onboarding/model/onboarding-colors";
+import { useChatRowShown, useThinkingDisplayPreference } from "@/features/settings/model/chat-details";
 import { useMessageColor } from "@/features/settings/model/message-color";
 import { useRoutineCollapsePreference } from "@/features/settings/model/routine-collapse";
 import { canReadAloud, stopReadAloud } from "@/features/voice/model/message-reading";
@@ -108,6 +114,7 @@ import { chatDayLabels } from "../model/chat-day-markers";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
 import { type MessageFileTarget, messageFileDirectory, messageFileTarget } from "../model/message-file-target";
+import { messageTime } from "../model/message-time";
 import { isStreamingReply } from "../model/reply-reveal";
 import { uploadProgressAt } from "../model/upload-progress";
 import { type AttachmentTint, ChatAttachmentView } from "./chat-attachment";
@@ -127,6 +134,14 @@ import { openMessageMenu } from "./chat-message-menu";
 import { ChatOutboxStatus, OutboxMessageMenu, type OutboxRowStatus } from "./chat-outbox-status";
 import { ChatRenderBoundary } from "./chat-render-boundary";
 import { ChatSelectableText } from "./chat-selectable-text";
+import {
+  type ChatSwipeGesture,
+  ChatSwipeGestureContext,
+  type ChatTimeReveal,
+  ChatTimeRevealContext,
+  ChatTimesMountedContext,
+  MESSAGE_TIME_WIDTH,
+} from "./chat-swipe-gesture";
 import { ChatTagActionsContext, useTaggedTabOpener } from "./chat-tag-actions";
 import { ChatVideoGeneration } from "./chat-video-generation";
 import { HistoryShownContext } from "./use-history-shown";
@@ -312,6 +327,16 @@ function ChatBubble({
 
 interface ChatMessageListProps {
   target: ChatTarget;
+  /**
+   * The swipe away from Back of an agent's chat. It attaches to the list, and a bubble that replies
+   * with a swipe in the same direction blocks it. Keep it for the life of the list: a change mounts
+   * the list again.
+   */
+  swipeGesture?: ChatSwipeGesture;
+  /** Android: how far the pull past the latest message moves the list up, as iOS bounces it. */
+  pullShift?: SharedValue<number>;
+  /** Android: the pan of the pull past the latest message. A hook gesture, on its own detector. */
+  pullGesture?: PanGesture;
   /** False while the chat opens on Android: the list has only its latest rows until the chat is in place. */
   rowsShown: boolean;
   /** Something covers the list, such as the voice mode, so screen readers skip it. */
@@ -333,6 +358,10 @@ interface ChatMessageListProps {
   turnSummaries?: ReadonlyMap<string, TurnStepsSummary>;
   /** Opens the thinking of a turn. Absent where no sheet can show it, such as a channel. */
   onOpenTurn?: (turnId: string) => void;
+  /** Opens the subagents of a turn. Absent where no sheet can show them, such as a channel. */
+  onOpenSubagents?: (messageId: string) => void;
+  /** Opens the memory changes of a turn. Absent where no sheet can show them, such as a channel. */
+  onOpenMemoryChanges?: (messageId: string) => void;
   questionForm?: QuestionPromptController;
   /** Opens the form of an open question, in a channel where several agents can ask. */
   onSelectQuestion?: (messageId: string) => void;
@@ -481,6 +510,10 @@ interface MessageRowShared {
   listWidth: number;
   /** The agent of an agent chat. A workspace file that a message of no agent names is in its workspace. */
   fileAgentId: string | undefined;
+  /** Opens the subagents of a turn in their sheet. Unset where no sheet can show them. */
+  openSubagents: ((messageId: string) => void) | undefined;
+  /** Opens the memory changes of a turn in their sheet. Unset where no sheet can show them. */
+  openMemoryChanges: ((messageId: string) => void) | undefined;
   openFile: (file: MessageFileTarget, written: MessageFileTarget | null) => Promise<void>;
   actions: {
     reply: (message: ChatBubbleMessage) => void;
@@ -906,9 +939,9 @@ const MessageRow = memo(function MessageRow({
   );
   const rendered =
     message.kind === "routine" ? (
-      <RoutineMarkerRow key={message.id} message={message} muted={muted} />
+      <RoutineMarkerRow key={message.id} message={message} />
     ) : message.kind === "routine-run-group" ? (
-      <RoutineRunGroupRow key={message.id} group={message} muted={muted} />
+      <RoutineRunGroupRow key={message.id} group={message} />
     ) : message.kind === "context-reset" ? (
       <ContextResetMarkerRow key={message.id} muted={muted} />
     ) : message.kind === "app-suggestion" ? (
@@ -919,6 +952,10 @@ const MessageRow = memo(function MessageRow({
       <ChatExchangeMarker key={message.id} message={message} agents={agents} agentsById={agentsById} muted={muted} />
     ) : message.kind === "plan" ? (
       <ChatPlan key={message.id} message={message} />
+    ) : message.kind === "subagents" ? (
+      <ChatSubagents key={message.id} message={message} onOpen={shared.openSubagents} />
+    ) : message.kind === "memory-changes" ? (
+      <ChatMemoryChanges key={message.id} message={message} onOpen={shared.openMemoryChanges} />
     ) : message.kind === "question" ? (
       <ChatQuestionPrompt
         key={message.id}
@@ -1288,18 +1325,99 @@ function FocusHighlight({ rowId, color, shown }: { rowId: string; color: string;
 
 const RowContext = createContext<RowContextValue | null>(null);
 
+const MESSAGE_TIME = { hour: "numeric", minute: "2-digit" } as const;
+
+/**
+ * The time of a message, at the middle height of the message, so each time is level with its own
+ * bubble. It comes in from past the end of the chat with the swipe, fading in, and stops at the end
+ * of the screen once it is in; the bubbles can move on past that. A screen reader reads the time in
+ * the actions sheet.
+ */
+function MessageTime({ createdAt, reveal }: { createdAt: string; reveal: SharedValue<number> }) {
+  const mounted = useContext(ChatTimesMountedContext);
+  return mounted ? <MessageTimeLabel createdAt={createdAt} reveal={reveal} /> : null;
+}
+
+function MessageTimeLabel({ createdAt, reveal }: { createdAt: string; reveal: SharedValue<number> }) {
+  const { format } = useText();
+  const label = useMemo(() => {
+    const at = messageTime(createdAt);
+    return Number.isNaN(at) ? null : format.date(new Date(at), MESSAGE_TIME);
+  }, [createdAt, format]);
+  const style = useAnimatedStyle(() => {
+    const distance = reveal.get();
+    return {
+      opacity: interpolate(distance, [MESSAGE_TIME_WIDTH * 0.25, MESSAGE_TIME_WIDTH], [0, 1], Extrapolation.CLAMP),
+      transform: [{ translateX: Math.max(0, MESSAGE_TIME_WIDTH - distance) * END_X }],
+    };
+  });
+  if (!label) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      className="absolute top-0 bottom-0 items-end justify-center"
+      // The time ends 12 pt before the edge of the screen, inside the side padding of the list.
+      style={[{ end: -(LIST_PADDING - 12), width: MESSAGE_TIME_WIDTH }, style]}
+    >
+      <Typography.Paragraph type="body-xs" numberOfLines={1} className="text-muted">
+        {label}
+      </Typography.Paragraph>
+    </Animated.View>
+  );
+}
+
+/**
+ * A message bubble and its time. Only the bubble moves with the swipe that shows the times: the day
+ * label, the steps row, markers and dividers of the chat stay in place.
+ */
+function MessageWithTime({
+  createdAt,
+  reveal,
+  children,
+}: PropsWithChildren<{ createdAt: string | undefined; reveal: SharedValue<number> }>) {
+  const moved = useAnimatedStyle(() => ({ transform: [{ translateX: -reveal.get() * END_X }] }));
+  return (
+    <View>
+      <Animated.View style={moved}>{children}</Animated.View>
+      {createdAt ? <MessageTime createdAt={createdAt} reveal={reveal} /> : null}
+    </View>
+  );
+}
+
 /**
  * `item` is the row as the list holds it. The list keeps its rows while only their content changes
  * (see `useListRows`), so the row reads its message from the context.
  */
 function ChatRow({ item }: { item: VisibleMessage }) {
   const row = useContext(RowContext);
+  const timeReveal = useContext(ChatTimeRevealContext);
   if (!row) return null;
   const message = row.rowsById.get(item.id) ?? item;
   const response = row.responseIds.has(message.id);
   const turn = row.turnSummaries?.get(message.id);
   const openTurn = row.onOpenTurn;
   const day = row.dayLabels.get(message.id);
+  const messageRow =
+    message.kind === "thinking" ? null : (
+      <MessageRow
+        message={message}
+        isFirstUser={message.id === row.firstUserId}
+        source={
+          message.kind === "message" && message.replyToMessageId
+            ? row.messagesById.get(message.replyToMessageId)
+            : undefined
+        }
+        questionForm={message.id === row.promptController?.messageId ? row.promptController : undefined}
+        upload={row.upload?.messageId === message.id ? row.upload : undefined}
+        outbox={row.outboxStatuses?.get(message.id)}
+        selecting={message.id === row.selectingMessageId}
+        arriving={row.arrivals.has(message.id)}
+        revealed={row.revealedIds.has(message.id)}
+        shared={row.shared}
+      />
+    );
   return (
     <Animated.View
       style={[ROW_STYLE, response ? row.responseStyle : undefined]}
@@ -1324,23 +1442,12 @@ function ChatRow({ item }: { item: VisibleMessage }) {
           onPress={openTurn ? () => openTurn(turn.turnId) : undefined}
         />
       ) : null}
-      {message.kind === "thinking" ? null : (
-        <MessageRow
-          message={message}
-          isFirstUser={message.id === row.firstUserId}
-          source={
-            message.kind === "message" && message.replyToMessageId
-              ? row.messagesById.get(message.replyToMessageId)
-              : undefined
-          }
-          questionForm={message.id === row.promptController?.messageId ? row.promptController : undefined}
-          upload={row.upload?.messageId === message.id ? row.upload : undefined}
-          outbox={row.outboxStatuses?.get(message.id)}
-          selecting={message.id === row.selectingMessageId}
-          arriving={row.arrivals.has(message.id)}
-          revealed={row.revealedIds.has(message.id)}
-          shared={row.shared}
-        />
+      {message.kind === "message" && timeReveal ? (
+        <MessageWithTime createdAt={message.createdAt} reveal={timeReveal.offset}>
+          {messageRow}
+        </MessageWithTime>
+      ) : (
+        messageRow
       )}
       {row.branchDivider?.rowId === message.id ? (
         <BranchDividerRow label={row.branchDivider.label} onOpen={row.branchDivider.onOpen} muted={row.shared.muted} />
@@ -1539,6 +1646,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   activeTurnId,
   turnSummaries,
   onOpenTurn,
+  onOpenSubagents,
+  onOpenMemoryChanges,
   questionForm,
   onSelectQuestion,
   activityAccessory,
@@ -1584,9 +1693,19 @@ export const ChatMessageList = memo(function ChatMessageList({
   focusMessageId = null,
   focusUnread = false,
   onFocusPlaced,
+  swipeGesture,
+  pullShift,
+  pullGesture,
 }: ChatMessageListProps) {
   const { t, format, sourceText } = useText();
   const isFocused = useIsFocused();
+  // How far the bubbles move to show the message times. A swipe on a message bubble sets it.
+  const timeOffset = useSharedValue(0);
+  const [timesMounted, setTimesMounted] = useState(false);
+  const timeReveal = useMemo<ChatTimeReveal>(
+    () => ({ offset: timeOffset, mount: () => setTimesMounted(true) }),
+    [timeOffset],
+  );
   const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const messagesById = useMemo(
     () => indexChatMessages(messages, messageAliases, referenceMessages),
@@ -1696,11 +1815,18 @@ export const ChatMessageList = memo(function ChatMessageList({
     return { backgroundColor: `rgb(${r}, ${g}, ${b})` };
   });
 
+  const rowShown = useChatRowShown(turnSummaries);
   const visibleMessages = useMemo(
     () =>
       groupRoutineRunMarkers(
         groupExchangeMarkers(
-          messages.filter((message) => message.kind !== "thinking" || turnSummaries?.has(message.id)),
+          // The row that the chat opens at and the row before a branch line stay, also when a
+          // setting hides their kind.
+          messages.filter(
+            (message) =>
+              rowShown(message) ||
+              (message.kind !== "thinking" && (message.id === focusMessageId || message.id === branchDivider?.afterId)),
+          ),
         ),
         {
           unreadMessageIds: unreadLineMessageIds,
@@ -1709,7 +1835,7 @@ export const ChatMessageList = memo(function ChatMessageList({
           branchRowId: branchDivider?.afterId,
         },
       ),
-    [messages, turnSummaries, unreadLineMessageIds, focusMessageId, focusUnread, branchDivider?.afterId],
+    [messages, rowShown, unreadLineMessageIds, focusMessageId, focusUnread, branchDivider?.afterId],
   );
   // One pass over the loaded rows when they change; the rows read their label from the context.
   const dayLabels = useMemo(
@@ -1786,7 +1912,10 @@ export const ChatMessageList = memo(function ChatMessageList({
       tailIndex >= 0 ? { anchorIndex: tailIndex, anchorOffset: header, onReady: motion.onAnchorReady } : undefined,
     [tailIndex, header, motion.onAnchorReady],
   );
-  const sharedValues = useMemo(() => ({ scrollOffset: motion.scrollOffset }), [motion.scrollOffset]);
+  const sharedValues = useMemo(
+    () => ({ scrollOffset: motion.scrollOffset, isAtEnd: motion.atEnd }),
+    [motion.scrollOffset, motion.atEnd],
+  );
   const screen = useWindowDimensions();
   const columnWidth = useColumnWidth();
   const insets = useSafeAreaInsets();
@@ -1928,6 +2057,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       branchPoints: shownBranchPoints,
       listWidth,
       fileAgentId: target.kind === "agent" ? target.id : undefined,
+      openSubagents: onOpenSubagents,
+      openMemoryChanges: onOpenMemoryChanges,
       openFile: messageFiles.open,
       actions,
     }),
@@ -1967,6 +2098,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       shownBranchPoints,
       listWidth,
       target.id,
+      onOpenSubagents,
+      onOpenMemoryChanges,
       messageFiles.open,
       actions,
     ],
@@ -2071,6 +2204,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       highlightColor,
     ],
   );
+  const showThinking = useThinkingDisplayPreference((state) => state.enabled);
   const activitySpec = (activity?: MobileAgentActivity): ChatActivitySpec | null => {
     const latestThinking = messages.findLast(
       (message) => message.kind === "thinking" && message.turnId === (activity?.turnId ?? activeTurnId),
@@ -2084,7 +2218,9 @@ export const ChatMessageList = memo(function ChatMessageList({
         (!activity?.agentId || !message.speaker || message.speaker.id === activity.agentId),
     );
     // One run of text, as desktop shows it: the row clamps the label, and blank lines would fill it.
-    const latestStep = !replying && latestThinking?.kind === "thinking" ? latestThinking.steps.at(-1) : undefined;
+    // With the thinking display off, the row says only that the agent thinks.
+    const latestStep =
+      showThinking && !replying && latestThinking?.kind === "thinking" ? latestThinking.steps.at(-1) : undefined;
     // A progress update shows as a message, so the row does not say it again.
     const thinkingDetail = latestStep && !latestStep.progress ? latestStep.text.replace(/\s+/gu, " ").trim() : null;
     const activityLabel =
@@ -2325,11 +2461,12 @@ export const ChatMessageList = memo(function ChatMessageList({
     </>
   );
 
-  return (
+  const pullStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -(pullShift?.get() ?? 0) }] }));
+  const body = (
     <Animated.View
       onTouchStart={selectingMessageId ? onTouchStart : undefined}
       onTouchEnd={selectingMessageId ? onTouchEnd : undefined}
-      style={[{ flex: 1 }, historyState === "ready" ? motion.historyStyle : undefined]}
+      style={[{ flex: 1 }, historyState === "ready" ? motion.historyStyle : undefined, pullStyle]}
       accessibilityElementsHidden={accessibilityHidden || (historyState === "ready" && !motion.historyVisible)}
       importantForAccessibility={
         !accessibilityHidden && (historyState !== "ready" || motion.historyVisible) ? "auto" : "no-hide-descendants"
@@ -2342,9 +2479,15 @@ export const ChatMessageList = memo(function ChatMessageList({
             <RoutineGroupsContext value={routineGroupsState}>
               <KeptOpenContext value={replySession.keptOpen}>
                 <RowContext value={rowContext}>
-                  <ListHeaderContext value={listHeader}>
-                    <ListFooterContext value={listFooter}>{list}</ListFooterContext>
-                  </ListHeaderContext>
+                  <ChatSwipeGestureContext value={swipeGesture ?? null}>
+                    <ChatTimeRevealContext value={timeReveal}>
+                      <ChatTimesMountedContext value={timesMounted}>
+                        <ListHeaderContext value={listHeader}>
+                          <ListFooterContext value={listFooter}>{list}</ListFooterContext>
+                        </ListHeaderContext>
+                      </ChatTimesMountedContext>
+                    </ChatTimeRevealContext>
+                  </ChatSwipeGestureContext>
                 </RowContext>
               </KeptOpenContext>
             </RoutineGroupsContext>
@@ -2353,5 +2496,15 @@ export const ChatMessageList = memo(function ChatMessageList({
       </ChatImageViewerProvider>
       {messageFiles.sheet}
     </Animated.View>
+  );
+  // The pull is a hook gesture and the swipe an older one: each has its own detector. The detector of
+  // a hook gesture takes no space of its own.
+  const pulled = pullGesture ? <GestureDetector gesture={pullGesture}>{body}</GestureDetector> : body;
+  return swipeGesture ? (
+    <GestureDetector gesture={swipeGesture}>
+      <View style={{ flex: 1 }}>{pulled}</View>
+    </GestureDetector>
+  ) : (
+    pulled
   );
 }, sameListProps);

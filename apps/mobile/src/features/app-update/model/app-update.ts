@@ -238,6 +238,14 @@ export async function installAppUpdate(update: AppUpdate, reloadColor: string): 
 }
 
 /**
+ * OpenBot Local: no store lists this fork, so the store page is our releases page (upstream's rating ask
+ * calls this; the ask itself is off in this fork, see use-rating-ask-gate.ts).
+ */
+export async function openStorePage(_options: { review?: boolean } = {}): Promise<void> {
+  await Linking.openURL(LOCAL_RELEASES_PAGE);
+}
+
+/**
  * The notes of our releases after the running build, newest first. They load when the user opens
  * What's new, from the same GitHub releases list as the update.
  */

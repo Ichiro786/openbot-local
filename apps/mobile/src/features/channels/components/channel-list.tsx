@@ -51,6 +51,8 @@ function useChannelMenuActions(channel: ChannelSummary, serverId: string) {
     ({ servers }) => servers.find((server) => server.id === serverId)?.role === "member",
   );
   const canDelete = online && !isMember && !channel.archived;
+  // The host refuses to delete a channel while a task runs there: the user stops it first.
+  const deleteBlocked = channel.activeTasks > 0;
   const deleting = useRef(false);
   const handlePin = (withHaptic = true) => toggleChannelPinAnimated(channel, serverId, { haptic: withHaptic });
   const handleHide = () => {
@@ -93,7 +95,18 @@ function useChannelMenuActions(channel: ChannelSummary, serverId: string) {
         },
       },
     ]);
-  return { isPinned, canPin, canDelete, sectionMenu, handlePin, handleHide, handleInfo, handleCopyId, handleDelete };
+  return {
+    isPinned,
+    canPin,
+    canDelete,
+    deleteBlocked,
+    sectionMenu,
+    handlePin,
+    handleHide,
+    handleInfo,
+    handleCopyId,
+    handleDelete,
+  };
 }
 
 /** The chat link of a channel on iOS, with its context menu. Android uses `ChannelAndroidMenu`. */
@@ -107,8 +120,18 @@ function ChannelContextMenuLink({
   children: ReactNode;
 }) {
   const { t } = useText();
-  const { isPinned, canPin, canDelete, sectionMenu, handlePin, handleHide, handleInfo, handleCopyId, handleDelete } =
-    useChannelMenuActions(channel, serverId);
+  const {
+    isPinned,
+    canPin,
+    canDelete,
+    deleteBlocked,
+    sectionMenu,
+    handlePin,
+    handleHide,
+    handleInfo,
+    handleCopyId,
+    handleDelete,
+  } = useChannelMenuActions(channel, serverId);
   return (
     <Link href={{ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } }} asChild>
       <Link.Trigger>{children}</Link.Trigger>
@@ -133,7 +156,7 @@ function ChannelContextMenuLink({
             {t("mobile.agent.menu.copyId")}
           </Link.MenuAction>
           {canDelete ? (
-            <Link.MenuAction destructive icon="trash" onPress={handleDelete}>
+            <Link.MenuAction destructive icon="trash" disabled={deleteBlocked} onPress={handleDelete}>
               {t("common.delete")}
             </Link.MenuAction>
           ) : null}
@@ -183,8 +206,18 @@ function OpenChannelMenu({
   useEffect(() => {
     menu.current?.show();
   }, []);
-  const { isPinned, canPin, canDelete, sectionMenu, handlePin, handleHide, handleInfo, handleCopyId, handleDelete } =
-    useChannelMenuActions(channel, serverId);
+  const {
+    isPinned,
+    canPin,
+    canDelete,
+    deleteBlocked,
+    sectionMenu,
+    handlePin,
+    handleHide,
+    handleInfo,
+    handleCopyId,
+    handleDelete,
+  } = useChannelMenuActions(channel, serverId);
   const actions: MenuAction[] = [
     {
       id: "pin",
@@ -205,7 +238,7 @@ function OpenChannelMenu({
           id: "delete",
           title: t("common.delete"),
           image: "trash",
-          attributes: { destructive: true, hidden: !canDelete },
+          attributes: { destructive: true, hidden: !canDelete, disabled: deleteBlocked },
         },
       ],
     },
