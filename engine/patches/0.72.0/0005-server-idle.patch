@@ -59,3 +59,20 @@ index f4a7174b8..da7936d74 100644
        performance.mark("openbot:renderer-loaded");
        // The start is finished: the database is open and the main window loaded.
        startAttempts?.finished();
+diff --git a/src/main/resource-monitor.ts b/src/main/resource-monitor.ts
+index 9aded82a4..99ef12bcd 100644
+--- a/src/main/resource-monitor.ts
++++ b/src/main/resource-monitor.ts
+@@ -352,6 +352,12 @@ export class ResourceMonitor implements AnalyticsResourceSource {
+    */
+   #restLoop(): void {
+     if (this.#profiler.running) return;
++    // OpenBot Local: the phone's server runs on a battery and nobody sits at its windows, so it rests like
++    // an idle desktop app. A turn is still measured.
++    if (process.env.OPENBOT_LOCAL_LOOP_REST === "1") {
++      if (!this.#options.turnRunning()) this.#loop.disable();
++      return;
++    }
+     if (this.#options.server || this.#options.turnRunning() || BrowserWindow.getFocusedWindow() !== null) return;
+     this.#loop.disable();
+   }

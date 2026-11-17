@@ -47,6 +47,8 @@
 #   OPENBOT_AUTH_API_URL    Passed through to OpenBot (another account server).
 #   OPENBOT_LOCAL_NO_RENDERER  1 (default): the server's hidden window does not load the desktop UI
 #                           (engine patch 0005; that renderer kept the engine busy for nobody). 0 loads it.
+#   OPENBOT_LOCAL_LOOP_REST 1 (default): the main-loop delay histogram (a 20 ms timer that upstream never
+#                           stops in server mode) rests between turns, like an idle desktop app (patch 0005).
 #   OPENBOT_COMPILE_CACHE   1 (default): V8 compile cache in /root/.cache/node-compile-cache, emptied
 #                           when /opt/OpenBot/engine-version changes. 0 turns it off.
 set -uo pipefail
@@ -432,6 +434,7 @@ export LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11
 # Engine patch 0005: no desktop UI renderer in the hidden server window, and the count of working agents
 # in $XDG_RUNTIME_DIR/busy (the app holds its wake lock while it is not 0).
 export OPENBOT_LOCAL_NO_RENDERER="${OPENBOT_LOCAL_NO_RENDERER:-1}"
+export OPENBOT_LOCAL_LOOP_REST="${OPENBOT_LOCAL_LOOP_REST:-1}"
 export OPENBOT_LOCAL_BUSY_FILE="$XDG_RUNTIME_DIR/busy"
 rm -f "$OPENBOT_LOCAL_BUSY_FILE"
 # V8 compile cache for the main process (warm start about 1 s faster). Emptied when the engine changes, so
