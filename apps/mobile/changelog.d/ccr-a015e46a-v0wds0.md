@@ -1,0 +1,1 @@
+- Add timing marks for the open of a chat to the support log (Settings > Support): the tap, the navigation gate, the zoom shell, the chat mount, the first layout, and any stall of the JS thread over 50 ms. They draw nothing and change no behavior. They show where the time goes when a chat opens or closes.

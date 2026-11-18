@@ -3,6 +3,7 @@ import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { KeyboardController } from "react-native-keyboard-controller";
+import { openTraceMark, openTraceStart } from "@/shared/lib/open-trace";
 import { runChatBack } from "@/shared/motion/LiveZoomScreen";
 
 /**
@@ -41,6 +42,7 @@ export function useLeaveChat(): () => void {
         if (event.data.closing) closingAt.current = Date.now();
       }),
       navigation.addListener("transitionEnd", (event) => {
+        openTraceMark(`transitionEnd (closing: ${event.data.closing})`);
         if (!event.data.closing) clear();
       }),
       navigation.addListener("gestureCancel", clear),
@@ -52,6 +54,7 @@ export function useLeaveChat(): () => void {
     };
   }, [navigation]);
   return useCallback(() => {
+    openTraceStart("chat back");
     // Build 11.3 zoomfix: a zoom-opened chat (ColorOS on) closes by its zoom, bounded in LiveZoomScreen.
     if (runChatBack(route.key)) {
       void KeyboardController.dismiss();

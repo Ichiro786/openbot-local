@@ -72,6 +72,7 @@ import { showsOnline } from "@/features/workspace/model/server-status";
 import { useSplitLayout } from "@/shared/components/adaptive-split";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { haptics } from "@/shared/lib/haptics";
+import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { END_X } from "@/shared/lib/text-direction";
@@ -348,6 +349,14 @@ export function ChatView({
   onSwipeForward = null,
   onPullPastEnd = null,
 }: ChatViewProps) {
+  const opened = useRef(false);
+  if (!opened.current) {
+    opened.current = true;
+    openTraceMark("ChatView first render");
+  }
+  useEffect(() => {
+    openTraceMark("ChatView effects ran (committed)");
+  }, []);
   const { t, errorMessage } = useText();
   const workspace = useMobileWorkspaceReader();
   const browserViewAvailable = useMobileWorkspaceSelector(

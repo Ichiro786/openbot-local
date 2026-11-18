@@ -26,6 +26,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
+import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import {
   coverLiveZoomHome,
@@ -445,12 +446,19 @@ function LiveZoomFrame({
   const [shellGone, setShellGone] = useState(!shell);
   const shellOpacity = useSharedValue(1);
   useEffect(() => {
+    openTraceMark("zoom shell mounted");
+  }, []);
+  useEffect(() => {
     if (chatShown) return;
     // After the shell's first frame: the chat's mount never delays the open's start.
-    const frame = requestAnimationFrame(() => startTransition(() => setChatShown(true)));
+    const frame = requestAnimationFrame(() => {
+      openTraceMark("chat mount requested");
+      startTransition(() => setChatShown(true));
+    });
     return () => cancelAnimationFrame(frame);
   }, [chatShown]);
   const chatLaidOut = useCallback(() => {
+    openTraceMark("chat laid out (shell fade starts)");
     shellOpacity.set(
       withTiming(0, { duration: SHELL_FADE_MS, easing: Easing.linear }, (finished) => {
         if (finished) scheduleOnRN(setShellGone, true);
