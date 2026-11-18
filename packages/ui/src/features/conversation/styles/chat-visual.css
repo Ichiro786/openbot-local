@@ -19,11 +19,6 @@
   max-width: var(--message-wide-bubble-width);
 }
 
-/* In a chat with agent faces, the page starts after the face column, as the agent's bubbles do. */
-.chat-visual-with-author {
-  padding-inline-start: calc(var(--message-author-column) + var(--openbot-space-2));
-}
-
 /* A page that fills a panel. The page has no margin, so the frame gives it one. */
 .chat-visual-frame-fill {
   box-sizing: border-box;

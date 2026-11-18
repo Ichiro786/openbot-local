@@ -9,8 +9,10 @@ export const Alert: Pick<typeof NativeAlert, "alert" | "prompt"> = {
     if (
       isAndroid &&
       appDialogs.show({
-        title,
-        message,
+        // React Native 0.88 types the title and message as nullable; the themed dialog needs a
+        // string title, and no message stays unset.
+        title: title ?? "",
+        message: message ?? undefined,
         buttons: buttons?.length ? buttons : [{ text: currentText().t("common.close") }],
         options,
       })

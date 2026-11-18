@@ -125,7 +125,7 @@
   .app-window
     > .app-frame-edge
     :is(.settings-panel, .browser-panel)
-    > :is(.settings-panel-header, .file-preview-header, .browser-preview-header)::before {
+    > :is(.settings-panel-header, .file-preview-header)::before {
     position: absolute;
     top: 50%;
     width: 1px;
@@ -156,14 +156,14 @@
   .app-window
     > .app-frame-edge
     :is(.settings-panel, .browser-panel)
-    > :is(.settings-panel-header, .file-preview-header, .browser-preview-header) {
+    > :is(.settings-panel-header, .file-preview-header) {
     position: relative;
   }
 
   .app-window
     > .app-frame-edge
     :is(.settings-panel, .browser-panel)
-    > :is(.settings-panel-header, .file-preview-header, .browser-preview-header)::before {
+    > :is(.settings-panel-header, .file-preview-header)::before {
     left: 0;
   }
 
@@ -177,7 +177,7 @@
     > .app-frame-edge
     .side-panel-docked
     > :is(.settings-panel, .browser-panel)
-    > :is(.settings-panel-header, .file-preview-header, .browser-preview-header)::before {
+    > :is(.settings-panel-header, .file-preview-header)::before {
     content: none;
   }
 
@@ -283,13 +283,13 @@
     > .app-frame-edge
     > .window-page
     :is(.agent-usage-header, .routine-planner-title)
-    > :is(.agent-usage-identity, .agent-usage-controls, .routine-planner-identity, p) {
+    > :is(.agent-usage-identity, .agent-usage-controls, p) {
     flex-wrap: nowrap;
     gap: var(--openbot-space-2);
     -webkit-app-region: no-drag;
   }
 
-  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity, .routine-planner-identity) .ui-icon-button {
+  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity) .ui-icon-button {
     margin-left: 0;
   }
 
@@ -302,7 +302,7 @@
   }
 
   /* In a narrow window, the title gets shorter and the controls keep their size. */
-  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity, .routine-planner-identity) {
+  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity) {
     overflow: hidden;
   }
 
@@ -555,18 +555,12 @@
     -webkit-app-region: no-drag;
   }
 
-  .app-window > .app-frame-edge > .window-page .skills-marketplace-topbar .marketplace-title {
-    font-size: var(--openbot-text-md);
-    font-weight: var(--openbot-weight-medium);
-    white-space: nowrap;
-  }
-
-  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity, .routine-planner-identity) > .ui-icon-button,
-  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity, .routine-planner-identity) > h2 > span {
+  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity) > .ui-icon-button,
+  .app-window > .app-frame-edge > .window-page :is(.agent-usage-identity) > h2 > span {
     display: none;
   }
 
-  .app-frame-edge > .window-page :is(.agent-usage-identity, .routine-planner-identity) h2:focus {
+  .app-frame-edge > .window-page :is(.agent-usage-identity) h2:focus {
     outline: none;
   }
 }
@@ -749,7 +743,7 @@
   background: transparent;
 }
 
-.settings-page-content > .settings-modal-page :is(.settings-modal-header, .settings-modal-content) {
+.settings-page-content > .settings-modal-page .settings-modal-content {
   width: 100%;
   max-width: 784px;
   margin-inline: auto;

@@ -121,6 +121,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.memoryGone": "This memory no longer exists.",
   "error.backend.routineGone": "This routine no longer exists.",
   "error.backend.routineRunGone": "This routine run no longer exists.",
+  "error.backend.routineRunFailedNoReason":
+    "The run stopped with an error, but no reason came with it. Open the run to see what the agent did.",
   "error.backend.turnNotStarted": "The provider did not start this turn.",
   "error.backend.routineResultConnectionOff": "This messaging connection is off or removed. Choose another place.",
   "error.backend.routineResultNoDelivery": "This run has no answer to send again.",
@@ -273,6 +275,7 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mcpServerFailedToStart": "The server did not start: {reason}",
   "error.backend.mcpServerStartAbandoned":
     "{provider} stopped waiting before the server started, so its agents do not get the tools of this server.",
+  "error.backend.mcpServerStoppedDuringCall": "The MCP server stopped before it answered this call.",
   "error.backend.mcpToolSchemaRefused":
     "Its tool {tool} has an input format that this provider cannot read. Agents on other providers still get the server.",
   "error.backend.mcpServerSignInForProvider":

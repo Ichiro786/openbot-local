@@ -138,6 +138,9 @@ export const messages = {
   "mobile.chat.attachment.typeFile": "DATEI",
   "mobile.chat.attachment.tooLargeForMobile":
     "Diese Datei überschreitet das mobile Limit von {limit}. Öffne sie auf dem Desktop.",
+  "mobile.chat.backdrop.agentSet": "{name} hat den Hintergrund festgelegt",
+  "mobile.chat.backdrop.undo": "Rückgängig",
+  "mobile.chat.backdrop.dismiss": "Schließen",
   "mobile.chat.attachment.sharingUnavailable": "Dateifreigabe ist auf diesem Gerät nicht verfügbar.",
   "mobile.chat.attachment.unavailable": "Der Anhang ist nicht verfügbar. Versuche es erneut.",
   "mobile.chat.attachment.openFailed": "Anhang konnte nicht geöffnet werden",
@@ -494,7 +497,6 @@ export const messages = {
   "mobile.chat.thinking.latest": "Neueste",
   "mobile.chat.history.loadingOlder": "Ältere Nachrichten werden geladen…",
   "mobile.chat.history.retryOlder": "Ältere Nachrichten erneut laden",
-  "mobile.chat.history.loadOlder": "Ältere Nachrichten laden",
   "mobile.chat.history.connecting": "Verbindung zum Server wird hergestellt",
   "mobile.chat.history.loading": "Chatverlauf wird geladen",
   "mobile.chat.history.waiting": "Warten auf Verbindung",

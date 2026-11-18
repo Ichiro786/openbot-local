@@ -137,6 +137,9 @@ export const messages = {
   "mobile.chat.attachment.typeFile": "FILE",
   "mobile.chat.attachment.tooLargeForMobile":
     "Questo file supera il limite di {limit} per il telefono. Aprilo sul desktop.",
+  "mobile.chat.backdrop.agentSet": "{name} ha impostato lo sfondo",
+  "mobile.chat.backdrop.undo": "Annulla",
+  "mobile.chat.backdrop.dismiss": "Chiudi",
   "mobile.chat.attachment.sharingUnavailable": "La condivisione dei file non è disponibile su questo dispositivo.",
   "mobile.chat.attachment.unavailable": "L'allegato non è disponibile. Riprova.",
   "mobile.chat.attachment.openFailed": "Impossibile aprire l'allegato",
@@ -487,7 +490,6 @@ export const messages = {
   "mobile.chat.thinking.latest": "Ultimi",
   "mobile.chat.history.loadingOlder": "Caricamento dei messaggi precedenti…",
   "mobile.chat.history.retryOlder": "Riprova a caricare i messaggi precedenti",
-  "mobile.chat.history.loadOlder": "Carica i messaggi precedenti",
   "mobile.chat.history.connecting": "Connessione al server",
   "mobile.chat.history.loading": "Caricamento della cronologia della chat",
   "mobile.chat.history.waiting": "In attesa della connessione",

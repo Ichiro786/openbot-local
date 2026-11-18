@@ -138,6 +138,9 @@ export const messages = {
   "mobile.chat.attachment.typeFile": "ARCHIVO",
   "mobile.chat.attachment.tooLargeForMobile":
     "Este archivo supera el límite de {limit} del móvil. Ábrelo en el escritorio.",
+  "mobile.chat.backdrop.agentSet": "{name} cambió el fondo",
+  "mobile.chat.backdrop.undo": "Deshacer",
+  "mobile.chat.backdrop.dismiss": "Cerrar",
   "mobile.chat.attachment.sharingUnavailable": "No se pueden compartir archivos en este dispositivo.",
   "mobile.chat.attachment.unavailable": "El archivo adjunto no está disponible. Vuelve a intentarlo.",
   "mobile.chat.attachment.openFailed": "No se pudo abrir el archivo adjunto",
@@ -488,7 +491,6 @@ export const messages = {
   "mobile.chat.thinking.latest": "Lo último",
   "mobile.chat.history.loadingOlder": "Cargando mensajes anteriores…",
   "mobile.chat.history.retryOlder": "Volver a intentar cargar mensajes anteriores",
-  "mobile.chat.history.loadOlder": "Cargar mensajes anteriores",
   "mobile.chat.history.connecting": "Conectando con el servidor",
   "mobile.chat.history.loading": "Cargando el historial del chat",
   "mobile.chat.history.waiting": "Esperando conexión",

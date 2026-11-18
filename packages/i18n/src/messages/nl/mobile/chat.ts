@@ -129,6 +129,9 @@ export const messages = {
   "mobile.chat.attachment.typeFile": "BESTAND",
   "mobile.chat.attachment.tooLargeForMobile":
     "Dit bestand is groter dan de mobiele limiet van {limit}. Open het op je computer.",
+  "mobile.chat.backdrop.agentSet": "{name} heeft de achtergrond ingesteld",
+  "mobile.chat.backdrop.undo": "Ongedaan maken",
+  "mobile.chat.backdrop.dismiss": "Sluiten",
   "mobile.chat.attachment.sharingUnavailable": "Bestanden delen is niet beschikbaar op dit apparaat.",
   "mobile.chat.attachment.unavailable": "De bijlage is niet beschikbaar. Probeer opnieuw.",
   "mobile.chat.attachment.openFailed": "Kan bijlage niet openen",
@@ -455,7 +458,6 @@ export const messages = {
   "mobile.chat.thinking.latest": "Nieuwste",
   "mobile.chat.history.loadingOlder": "Oudere berichten laden…",
   "mobile.chat.history.retryOlder": "Probeer oudere berichten opnieuw te laden",
-  "mobile.chat.history.loadOlder": "Laad oudere berichten",
   "mobile.chat.history.connecting": "Verbinden met server",
   "mobile.chat.history.loading": "Chatgeschiedenis laden",
   "mobile.chat.history.waiting": "Wachten op verbinding",

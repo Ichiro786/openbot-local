@@ -63,6 +63,7 @@ import {
 } from "@/features/chat/components/streaming-tail-text";
 import { OpenbotUiBlock } from "@/features/chat/openbot-ui/openbot-ui-block";
 import { fenceClosed } from "@/features/chat/openbot-ui/openbot-ui-schema";
+import { PLAIN_BUBBLE_SHARE } from "@/features/settings/model/message-color";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { useFontScale } from "@/shared/lib/font-scale";
 import { graphemes } from "@/shared/lib/graphemes";
@@ -87,6 +88,7 @@ import {
 import { plainMentionParts } from "../model/chat-mentions";
 import { createReplyReveal, finishedReplyReveal } from "../model/reply-reveal";
 import { tableCsv } from "../model/table-copy";
+import { useSolidChatFill } from "./chat-bubble-fill";
 import { ChatCodeBlock } from "./chat-code-block";
 import { ChatCodePreview } from "./chat-code-preview";
 import { useOpenMessageFile } from "./chat-file-actions";
@@ -753,6 +755,9 @@ function MarkdownTable({ token, presentation }: { token: Tokens.Table; presentat
     "--openbot-data-table-text",
   ]).map((value) => (value === undefined ? "" : String(value)));
   const { tone } = presentation;
+  // With solid bubbles, the grey card out of a bubble is solid too, so a backdrop does not show
+  // through the header row.
+  const solidCard = useSolidChatFill(PLAIN_BUBBLE_SHARE);
   // The card has the background of a code block, and the lines between the rows have its color.
   // The rows are on the darker canvas. A message color gives its own surfaces; see `BubbleTone`.
   // Out of a bubble, the card is the bubble: the message color under it shows through, or else it has
@@ -760,7 +765,7 @@ function MarkdownTable({ token, presentation }: { token: Tokens.Table; presentat
   const card = presentation.outside
     ? tone
       ? "transparent"
-      : withAlpha(control, "99")
+      : (solidCard ?? withAlpha(control, "99"))
     : (tone?.panel ?? withAlpha(textColor, "0f"));
   const rowsBackground = tone?.deep ?? canvas;
   const rowLine = tone?.line ?? card;

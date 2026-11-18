@@ -16,6 +16,7 @@ import { useCSSVariable, useUniwind, withUniwind } from "uniwind";
 import { MobileAnalyticsLifecycle } from "@/features/analytics/lifecycle";
 import { AppLockOverlay } from "@/features/app-lock/components/app-lock-overlay";
 import { installAppLock } from "@/features/app-lock/model/app-lock";
+import { UpdateRequiredOverlay } from "@/features/app-update/components/update-required-overlay";
 import { DevelopmentConnectLinkHandler } from "@/features/auth/components/development-connect-link-handler";
 import { MobileSessionProvider, useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { loadOnboardingProgress } from "@/features/onboarding/model/onboarding-progress";
@@ -26,6 +27,7 @@ import { ThemeSweep } from "@/features/settings/components/theme-sweep";
 import { loadAppLanguage } from "@/features/settings/model/app-language";
 import { loadAppearance, useAppearance } from "@/features/settings/model/appearance";
 import { loadAvatarScale } from "@/features/settings/model/avatar-size";
+import { loadChatBackdrop } from "@/features/settings/model/chat-backdrop";
 import { loadChatBackground } from "@/features/settings/model/chat-background";
 import { loadChatDetailPreferences } from "@/features/settings/model/chat-details";
 import { loadChatOrderPreference } from "@/features/settings/model/chat-order";
@@ -53,9 +55,9 @@ import { checkRecognitionModels } from "@/features/voice/model/recognition-model
 import { supertonicModel } from "@/features/voice/model/supertonic-model";
 import { loadVoiceServer } from "@/features/voice/model/voice-server";
 import { loadVoiceSettings } from "@/features/voice/model/voice-settings";
-import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
 import { AppDialogBackground } from "@/shared/components/app-dialog-background";
 import { AppDialogHost } from "@/shared/components/app-dialog-host";
+import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
 import { BloubStageProvider, useBloubStageRequest } from "@/shared/components/bloub-stage/bloub-stage-context";
@@ -236,6 +238,7 @@ function RootNavigator() {
         </View>
         <BloubStage nativeSplashHidden={nativeHidden} onLayout={() => reportArtwork("stage")} />
         <ThemeSweep />
+        <UpdateRequiredOverlay />
         <AppLockOverlay />
       </View>
     </SplashContentReadyContext.Provider>
@@ -274,6 +277,7 @@ export default function RootLayout() {
       void loadPhotoQualityPreference().catch(() => undefined);
       void loadMessageColor().catch(() => undefined);
       void loadChatBackground().catch(() => undefined);
+      void loadChatBackdrop().catch(() => undefined);
       void loadRoutineCollapsePreference().catch(() => undefined);
       void loadChatDetailPreferences().catch(() => undefined);
       void loadFullVisualPreference().catch(() => undefined);

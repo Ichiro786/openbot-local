@@ -137,6 +137,9 @@ export const messages = {
   "mobile.chat.attachment.typeFile": "ファイル",
   "mobile.chat.attachment.tooLargeForMobile":
     "このファイルはモバイルの上限 {limit} を超えています。パソコンで開いてください。",
+  "mobile.chat.backdrop.agentSet": "{name} が背景を設定しました",
+  "mobile.chat.backdrop.undo": "元に戻す",
+  "mobile.chat.backdrop.dismiss": "閉じる",
   "mobile.chat.attachment.sharingUnavailable": "このデバイスではファイルの共有を利用できません。",
   "mobile.chat.attachment.unavailable": "添付ファイルを利用できません。もう一度お試しください。",
   "mobile.chat.attachment.openFailed": "添付ファイルを開けませんでした",
@@ -479,7 +482,6 @@ export const messages = {
   "mobile.chat.thinking.latest": "最新",
   "mobile.chat.history.loadingOlder": "以前のメッセージを読み込み中…",
   "mobile.chat.history.retryOlder": "以前のメッセージの読み込みを再試行",
-  "mobile.chat.history.loadOlder": "以前のメッセージを読み込む",
   "mobile.chat.history.connecting": "サーバーに接続中",
   "mobile.chat.history.loading": "チャット履歴を読み込み中",
   "mobile.chat.history.waiting": "接続を待っています",

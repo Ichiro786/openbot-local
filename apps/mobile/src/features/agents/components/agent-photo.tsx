@@ -18,6 +18,11 @@ export interface AgentPhotoProps {
   agentId?: string;
   serverId?: string;
   imageUrl?: string | null;
+  /**
+   * The `avatarUrl` of the agent record, when the caller already has the record. Without it, the photo
+   * finds the agent in the workspace. `imageUrl` wins over it.
+   */
+  avatarUrl?: string | null;
   disconnected?: boolean;
 }
 
@@ -25,6 +30,7 @@ export function AgentPhoto({
   agentId,
   serverId,
   imageUrl,
+  avatarUrl: knownAvatarUrl,
   disconnected = false,
   size,
   rings,
@@ -40,11 +46,13 @@ export function AgentPhoto({
 }) {
   const workspace = useMobileWorkspaceReader();
   const queryScope = useQueryScope();
-  const avatarUrl = useMobileWorkspaceSelector((current) =>
-    imageUrl === undefined
+  // A list row gives the URL of its agent, so the rows do not each search all agents at each change.
+  const foundAvatarUrl = useMobileWorkspaceSelector((current) =>
+    imageUrl === undefined && knownAvatarUrl === undefined
       ? current.agents.find((candidate) => candidate.id === agentId && candidate.serverId === serverId)?.avatarUrl
       : undefined,
   );
+  const avatarUrl = imageUrl !== undefined ? undefined : knownAvatarUrl !== undefined ? knownAvatarUrl : foundAvatarUrl;
   const online = useMobileWorkspaceSelector((current) =>
     current.servers.some((server) => server.id === serverId && showsOnline(server)),
   );
@@ -72,9 +80,7 @@ export function AgentPhoto({
       {/* A URI means the transfer finished, not that the native image is ready. Keep the
           generated face until this version has actually appeared, also in a recycled row. */}
       {displayed !== uri ? children : null}
-      <View
-        style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, overflow: "hidden" }}
-      >
+      <View style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, overflow: "hidden" }}>
         <Image
           key={uri}
           source={{ uri }}
