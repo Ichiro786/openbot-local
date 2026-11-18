@@ -6,7 +6,7 @@ import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references"
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
 import { markdownInlinePlainText, markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import { useIsFocused } from "expo-router";
-import { Typography } from "heroui-native";
+import { Spinner, Typography } from "heroui-native";
 import CircleX from "lucide-react-native/icons/circle-x";
 import CornerUpRight from "lucide-react-native/icons/corner-up-right";
 import GitFork from "lucide-react-native/icons/git-fork";
@@ -54,7 +54,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { useCSSVariable } from "uniwind";
+import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/components/chat-activity-row";
 import { ChatAppSuggestion } from "@/features/chat/components/chat-app-suggestion";
@@ -93,8 +93,15 @@ import {
 } from "@/features/chat/model/chat-messages";
 import type { TurnStepsSummary } from "@/features/chat/model/turn-thinking";
 import { readableOn } from "@/features/onboarding/model/onboarding-colors";
+import { useChatBackdrop } from "@/features/settings/model/chat-backdrop";
 import { useChatRowShown, useThinkingDisplayPreference } from "@/features/settings/model/chat-details";
-import { useMessageColor } from "@/features/settings/model/message-color";
+import {
+  MEMBER_BUBBLE_SHARE,
+  mixColor,
+  PLAIN_BUBBLE_SHARE,
+  tintedMessageColor,
+  useMessageColor,
+} from "@/features/settings/model/message-color";
 import { useRoutineCollapsePreference } from "@/features/settings/model/routine-collapse";
 import { canReadAloud, stopReadAloud } from "@/features/voice/model/message-reading";
 import { useConnectionAppearance } from "@/features/workspace/components/use-connection-appearance";
@@ -120,6 +127,8 @@ import { messageTime } from "../model/message-time";
 import { isStreamingReply } from "../model/reply-reveal";
 import { uploadProgressAt } from "../model/upload-progress";
 import { type AttachmentTint, ChatAttachmentView } from "./chat-attachment";
+import { useChatBackdropBase } from "./chat-backdrop-layer";
+import { ChatSolidSurfaceProvider } from "./chat-bubble-fill";
 import { ChatFileActionsContext, type OpenMessageFile, useMessageFileOpener } from "./chat-file-actions";
 import { ChatImageGallery } from "./chat-image-gallery";
 import { ChatImageGeneration, imageGenerationStatus } from "./chat-image-generation";
@@ -267,8 +276,11 @@ function ChatBubble({
   animateSize,
   className,
   style,
+  fill,
 }: PropsWithChildren<{
   agent: boolean;
+  /** The solid fill of an agent bubble, or unset for the see-through fill. */
+  fill: string | undefined;
   collapsed?: boolean;
   /** Off when Settings turns reply animation off: the background takes each new size at once. */
   animateSize: boolean;
@@ -318,8 +330,13 @@ function ChatBubble({
           // A new view when the setting changes, so a filled background keeps no animated size.
           key={sized ? "sized" : "filled"}
           pointerEvents="none"
-          className="absolute left-0 top-0 bg-control/60"
-          style={[BUBBLE_CORNER, sized ? null : StyleSheet.absoluteFill, background]}
+          className={fill ? "absolute left-0 top-0" : "absolute left-0 top-0 bg-control/60"}
+          style={[
+            BUBBLE_CORNER,
+            sized ? null : StyleSheet.absoluteFill,
+            fill ? { backgroundColor: fill } : null,
+            background,
+          ]}
         />
       ) : null}
       {children}
@@ -329,6 +346,8 @@ function ChatBubble({
 
 interface ChatMessageListProps {
   target: ChatTarget;
+  /** The color under the messages: the chat background, or the base color of the backdrop. */
+  bubbleSurface: string;
   /**
    * The swipe away from Back of an agent's chat. It attaches to the list, and a bubble that replies
    * with a swipe in the same direction blocks it. Keep it for the life of the list: a change mounts
@@ -475,6 +494,13 @@ interface MessageRowShared {
   attachmentTint: AttachmentTint | undefined;
   /** The colors of code in the user's bubble, unset with the same setting. */
   bubbleTone: BubbleTone | undefined;
+  /**
+   * Solid bubbles: the fill of a bubble with no color, the control fill mixed onto the surface. Unset
+   * with see-through bubbles, which keep the translucent fill.
+   */
+  plainBubbleFill: string | undefined;
+  /** Solid bubbles: the surface that a member color mixes onto. Unset with see-through bubbles. */
+  solidBubbleSurface: string | undefined;
   firstMessageStyle: ComponentProps<typeof Animated.View>["style"];
   /** Arriving replies animate: the screen is focused, online, active, and shows the response. */
   animationActive: boolean;
@@ -796,6 +822,8 @@ const MessageRow = memo(function MessageRow({
     foreground,
     userForeground,
     userBubbleStyle,
+    plainBubbleFill,
+    solidBubbleSurface,
     firstMessageStyle,
     replySession,
     markRevealed,
@@ -894,11 +922,12 @@ const MessageRow = memo(function MessageRow({
         <ChatBubble
           key={key}
           agent={message.author === "agent"}
+          fill={plainBubbleFill}
           collapsed={waiting}
           animateSize={shared.textReveal}
           className={
             message.author === "user"
-              ? `max-w-full self-end px-4 py-3 ${userBubbleStyle || memberColor ? "" : "bg-control/60"}`
+              ? `max-w-full self-end px-4 py-3 ${userBubbleStyle || memberColor || plainBubbleFill ? "" : "bg-control/60"}`
               : `max-w-full self-start ${waiting ? "" : "px-4 py-3"}`
           }
           style={[
@@ -911,15 +940,28 @@ const MessageRow = memo(function MessageRow({
               : undefined,
             message.author === "user"
               ? memberColor
-                ? { backgroundColor: `${memberColor}38` }
-                : userBubbleStyle
+                ? {
+                    backgroundColor:
+                      (solidBubbleSurface && mixColor(solidBubbleSurface, memberColor, MEMBER_BUBBLE_SHARE)) ||
+                      `${memberColor}38`,
+                  }
+                : (userBubbleStyle ?? (plainBubbleFill ? { backgroundColor: plainBubbleFill } : undefined))
               : undefined,
           ]}
         >
           {children}
         </ChatBubble>
       ) : null,
-    [message, waiting, shared.textReveal, shared.listWidth, userBubbleStyle, memberColor],
+    [
+      message,
+      waiting,
+      shared.textReveal,
+      shared.listWidth,
+      userBubbleStyle,
+      memberColor,
+      plainBubbleFill,
+      solidBubbleSurface,
+    ],
   );
   // A table out of the user's bubble is as wide as the widest bubble and on its side.
   const sentTable = useCallback(
@@ -1630,6 +1672,7 @@ export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<b
 }
 
 export const ChatMessageList = memo(function ChatMessageList({
+  bubbleSurface,
   upload,
   outboxStatuses,
   target,
@@ -1797,14 +1840,35 @@ export const ChatMessageList = memo(function ChatMessageList({
   const arrivals = useMessageArrivals(replySession.key, messages, watchesArrivals);
   const messageColorMode = useMessageColor((state) => state.mode);
   const customMessageColor = useMessageColor((state) => state.customColor);
-  const userBubbleColor =
-    messageColorMode === "custom"
+  const messageColorStyle = useMessageColor((state) => state.style);
+  // A page that an agent set as the backdrop can bring the color of the reader's bubbles, as on desktop.
+  const backdropBubbleColor = useChatBackdrop((state) =>
+    state.choice === "agent" ? state.agentPage?.bubbles?.yours : undefined,
+  );
+  const [themeSurface, controlFill] = useCSSVariable(["--openbot-bg-surface", "--openbot-bg-control"]);
+  // See-through bubbles apply only over a backdrop. With no backdrop, bubbles are always solid.
+  const seeThroughSetting = useMessageColor((state) => state.seeThrough);
+  const backdropShown = useChatBackdropBase() !== null;
+  const seeThrough = seeThroughSetting && backdropShown;
+  // Solid bubbles take the look of the see-through fill on the surface under them, so a chat with no
+  // backdrop looks as before, and a backdrop does not show through a bubble.
+  const solidBubbleSurface = seeThrough ? undefined : bubbleSurface;
+  const plainBubbleFill = seeThrough
+    ? undefined
+    : (mixColor(bubbleSurface, String(controlFill), PLAIN_BUBBLE_SHARE) ?? String(controlFill));
+  const dark = useUniwind().theme === "dark";
+  const solidBubbleColor =
+    backdropBubbleColor ??
+    (messageColorMode === "custom"
       ? customMessageColor
       : avatarHeadColor(
           target.kind === "agent" ? target.avatarSeed : target.id,
           target.kind === "agent" ? target.avatarHue : null,
           target.kind === "agent" ? target.avatarColor : null,
-        );
+        ));
+  // Tint mixes a part of the color into the bubble surface, as the desktop Tint does.
+  const userBubbleColor =
+    messageColorStyle === "tint" ? tintedMessageColor(solidBubbleColor, String(themeSurface), dark) : solidBubbleColor;
   // A channel has no one agent color for the reader's messages.
   const coloredMessages = messageColorMode === "custom" || (messageColorMode === "agent" && target.kind === "agent");
   // Dark text on a light color and white text on a dark one, so the text stays readable.
@@ -2044,6 +2108,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       foreground,
       userForeground,
       userBubbleStyle: coloredMessages ? userBubbleStyle : undefined,
+      plainBubbleFill,
+      solidBubbleSurface,
       attachmentTint: coloredMessages ? { color: userBubbleColor, foreground: userForeground } : undefined,
       bubbleTone: coloredMessages ? bubbleTone(userForeground) : undefined,
       firstMessageStyle: motion.firstMessageStyle,
@@ -2088,6 +2154,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       userBubbleStyle,
       userBubbleColor,
       coloredMessages,
+      plainBubbleFill,
+      solidBubbleSurface,
       motion.firstMessageStyle,
       screenReaderEnabled,
       animationActive,
@@ -2305,6 +2373,13 @@ export const ChatMessageList = memo(function ChatMessageList({
     if (motion.historyVisible && canLoadOlder && !olderError) onLoadOlder();
   };
   const onStartReached = useCallback(() => startReached.current(), []);
+  // No button loads older pages. The list reports the top again only when its data changes, so a top
+  // that it reported while the history was hidden or the phone was offline loads the next page here.
+  const historyVisible = motion.historyVisible;
+  const startListRef = motion.listRef;
+  useEffect(() => {
+    if (historyVisible && online && startListRef.current?.getState().isNearStart) startReached.current();
+  }, [historyVisible, online, startListRef]);
   const contentContainerStyle = useMemo(
     () => ({
       paddingLeft: insets.left + LIST_PADDING,
@@ -2401,16 +2476,22 @@ export const ChatMessageList = memo(function ChatMessageList({
   const listHeader = (
     <>
       {hasOlder ? (
-        <View className="items-center pb-3">
-          <Button variant="tertiary" isDisabled={!canLoadOlder} onPress={onLoadOlder}>
-            <Button.Label>
-              {olderLoading
-                ? t("mobile.chat.history.loadingOlder")
-                : olderError
-                  ? t("mobile.chat.history.retryOlder")
-                  : t("mobile.chat.history.loadOlder")}
-            </Button.Label>
-          </Button>
+        // Scrolling to the top loads older pages by itself (onStartReached). The slot keeps one height
+        // in every state, so the messages below it do not move when the state changes.
+        <View className="h-13 items-center justify-center">
+          {olderLoading ? (
+            <View
+              accessible
+              accessibilityLabel={t("mobile.chat.history.loadingOlder")}
+              accessibilityState={{ busy: true }}
+            >
+              <Spinner size="sm" color={themeMuted} />
+            </View>
+          ) : olderError ? (
+            <Button size="sm" variant="tertiary" isDisabled={!canLoadOlder} onPress={onLoadOlder}>
+              <Button.Label>{t("mobile.chat.history.retryOlder")}</Button.Label>
+            </Button>
+          ) : null}
         </View>
       ) : null}
       {historyState === "connecting" || historyState === "loading" ? (
@@ -2484,28 +2565,30 @@ export const ChatMessageList = memo(function ChatMessageList({
         !accessibilityHidden && (historyState !== "ready" || motion.historyVisible) ? "auto" : "no-hide-descendants"
       }
     >
-      <ChatImageViewerProvider serverId={target.serverId} images={images}>
-        {/* The history hides only once it is ready: a loading list shows what it has. */}
-        <ChatTagActionsContext value={openTaggedTab}>
-          <HistoryShownContext value={historyState !== "ready" || motion.historyVisible}>
-            <RoutineGroupsContext value={routineGroupsState}>
-              <KeptOpenContext value={replySession.keptOpen}>
-                <RowContext value={rowContext}>
-                  <ChatSwipeGestureContext value={swipeGesture ?? null}>
-                    <ChatTimeRevealContext value={timeReveal}>
-                      <ChatTimesMountedContext value={timesMounted}>
-                        <ListHeaderContext value={listHeader}>
-                          <ListFooterContext value={listFooter}>{list}</ListFooterContext>
-                        </ListHeaderContext>
-                      </ChatTimesMountedContext>
-                    </ChatTimeRevealContext>
-                  </ChatSwipeGestureContext>
-                </RowContext>
-              </KeptOpenContext>
-            </RoutineGroupsContext>
-          </HistoryShownContext>
-        </ChatTagActionsContext>
-      </ChatImageViewerProvider>
+      <ChatSolidSurfaceProvider surface={solidBubbleSurface}>
+        <ChatImageViewerProvider serverId={target.serverId} images={images}>
+          {/* The history hides only once it is ready: a loading list shows what it has. */}
+          <ChatTagActionsContext value={openTaggedTab}>
+            <HistoryShownContext value={historyState !== "ready" || motion.historyVisible}>
+              <RoutineGroupsContext value={routineGroupsState}>
+                <KeptOpenContext value={replySession.keptOpen}>
+                  <RowContext value={rowContext}>
+                    <ChatSwipeGestureContext value={swipeGesture ?? null}>
+                      <ChatTimeRevealContext value={timeReveal}>
+                        <ChatTimesMountedContext value={timesMounted}>
+                          <ListHeaderContext value={listHeader}>
+                            <ListFooterContext value={listFooter}>{list}</ListFooterContext>
+                          </ListHeaderContext>
+                        </ChatTimesMountedContext>
+                      </ChatTimeRevealContext>
+                    </ChatSwipeGestureContext>
+                  </RowContext>
+                </KeptOpenContext>
+              </RoutineGroupsContext>
+            </HistoryShownContext>
+          </ChatTagActionsContext>
+        </ChatImageViewerProvider>
+      </ChatSolidSurfaceProvider>
       {messageFiles.sheet}
     </Animated.View>
   );

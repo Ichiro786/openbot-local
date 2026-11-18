@@ -1,0 +1,78 @@
+diff --git a/src/main/application-services.ts b/src/main/application-services.ts
+index c1ac566f..3a2e6e09 100644
+--- a/src/main/application-services.ts
++++ b/src/main/application-services.ts
+@@ -96,7 +96,7 @@ import { sizeWorkflowPicture } from "./workflow-picture-size";
+  */
+ 
+ import { randomBytes } from "node:crypto";
+-import { existsSync } from "node:fs";
++import { existsSync, renameSync, writeFileSync } from "node:fs";
+ import { readdir, readFile, rm } from "node:fs/promises";
+ import { homedir, hostname, tmpdir } from "node:os";
+ import { join, resolve } from "node:path";
+@@ -4325,6 +4325,29 @@ export async function createApplicationServices({
+       write: (line) => process.stdout.write(line),
+     });
+   }
++  // OpenBot Local: the Android app keeps the phone awake only while agents work. It watches this
++  // file (inotify on the host side, no polling), so the server writes it only when the count changes.
++  const busyFile = serverModeEnvironment ? process.env.OPENBOT_LOCAL_BUSY_FILE : undefined;
++  if (busyFile) {
++    let lastWorking = -1;
++    const writeBusy = () => {
++      const working = service.workingAgents().length;
++      if (working === lastWorking) return;
++      lastWorking = working;
++      try {
++        writeFileSync(`${busyFile}.tmp`, `working=${working}\n`);
++        renameSync(`${busyFile}.tmp`, busyFile);
++      } catch (error) {
++        logger.warn("Unable to write the OpenBot Local busy file:", toLogValue(error));
++      }
++    };
++    writeBusy();
++    reportLocalServerWorkingAgents({
++      read: () => service.workingAgents(),
++      subscribe: (listener) => service.on("event", listener),
++      write: writeBusy,
++    });
++  }
+   configureAttachmentProtocol({ mailbox, agents: service, remoteServers });
+   configureServerLogoProtocols({ teamStore, remoteServers });
+   // After the servers: the view it opens belongs to one of them, and it has to stop before they do.
+diff --git a/src/main/index.ts b/src/main/index.ts
+index f039cad1..3342f565 100644
+--- a/src/main/index.ts
++++ b/src/main/index.ts
+@@ -1990,7 +1990,12 @@ if (!hasSingleInstanceLock) {
+         );
+       // The island pages load beside the main window, not before it.
+       reconcileDynamicIsland();
+-      await windows.loadRenderer(mainWindow);
++      // OpenBot Local: on the phone nobody sees this server's window; its renderer is the whole desktop
++      // UI running for nobody. The window stays, like a local server's that never loads: the agent
++      // browser and the services attach to it.
++      if (serverMode && process.env.OPENBOT_LOCAL_NO_RENDERER === "1")
++        logger.info("OpenBot Local: the server window does not load its renderer.");
++      else await windows.loadRenderer(mainWindow);
+       performance.mark("openbot:renderer-loaded");
+       // The start is finished: the database is open and the main window loaded.
+       startAttempts?.finished();
+diff --git a/src/main/resource-monitor.ts b/src/main/resource-monitor.ts
+index 9aded82a..99ef12bc 100644
+--- a/src/main/resource-monitor.ts
++++ b/src/main/resource-monitor.ts
+@@ -352,6 +352,12 @@ export class ResourceMonitor implements AnalyticsResourceSource {
+    */
+   #restLoop(): void {
+     if (this.#profiler.running) return;
++    // OpenBot Local: the phone's server runs on a battery and nobody sits at its windows, so it rests like
++    // an idle desktop app. A turn is still measured.
++    if (process.env.OPENBOT_LOCAL_LOOP_REST === "1") {
++      if (!this.#options.turnRunning()) this.#loop.disable();
++      return;
++    }
+     if (this.#options.server || this.#options.turnRunning() || BrowserWindow.getFocusedWindow() !== null) return;
+     this.#loop.disable();
+   }

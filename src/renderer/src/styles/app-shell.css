@@ -997,8 +997,7 @@ textarea {
   /* A side panel's header continues the top row at the chat header's height, so the lines meet. The
    * window card draws the line. */
   .app-frame-edge .settings-panel-header,
-  .app-frame-edge .file-preview-header,
-  .app-frame-edge .browser-preview-header {
+  .app-frame-edge .file-preview-header {
     height: var(--left-header-height);
     border-bottom: 0;
     background: transparent;
@@ -2095,24 +2094,6 @@ textarea {
   height: 34px;
 }
 
-.person-unread-badge {
-  position: absolute;
-  z-index: 2;
-  right: -4px;
-  bottom: -3px;
-  display: grid;
-  min-width: 17px;
-  height: 17px;
-  place-items: center;
-  border: 2px solid var(--openbot-bg-sidebar);
-  border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-text-primary);
-  padding: 0 3px;
-  color: var(--openbot-bg-sidebar);
-  font-size: var(--openbot-text-sm);
-  font-weight: 680;
-}
-
 .agent-row {
   --agent-row-avatar-size: 46px;
 
@@ -2495,18 +2476,6 @@ textarea {
   .agent-avatar[data-breathe] {
     animation: none;
   }
-}
-
-/* The rings reach 1.4 ball radii, which is the margin the Bloub viewBox carries
-   past its body: 316 units drawn over the 200 the image fills, so the layer is
-   158% of the avatar box and sits (158% - 100%) / 2 outside it on each side. */
-.agent-avatar > .agent-avatar-arcs {
-  position: absolute;
-  inset: -29%;
-  width: auto;
-  height: auto;
-  overflow: visible;
-  translate: none;
 }
 
 .agent-row .agent-avatar {
@@ -3418,7 +3387,6 @@ textarea {
   color: var(--openbot-text-primary);
 }
 
-.choice-key,
 .composer-mention-token,
 .remote-desktop-empty-mark {
   background: var(--openbot-bg-control-hover);

@@ -5,7 +5,10 @@ import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  useMobileWorkspaceActions,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MenuAction } from "@/shared/components/menu-view";
 import { Alert } from "@/shared/lib/alert";
@@ -46,9 +49,10 @@ export function useThreadActions(serverId: string, onDeleted?: (task: AgentTask)
   const { t } = useText();
   const queryScope = useQueryScope();
   const queryClient = useQueryClient();
-  const { canEditThreads, controlAgentTask, deleteAgentThread } = useMobileWorkspace();
+  // Only what the menu needs, so a change elsewhere in the workspace does not render the thread list again.
+  const { controlAgentTask, deleteAgentThread } = useMobileWorkspaceActions();
   const [acting, setActing] = useState<ReadonlySet<string>>(() => new Set());
-  const editable = canEditThreads(serverId);
+  const editable = useMobileWorkspaceSelector((workspace) => workspace.canEditThreads(serverId));
 
   // The threads with a request on the way. The ref answers at once; the state draws the menu.
   const pending = useRef(new Set<string>());
