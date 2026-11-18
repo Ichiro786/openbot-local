@@ -194,8 +194,6 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
   );
   const openingGesture = usePanGesture(openingConfig);
 
-  // Where the drawer was when the finger took it. A grab during a spring continues from there, not from open.
-  const closingStart = useSharedValue(1);
   const closingGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -205,11 +203,8 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
         .activeOffsetX(-8 * END_X)
         .failOffsetX(12 * END_X)
         .failOffsetY([-12, 12])
-        .onStart(() => {
-          closingStart.set(drawerProgress.get());
-        })
         .onUpdate((event) => {
-          drawerProgress.set(Math.min(1, Math.max(0, closingStart.get() + (event.translationX * END_X) / drawerWidth)));
+          drawerProgress.set(Math.min(1, Math.max(0, 1 + (event.translationX * END_X) / drawerWidth)));
         })
         .onEnd((event) => {
           const velocity = (event.velocityX * END_X) / drawerWidth;
@@ -225,7 +220,7 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
             ),
           );
         }),
-    [closingStart, drawerOpenOnUI, drawerProgress, drawerWidth, finishClosing, finishOpening],
+    [drawerOpenOnUI, drawerProgress, drawerWidth, finishClosing, finishOpening],
   );
 
   const surfaceStyle = useAnimatedStyle(() =>

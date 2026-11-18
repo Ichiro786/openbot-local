@@ -39,7 +39,7 @@ import { isAndroid, longPressDelay } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { END_X, lineDirectionStyle } from "@/shared/lib/text-direction";
 import { typeScale } from "@/shared/lib/type-scale";
-import { RowPressHighlight, useRowPress } from "@/shared/motion/RowPress";
+import { RowPressHighlight, rowPressStyle } from "@/shared/motion/RowPress";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
@@ -138,7 +138,6 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
   const waitReason = useAgentListWaitReason(agent.id);
   const isUnpinTarget = transition?.chatId === agent.id && transition.target === "row";
   const { enabled: colorOS, reduceMotion } = useColorOSMotion();
-  const rowPress = useRowPress(reduceMotion);
   const bloub = (
     <BloubAvatar
       agentId={agent.id}
@@ -191,26 +190,20 @@ export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, 
         if (event.nativeEvent.actionName === "pin") toggleAgentPinAnimated(agent.id);
       }}
       className="w-full"
-      onPressIn={(event) => {
-        if (colorOS) rowPress.onPressIn();
-        agentChatPreview.onPressIn?.(event);
-      }}
+      onPressIn={agentChatPreview.onPressIn}
       delayLongPress={longPressDelay}
       onLongPress={holdMenu.onLongPress}
-      onPressOut={(event) => {
-        if (colorOS) rowPress.onPressOut();
-        holdMenu.onPressOut?.(event);
-      }}
+      onPressOut={holdMenu.onPressOut}
     >
       {({ pressed }) => (
         <Animated.View
           className="min-h-20 w-full flex-row items-center gap-3 py-1"
           style={[
             { backgroundColor: background, paddingLeft: leftInset, paddingRight: rightInset },
-            colorOS ? rowPress.rowStyle : { opacity: pressed ? 0.58 : 1 },
+            colorOS ? rowPressStyle(pressed, reduceMotion) : { opacity: pressed ? 0.58 : 1 },
           ]}
         >
-          {colorOS ? <RowPressHighlight style={rowPress.highlightStyle} /> : null}
+          {colorOS ? <RowPressHighlight pressed={pressed} /> : null}
           {avatar}
           <AgentRowTextReveal active={isUnpinTarget}>
             <View className="min-w-0 flex-1 gap-0.5">

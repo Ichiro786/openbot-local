@@ -32,7 +32,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, longPressDelay } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
 import { typeScale } from "@/shared/lib/type-scale";
-import { RowPressHighlight, useRowPress } from "@/shared/motion/RowPress";
+import { RowPressHighlight, rowPressStyle } from "@/shared/motion/RowPress";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { ChannelAvatar } from "./channel-avatar";
 
@@ -321,7 +321,6 @@ export const ChannelListRow = memo(function ChannelListRow({
   const unread = channel.unreadCount > 0;
   const togglePin = (withHaptic = true) => toggleChannelPinAnimated(channel, serverId, { haptic: withHaptic });
   const { enabled: colorOS, reduceMotion } = useColorOSMotion();
-  const rowPress = useRowPress(reduceMotion);
   const openLabel = title
     ? t("mobile.channel.list.openWithTitle", { name: channel.name, title })
     : t("mobile.channel.list.open", { name: channel.name });
@@ -357,11 +356,7 @@ export const ChannelListRow = memo(function ChannelListRow({
       className={pinned ? "w-full items-center gap-2 px-1" : "w-full"}
       delayLongPress={longPressDelay}
       onLongPress={holdMenu.onLongPress}
-      onPressIn={colorOS ? rowPress.onPressIn : undefined}
-      onPressOut={(event) => {
-        if (colorOS) rowPress.onPressOut();
-        holdMenu.onPressOut?.(event);
-      }}
+      onPressOut={holdMenu.onPressOut}
       style={pinned ? ({ pressed }) => ({ opacity: pressed ? 0.58 : 1 }) : undefined}
     >
       {pinned ? (
@@ -394,10 +389,10 @@ export const ChannelListRow = memo(function ChannelListRow({
             className="min-h-20 w-full flex-row items-center gap-3 py-1"
             style={[
               { backgroundColor: rowBackground, paddingLeft: leftInset, paddingRight: rightInset },
-              colorOS ? rowPress.rowStyle : { opacity: pressed ? 0.58 : 1 },
+              colorOS ? rowPressStyle(pressed, reduceMotion) : { opacity: pressed ? 0.58 : 1 },
             ]}
           >
-            {colorOS ? <RowPressHighlight style={rowPress.highlightStyle} /> : null}
+            {colorOS ? <RowPressHighlight pressed={pressed} /> : null}
             {avatar}
             <View className="min-w-0 flex-1 gap-0.5">
               <View className="flex-row items-center gap-2">

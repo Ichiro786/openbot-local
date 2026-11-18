@@ -39,7 +39,6 @@ import {
 import type { MobileSidebarItem } from "@/features/workspace/model/sidebar-layout";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion } from "@/shared/lib/motion";
-import { springs } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { typeScale } from "@/shared/lib/type-scale";
 
@@ -383,7 +382,7 @@ function DragGhost({
   const reducedMotion = useReducedMotion();
   const lift = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
-    if (!reducedMotion) lift.set(withSpring(1, springs.fastSpatial));
+    if (!reducedMotion) lift.set(withSpring(1, { damping: 18, stiffness: 320 }));
   }, [lift, reducedMotion]);
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: x.get() - grab.x }, { translateY: y.get() - grab.y }, { scale: 1 + 0.06 * lift.get() }],

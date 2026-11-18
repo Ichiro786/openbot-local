@@ -111,12 +111,7 @@ const CodeBlockBody = memo(function CodeBlockBody({
   const card = tone?.panel ?? `${textColor}0f`;
   const panel = tone?.deep ?? canvas;
   const foreground = tone?.foreground ?? theme.foreground;
-  const hasTone = tone !== undefined;
-  const toneMuted = tone?.muted;
-  const colors = useMemo<Partial<Record<ShjToken, ColorValue>>>(
-    () => (hasTone ? { cmnt: toneMuted } : theme.colors),
-    [hasTone, toneMuted, theme.colors],
-  );
+  const colors: Partial<Record<ShjToken, ColorValue>> = tone ? { cmnt: tone.muted } : theme.colors;
   const [highlight, setHighlight] = useState<{ text: string; language?: string; tokens: CodeToken[] } | null>(() => {
     const tokens = cachedHighlight(text, language);
     return tokens ? { text, language, tokens } : null;
@@ -154,15 +149,12 @@ const CodeBlockBody = memo(function CodeBlockBody({
       if (timer !== null) clearTimeout(timer);
     };
   }, [text, language, finished, highlightAllowed]);
-  const tokens = useMemo(
-    () =>
-      !highlight || highlight.language !== language || !text.startsWith(highlight.text)
-        ? [{ text, offset: 0 }]
-        : highlight.text === text
-          ? highlight.tokens
-          : [...highlight.tokens, { text: text.slice(highlight.text.length), offset: highlight.text.length }],
-    [highlight, language, text],
-  );
+  const tokens =
+    !highlight || highlight.language !== language || !text.startsWith(highlight.text)
+      ? [{ text, offset: 0 }]
+      : highlight.text === text
+        ? highlight.tokens
+        : [...highlight.tokens, { text: text.slice(highlight.text.length), offset: highlight.text.length }];
   const runs = useMemo(() => codeRuns(tokens, colors, foreground), [tokens, colors, foreground]);
   const copied = copiedText === text;
   async function copy() {
@@ -241,23 +233,19 @@ export function useCodeTokenColors() {
     "--openbot-warning-text",
     "--openbot-danger-text",
   ]).map(String);
-  // One object while the colours stay, so a render with the same text keeps the memoized runs.
-  const colors = useMemo<Partial<Record<ShjToken, ColorValue>>>(
-    () => ({
-      kwd: keyword,
-      type: keyword,
-      class: keyword,
-      func: keyword,
-      str: string,
-      insert: string,
-      num: number,
-      bool: number,
-      esc: number,
-      cmnt: muted,
-      deleted: error,
-      err: error,
-    }),
-    [keyword, string, number, muted, error],
-  );
+  const colors: Partial<Record<ShjToken, ColorValue>> = {
+    kwd: keyword,
+    type: keyword,
+    class: keyword,
+    func: keyword,
+    str: string,
+    insert: string,
+    num: number,
+    bool: number,
+    esc: number,
+    cmnt: muted,
+    deleted: error,
+    err: error,
+  };
   return { foreground, muted, colors };
 }

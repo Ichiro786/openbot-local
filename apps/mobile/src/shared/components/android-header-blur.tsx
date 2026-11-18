@@ -3,7 +3,7 @@ import { BlurTargetView, BlurView } from "expo-blur";
 import type { NativeStackHeaderProps } from "expo-router/native-stack";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { type ReactNode, type RefObject, useId } from "react";
+import type { ReactNode, RefObject } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
@@ -82,8 +82,6 @@ export function AndroidHeaderBlur({
 }) {
   const { theme } = useUniwind();
   const { belowBar, full } = BLUR_SHAPES[shape];
-  // Each mounted header needs its own gradient id: a stack keeps the pages below mounted.
-  const maskId = `android-header-mask-${useId().replaceAll(":", "")}`;
   return (
     <MaskedView
       pointerEvents="none"
@@ -96,13 +94,13 @@ export function AndroidHeaderBlur({
       maskElement={
         <Svg height="100%" width="100%">
           <Defs>
-            <LinearGradient id={maskId} x1="0" x2="0" y1="0" y2="1">
+            <LinearGradient id="android-header-mask" x1="0" x2="0" y1="0" y2="1">
               {maskStops(full).map(({ offset, opacity }) => (
                 <Stop key={offset} offset={offset} stopColor="#000000" stopOpacity={opacity} />
               ))}
             </LinearGradient>
           </Defs>
-          <Rect fill={`url(#${maskId})`} height="100%" width="100%" />
+          <Rect fill="url(#android-header-mask)" height="100%" width="100%" />
         </Svg>
       }
     >

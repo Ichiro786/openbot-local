@@ -444,9 +444,6 @@ export function ChatView({
   const queryClient = useQueryClient();
   // Use skill in the plus menu bumps it; the composer then writes `@` and offers the skills.
   const [skillPickerVersion, setSkillPickerVersion] = useState(0);
-  // Stable, so a streamed chunk does not render the composer again.
-  const bumpSkillPicker = useCallback(() => setSkillPickerVersion((version) => version + 1), []);
-  const onUseSkill = mentionSkills?.length ? bumpSkillPicker : undefined;
   // On Android a drag in the open `@` list was also the swipe that hides the keyboard: the composer
   // followed the finger down behind the keyboard, which stayed. iOS keeps the swipe.
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -1681,7 +1678,7 @@ export function ChatView({
                   onInputFocus={motion.anticipateKeyboard}
                   menuOpen={attachments.menuOpen}
                   menuProgress={menuProgress}
-                  onUseSkill={onUseSkill}
+                  onUseSkill={mentionSkills?.length ? () => setSkillPickerVersion((version) => version + 1) : undefined}
                   stopping={stopping}
                   voice={composerVoice}
                     dictation={composerDictation}
@@ -1713,7 +1710,7 @@ export function ChatView({
             keyboardOffset={keyboardOffset}
             liquidGlassAvailable={liquidGlassAvailable}
             onClose={attachments.closeMenu}
-            onUseSkill={onUseSkill}
+            onUseSkill={mentionSkills?.length ? () => setSkillPickerVersion((version) => version + 1) : undefined}
             progress={menuProgress}
           />
         ) : null}

@@ -36,7 +36,6 @@ import {
   resolveZoomOrigin,
 } from "./liveZoom";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
-import { zoom } from "./tokens";
 import { useColorOSMotion } from "./useColorOSMotion";
 
 /**
@@ -96,8 +95,7 @@ const GESTURE_SHIFT = 0.06;
 const SHELL_FADE_MS = 160;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
-// A spring without `mass` takes Reanimated's mass of 4 (about ζ 0.34): slow and wobbly. The token sets mass 1.
-const SPRING_BACK = zoom.cancelSpring;
+const SPRING_BACK = { damping: 22, stiffness: 260 };
 /**
  * Build 14 (video 97 frames 370-379: the drag stepped at 60 Hz at its start): each progress event (they
  * reach JS at most once a frame, fewer when it is busy) is followed on the UI thread over this long, so

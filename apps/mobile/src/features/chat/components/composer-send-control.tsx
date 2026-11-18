@@ -15,7 +15,6 @@ const ROUND_RADIUS = 20;
 const SQUARE_RADIUS = 12;
 // A primed fill grows in from this scale on the fast spatial spring, so it pops with a small overshoot.
 const FILL_REST_SCALE = 0.82;
-const SEND_HIT_SLOP = { top: 4, bottom: 4, right: 4 } as const;
 
 type Mode = "send" | "stop" | "dictate";
 
@@ -89,8 +88,6 @@ export function ComposerSendControl({
       accessibilityState={{ disabled: !ready, busy: spinner }}
       disabled={!ready}
       className="size-10 items-center justify-center"
-      // The target is 48 dp with the slop; the mic beside it is 4 dp away, so no slop on that side.
-      hitSlop={SEND_HIT_SLOP}
       onPress={onPress}
     >
       {/* Dim lives on this inner layer: the pressable's own opacity belongs to its press feedback. */}
