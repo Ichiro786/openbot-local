@@ -37,8 +37,8 @@ import { GestureDetector, type PanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   type EntryAnimationsValues,
-  FadeIn,
   Extrapolation,
+  FadeIn,
   FadeInDown,
   interpolate,
   Keyframe,
@@ -61,8 +61,8 @@ import { ChatAppSuggestion } from "@/features/chat/components/chat-app-suggestio
 import { type ApprovalDecision, approvalTitle, ChatApprovalCard } from "@/features/chat/components/chat-approval-card";
 import { ChatExchangeGroup, ChatExchangeMarker } from "@/features/chat/components/chat-exchange-marker";
 import { ChatMarkdown, chatMarkdownHasTable } from "@/features/chat/components/chat-markdown";
-import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
 import { ChatMemoryChanges } from "@/features/chat/components/chat-memory-changes";
+import { SkeletonBubbles } from "@/features/chat/components/chat-open-skeleton";
 import { ChatPlan } from "@/features/chat/components/chat-plan";
 import { ChatQuestionPrompt } from "@/features/chat/components/chat-question-prompt";
 import {
@@ -78,8 +78,8 @@ import { useActivityPresence } from "@/features/chat/components/use-activity-pre
 import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-chat-motion";
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
-import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
+import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import {
   type ChatBubbleMessage,
   type ChatMarkerGroup,
@@ -106,6 +106,7 @@ import { Button } from "@/shared/components/button";
 import { haptics } from "@/shared/lib/haptics";
 import { useMotionPreference, useReducedMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
+import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { END_X, lineDirectionStyle, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
@@ -1934,7 +1935,10 @@ export const ChatMessageList = memo(function ChatMessageList({
   );
   const onListReady = motion.onListReady;
   const hasRows = rows.length > 0;
-  const onReady = useCallback(() => onListReady(hasRows), [onListReady, hasRows]);
+  const onReady = useCallback(() => {
+    openTraceMark(`list ready (rows: ${hasRows})`);
+    onListReady(hasRows);
+  }, [onListReady, hasRows]);
   const selectionArea = useRef<ViewInstance | null>(null);
   const actionHandlers = useRef({
     onReply,

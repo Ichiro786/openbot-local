@@ -25,6 +25,10 @@ on:
         description: "Compile-check only: build without the engine payload (APK cannot install the engine)"
         type: boolean
         default: false
+      source_ref:
+        description: "Commit or branch of the app code to build (blank = the ref this run was started on). The workflow file still comes from the started ref; use it to A/B an older commit"
+        required: false
+        default: ""
       clear_cache:
         description: "Skip restoring the Gradle, ccache and Bun caches (escape hatch for stale-cache errors); fresh caches are still saved"
         type: boolean
@@ -39,7 +43,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: android-local-${{ github.ref }}-${{ github.event_name }}
+  # A dispatch gets its own group, so two builds (such as an A/B pair) can run at once.
+  group: android-local-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -73,6 +78,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
 
       # A React Native release build needs more disk than the runner leaves free.
@@ -212,6 +218,22 @@ jobs:
             const plugins = (c.plugins || []).map((p) => (Array.isArray(p) ? p[0] : p));
             if (!plugins.some((p) => String(p).includes("openbot-engine"))) console.warn("::warning::openbot-engine plugin not listed in the public config");
           '
+
+      # Gradle downloads this NDK itself when it is missing, and that download failed twice on main
+      # ("Failed to install the following SDK components: ndk;27.1.12297006"). Install it here
+      # first, with licenses accepted and retries, so a bad download stops the build with a clear error.
+      - name: Install Android NDK (with retries)
+        run: |
+          set -euo pipefail
+          NDK_VERSION=27.1.12297006
+          SDKMANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          for attempt in 1 2 3 4; do
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            if "$SDKMANAGER" "ndk;${NDK_VERSION}"; then break; fi
+            echo "::warning::NDK install attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          test -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}/ndk/${NDK_VERSION}" || { echo "::error::NDK ${NDK_VERSION} is not installed"; exit 1; }
 
       - name: Expo prebuild (android)
         working-directory: apps/mobile

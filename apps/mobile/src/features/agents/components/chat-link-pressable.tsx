@@ -5,6 +5,7 @@ import { openChatFromPane, useChatListPane } from "@/features/agents/components/
 import type { createChatNavigationGate } from "@/features/agents/model/chat-navigation-gate";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
+import { openTraceMark, openTraceStart } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import { armLiveZoom, registerZoomSource, type ZoomOrigin } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -74,15 +75,18 @@ export function ChatLinkPressable({
       }}
       onPress={(event) => {
         if (event.defaultPrevented) return;
+        openTraceStart("row tap");
         void haptics.impact("soft");
         event.persist();
         // Build 11.3 council A6: a zoom-open navigates even if this row remounted meanwhile (a list
         // refresh or a settings re-render between the tap and the push dropped the open silently).
         // Link's handler pushes through the router, not through this instance.
         const navigate = () => {
+          openTraceMark("navigate called (after the gate)");
           if (mounted.current || zoom) onPress?.(event);
         };
         const go = () => {
+          openTraceMark("go: gate request");
           if (pane) openChatFromPane(pane, chatId, navigate);
           else if (gate && colorOS && route.name === "connected") gate.request(navigate, navigation.isFocused);
           else navigate();
