@@ -192,7 +192,6 @@ import { VAULT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v2";
 import { VAULT_V3_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v3";
 import { VAULT_V4_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v4";
 import { WHATSAPP_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-connector-v1";
-import { WHATSAPP_MOBILE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-mobile-v1";
 import { WHATSAPP_STATUS_REACTIONS_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-status-reactions-v1";
 import { WHATSAPP_WORKING_MESSAGE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-working-message-v1";
 import { WORKFLOWS_CHATS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-chats-v1";
@@ -1005,7 +1004,7 @@ export function createHostRequestActions({
     updateAgentBrowserProfile: async (input, serverId) =>
       runTeamRequest(updateHostAgentBrowserProfile(browserProfilesAdmin(serverId), input)),
     whatsappRequest: async (serverId, route, body) =>
-      capabilityApi(serverId, WHATSAPP_MOBILE_CAPABILITY, "mobile.server.connectors.unsupported")(
+      capabilityApi(serverId, WHATSAPP_CONNECTOR_CAPABILITY, "mobile.server.connectors.unsupported")(
         "POST",
         route,
         (value: unknown) => value,

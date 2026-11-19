@@ -1,0 +1,3 @@
+### Fixed
+
+- Fix the app connection after the 0.73.0 update: every request after the compatibility check failed with "The Team API operation is not supported". The fork capability list held 257 names, one over the released protocol 9 limit of 256. Upstream 0.73.0 holds exactly 256; the fork whatsapp-mobile-v1 alias added the 257th name. Remove the alias from the two capability lists and gate the app WhatsApp actions on the canonical whatsapp-connector-v1 capability instead. The alias routes still work. Version stays 1.4.11; versionCode rises to 10420 so the APK installs over the previous build.
