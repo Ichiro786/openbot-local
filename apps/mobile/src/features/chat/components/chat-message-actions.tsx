@@ -1,4 +1,5 @@
 import { type ConversationReaction, MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
+import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
@@ -34,8 +35,6 @@ import { type MessageChannelTargets, type MessageFiles, openMessageActions } fro
 import { useCopyMessage } from "./use-copy-message";
 import { useHistoryShown } from "./use-history-shown";
 
-// Copy → check: the check pops in on M3 Expressive fast spatial (a small overshoot), the copy glyph
-// shrinks away under it on fast effects. The check leaves the same way, a little faster.
 const CHECK_IN = ZoomIn.springify()
   .mass(springs.fastSpatial.mass)
   .stiffness(springs.fastSpatial.stiffness)
@@ -57,15 +56,9 @@ const PICKER_IN = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
 const PICKER_OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
 const ICON_SIZE = 18;
 const PRESSED = { transform: [{ scale: 0.94 }] };
-/** ColorOS motion: the 0.96 press of the spec, still static (no animated values per button). */
+
 const COLOROS_PRESSED = { transform: [{ scale: colorOSPress.scale }] };
 
-/**
- * A button of the row under a message, with the size and look of a small ghost HeroUI `Button`. It
- * is a plain pressable: each message in the chat has up to five of these, and each HeroUI button mounts an
- * animated pressable with about nine shared values and four animated styles, which made the chat
- * lag while it scrolled. The press shows at once, without an animation.
- */
 function pressInTick() {
   void haptics.impact("light");
 }
@@ -81,15 +74,13 @@ function ActionButton({
   accessibilityLabel: string;
   accessibilityState?: AccessibilityState;
   onPress: () => void;
-  /** Drawn as a pressed HeroUI `secondary` button. */
+
   selected?: boolean;
-  /** An emoji, not an icon: the button takes the width of its content. */
+
   label?: boolean;
 }>) {
-  // An icon draws only once the chat shows its history. The button keeps its size without it, so
-  // the row does not move, and a chat that opens does not wait for the icons of every row.
   const historyShown = useHistoryShown();
-  // One store read per button; the press stays a plain style swap plus a light tick on press-in.
+
   const colorOS = useMotionPreferences((s) => s.colorOSMotion);
   return (
     <Pressable
@@ -106,15 +97,13 @@ function ActionButton({
   );
 }
 
-/** Build 10: what the long-press menu of a message does through its action row. */
 export type MessageActionsControl = {
   react: (emoji: string | null) => void;
   copy: () => void;
-  /** The reader's reaction as the row shows it (the pending one included). */
+
   own: string | null;
 };
 
-/** Reads the message aloud with the reply voice from the settings. A second tap stops it. */
 function ReadAloudButton({
   messageId,
   text,
@@ -143,10 +132,6 @@ function ReadAloudButton({
   );
 }
 
-/**
- * The row under a message: its reactions, Copy, Read aloud, React, Reply, Select text and the time. A
- * phone has no hover, so the row always shows, and each action takes one tap.
- */
 export function ChatMessageActions({
   align,
   copyText,
@@ -162,26 +147,22 @@ export function ChatMessageActions({
   controlRef,
 }: {
   align: "start" | "end";
-  /** The text that Copy puts on the clipboard. Empty for a message of files only. */
+
   copyText: string;
   createdAt?: string;
   reactions?: readonly ConversationReaction[];
   agentsById: ReadonlyMap<string, MobileAgent>;
-  /** Unset where a reaction cannot be saved. `null` removes the reader's reaction. */
+
   onReact?: (emoji: string | null) => Promise<void>;
   onReply?: () => void;
-  /** Starts the selection of the text in the bubble, or ends it while `selecting`. */
+
   onSelectText?: () => void;
   selecting?: boolean;
-  /** The message that Read aloud reads. Unset where the app cannot read aloud. */
+
   readAloudId?: string;
-  /**
-   * Build 10 (ColorOS motion): the message's long-press menu carries React, Reply and Select text.
-   * The row under the reader's own message shows only its reactions; under an agent message it
-   * keeps Copy, Read aloud and the time.
-   */
+
   longPressMenu?: boolean;
-  /** Build 10: lets the long-press menu react and copy through this row (its pending reaction and check). */
+
   controlRef?: RefObject<MessageActionsControl | null>;
 }) {
   const { t, format } = useText();
@@ -190,7 +171,7 @@ export function ChatMessageActions({
   const { copy, copied } = useCopyMessage(copyText);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [moreEmoji, setMoreEmoji] = useState(false);
-  // The reader's reaction shows at once. The host sends the saved list after it, and that list wins.
+
   const [pending, setPending] = useState<{
     emoji: string | null;
     over: readonly ConversationReaction[] | undefined;
@@ -222,12 +203,8 @@ export function ChatMessageActions({
     [createdAt, format],
   );
 
-  // Build 10: under the reader's own message the long-press menu has every action, so the row
-  // keeps only its space (and reactions, when there are any).
   if (longPressMenu && align === "end" && shown.length === 0) return <View className="pb-2" />;
   return (
-    // The space under the row sets each message apart from the next one. Markers and activity rows
-    // have no action row, so they keep the list's own smaller gap.
     <View className={`gap-1 pb-2 ${align === "end" ? "items-end self-end" : "items-start self-start"}`}>
       <View
         accessibilityRole="toolbar"
@@ -268,8 +245,6 @@ export function ChatMessageActions({
             accessibilityLabel={copied ? t("mobile.chat.message.copied") : t("mobile.chat.message.copy")}
             onPress={() => void copy()}
           >
-            {/* Keyed by state, so Copy and the check trade places with layout animations. They run
-                only on a copy, and the row keeps no shared values at rest. */}
             <LayoutAnimationConfig skipEntering skipExiting>
               <Animated.View
                 key={copied ? "copied" : "copy"}
@@ -316,7 +291,6 @@ export function ChatMessageActions({
         ) : null}
         {onSelectText && !longPressMenu ? (
           <ActionButton
-            // Drawn as pressed while the text is selected: a second tap ends the selection.
             selected={selecting}
             accessibilityLabel={t("mobile.chat.message.selectText")}
             accessibilityState={{ selected: selecting }}
@@ -372,42 +346,35 @@ export function ChatMessageActions({
     </View>
   );
 }
-
-// Upstream 0.60 (#4718): the message actions sheet, used when the ColorOS long-press menu is off.
-/** A message that has actions: it is on the host and does not stream. */
 export interface MessageActionsInput {
   messageId: string;
-  /** The text that Copy puts on the clipboard. Empty for a message of files only. */
   copyText: string;
   createdAt?: string;
   reactions?: readonly ConversationReaction[];
-  /** Unset where a reaction cannot be saved. `null` removes the reader's reaction. */
   onReact?: (emoji: string | null) => Promise<void>;
   onReply?: () => void;
-  /** Unset where the message has no branch: it is not the last answer of a finished turn. */
   onBranch?: () => void;
   onSelectText?: () => void;
-  /** The message that Read aloud reads. Unset where the message is not a reply. */
   readAloudId?: string;
-  /** The open channels that the message text can go to. Unset where the message cannot go to one. */
   sendToChannel?: MessageChannelTargets;
-  /** Deletes the message for everyone. Unset where the reader cannot delete it. */
   onDelete?: () => Promise<void>;
-  /** Marks the message and the messages after it unread for the reader. Unset where it cannot. */
   onMarkUnread?: () => void;
-  /** The message is pinned in its chat. */
   pinned?: boolean;
-  /** Pins the message, or unpins it when `pinned`. Unset where the chat cannot pin messages. */
   onTogglePin?: () => Promise<void>;
-  /** The files of the message on the host. Unset for a message without files. */
   files?: MessageFiles;
 }
 
-/**
- * The reactions of a message, and the sheet with its actions. The reader's reaction shows at once;
- * the host sends the saved list after it, and that list wins. `open` is unset for a message
- * without actions.
- */
+export function reportTeamResult(work: Promise<void>, failedTitle: MobileTextKey): Promise<void> {
+  return work.then(
+    () => void haptics.notification("success"),
+    (error: unknown) => {
+      void haptics.notification("error");
+      const title = currentText().t(failedTitle);
+      showFailureAlert(error, "team", title, currentText().errorMessage(error, title));
+    },
+  );
+}
+
 export function useMessageActions(input: MessageActionsInput | null) {
   const { t } = useText();
   const reactions = input?.reactions;
@@ -435,7 +402,6 @@ export function useMessageActions(input: MessageActionsInput | null) {
       }
     : undefined;
   const onDelete = input?.onDelete;
-  // The sheet has closed when this runs, so the alert shows over the chat.
   const confirmDelete = onDelete
     ? () => {
         const text = currentText();
@@ -444,31 +410,13 @@ export function useMessageActions(input: MessageActionsInput | null) {
           {
             text: text.t("common.delete"),
             style: "destructive",
-            onPress: () =>
-              onDelete().then(
-                () => void haptics.notification("success"),
-                (error: unknown) => {
-                  void haptics.notification("error");
-                  const title = currentText().t("mobile.chat.message.deleteFailed");
-                  showFailureAlert(error, "team", title, currentText().errorMessage(error, title));
-                },
-              ),
+            onPress: () => reportTeamResult(onDelete(), "mobile.chat.message.deleteFailed"),
           },
         ]);
       }
     : undefined;
   const onTogglePin = input?.onTogglePin;
-  const togglePin = onTogglePin
-    ? () =>
-        onTogglePin().then(
-          () => void haptics.notification("success"),
-          (error: unknown) => {
-            void haptics.notification("error");
-            const title = currentText().t("mobile.chat.pins.failed");
-            showFailureAlert(error, "team", title, currentText().errorMessage(error, title));
-          },
-        )
-    : undefined;
+  const togglePin = onTogglePin ? () => reportTeamResult(onTogglePin(), "mobile.chat.pins.failed") : undefined;
   const open = input
     ? () =>
         openMessageActions({
@@ -501,22 +449,15 @@ export function useMessageActions(input: MessageActionsInput | null) {
   };
 }
 
-/**
- * The reactions of a message, in a pill on the bottom corner of its bubble toward the middle of the
- * chat, as on desktop: bottom left for the reader's own message, bottom right for an agent's. The
- * parent keeps room under the bubble for the part of the pill that hangs below it.
- */
 export function ChatMessageReactions({
   align,
   reactions,
   agentsById,
   onReact,
 }: {
-  /** The side of the chat the bubble sits on. */
   align: "start" | "end";
   reactions: readonly ConversationReaction[];
   agentsById: ReadonlyMap<string, MobileAgent>;
-  /** Unset where a reaction cannot be saved. `null` removes the reader's reaction. */
   onReact?: (emoji: string | null) => void;
 }) {
   const { t } = useText();
@@ -563,10 +504,6 @@ export function ChatMessageReactions({
   );
 }
 
-/**
- * A touch and hold on the bubble opens the message actions. A screen reader cannot find that
- * gesture, so while one runs, each message gets this button under it.
- */
 export function ChatMessageActionsButton({ align, onOpen }: { align: "start" | "end"; onOpen: () => void }) {
   const { t } = useText();
   const muted = useThemeColor("muted");

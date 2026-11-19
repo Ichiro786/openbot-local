@@ -8,11 +8,6 @@ import { ThinkingDots } from "@/shared/components/thinking-dots";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 
-/**
- * Under the agent chat, while the agent works in a channel: the channel turn does not show in this
- * chat, as on desktop, so this card says where the agent works. A tap opens the channel, where the
- * person answers a question, an approval or a browser step of that work.
- */
 export function ChatChannelWorkRow({
   channel,
   activity,

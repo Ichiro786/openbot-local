@@ -12,15 +12,9 @@ import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export const ChatNavigationGateContext = createContext<ReturnType<typeof createChatNavigationGate> | null>(null);
 
-/**
- * Build 11.3 simple zoom: a second tap this soon after a zoom-open is dropped instead of navigating a
- * second time (a plain time, so nothing ever stays blocked).
- */
 let lastZoomTapAt = 0;
 const ZOOM_TAP_GUARD_MS = 500;
 
-// Link injects its handler here. Defer that exact handler rather than recreating navigation with
-// router.push.
 export function ChatLinkPressable({
   chatId,
   prefetchServerId,
@@ -28,7 +22,6 @@ export function ChatLinkPressable({
   onPressIn,
   ...props
 }: ComponentProps<typeof Pressable> & {
-  /** The chat this row opens. The chat list pane does not open the chat that shows already. */
   chatId?: string;
   /**
    * Build 11: the agent's server. With it, a touch on the row starts reading the agent chat's latest

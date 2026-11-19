@@ -7,18 +7,11 @@ async function play(feedback: () => Promise<void>): Promise<void> {
   if (!ready || !enabled) return;
   try {
     await feedback();
-  } catch {
-    // Missing hardware or a native failure must not interrupt the user's action.
-  }
+  } catch {}
 }
 
 type ImpactStyle = "light" | "medium" | "heavy" | "soft" | "rigid";
 
-/**
- * Android plays the system haptic constants (View.performHapticFeedback) instead of vibrator
- * patterns: they feel like the system UI, follow the user's system haptics setting and need no
- * VIBRATE permission.
- */
 const A = ExpoHaptics.AndroidHaptics;
 const ANDROID_IMPACT: Record<ImpactStyle, ExpoHaptics.AndroidHaptics> = {
   light: A.Context_Click,
@@ -33,7 +26,6 @@ const ANDROID_NOTIFICATION: Record<"success" | "warning" | "error", ExpoHaptics.
   error: A.Reject,
 };
 
-/** Shared mobile feedback. From a worklet, call through scheduleOnRN. */
 export const haptics = {
   selection: (): Promise<void> =>
     play(() => (isAndroid ? ExpoHaptics.performAndroidHapticsAsync(A.Segment_Tick) : ExpoHaptics.selectionAsync())),
@@ -51,7 +43,6 @@ export const haptics = {
             }[style],
           ),
     ),
-  /** The tick when a long press opens a menu, so the user knows the finger can lift. */
   longPress: (): Promise<void> =>
     play(() =>
       isAndroid

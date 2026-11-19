@@ -1,10 +1,7 @@
 import { Stack } from "expo-router/stack";
 import { useCSSVariable } from "uniwind";
-import { androidBackOptions } from "@/shared/components/android-header-button";
-import { headerFontOptions } from "@/shared/lib/app-font";
-import { isIOS } from "@/shared/lib/platform";
+import { sheetStackOptions } from "@/shared/components/sheet-page-stack";
 import { sheetBackHaptics } from "@/shared/lib/sheet-back-haptics";
-import { sheetHeaderInsetOptions } from "@/shared/lib/sheet-header";
 import { useText } from "@/shared/lib/text";
 import { useColorOSPageAnimation } from "@/shared/motion/useColorOSMotion";
 
@@ -17,20 +14,7 @@ export default function QueuedMessagesLayout() {
   return (
     <Stack
       screenListeners={sheetBackHaptics}
-      screenOptions={(props) => ({
-        ...androidBackOptions(props),
-        ...sheetHeaderInsetOptions,
-        presentation: "card",
-        ...page,
-        headerBackButtonDisplayMode: "minimal",
-        ...headerFontOptions,
-        headerShadowVisible: false,
-        headerTransparent: isIOS,
-        headerStyle: { backgroundColor: isIOS ? "transparent" : background },
-        headerBlurEffect: "none",
-        scrollEdgeEffects: { top: "hidden", bottom: "soft" },
-        contentStyle: { backgroundColor: background },
-      })}
+      screenOptions={(props) => ({ ...sheetStackOptions(background)(props), ...page })}
     >
       <Stack.Screen name="index" options={{ title: t("mobile.app.route.queuedMessages") }} />
       <Stack.Screen name="actions" options={{ title: t("mobile.app.route.messageOptions") }} />

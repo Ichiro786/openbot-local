@@ -46,7 +46,6 @@ import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 
-/** What the folder browser picks: a folder to add, a folder to exclude, or the new place of a moved folder. */
 type BrowseMode = "add" | "exclude" | "locate";
 
 const COVERED_TEXT = {
@@ -56,11 +55,6 @@ const COVERED_TEXT = {
   "in-folder": "mobile.agent.folders.inFolder",
 } as const satisfies Record<AgentFolderCoverageReason, string>;
 
-/**
- * The folders that the agent can change besides its workspace, as the host reads them. The host sends
- * `agents-changed` after each change, from this phone or from the desktop, so an open page reads them
- * again (`AGENT_SETTINGS_PARTS`).
- */
 function useAgentFolders(agent: MobileAgent, enabled: boolean) {
   const { canManageAgentFolders, loadAgentFolders } = useMobileWorkspace();
   const queryScope = useQueryScope();
@@ -75,11 +69,6 @@ function useAgentFolders(agent: MobileAgent, enabled: boolean) {
   return { query, queryKey };
 }
 
-/**
- * The access label of the agent, and that label again as `wide` when the agent can change all files:
- * the folders then do not apply. They still apply to a provider whose own file tools reach only its
- * folders.
- */
 function useAgentAccess(
   agent: MobileAgent,
   host: MobileServer | undefined,
@@ -95,7 +84,6 @@ function useAgentAccess(
   return { label, wide: level === "workspace" ? null : label };
 }
 
-/** The Folders row of the agent settings, with the number of added folders. */
 export function AgentFoldersRow({
   agent,
   host,
@@ -136,6 +124,17 @@ export function AgentFoldersRow({
   );
 }
 
+function alertFolderFailure(cause: unknown) {
+  void haptics.notification("error");
+  const text = currentText();
+  showFailureAlert(
+    cause,
+    "agent",
+    text.t("mobile.agent.folders.failed"),
+    text.errorMessage(cause, text.t("mobile.agent.folders.failed")),
+  );
+}
+
 function openBrowser(agent: MobileAgent, mode: BrowseMode, path?: string, replace?: string) {
   router.push({
     pathname: "/agent-info/[agentId]/folder-browser",
@@ -149,7 +148,6 @@ function openBrowser(agent: MobileAgent, mode: BrowseMode, path?: string, replac
   });
 }
 
-/** Agent settings > Folders: the folders the agent can always change, the added ones and the excluded ones. */
 export function AgentFolders({
   agent,
   host,
@@ -166,13 +164,11 @@ export function AgentFolders({
   const { query, queryKey } = useAgentFolders(agent, available);
   const access = useAgentAccess(agent, host, available);
   const wideAccess = access.wide;
-  // The access decides if the folders apply, so the page opens Permissions too.
   const showPermissions = canManageAgentAccess(agent.serverId) || canManageAgentHostSettings(agent.serverId);
   const muted = String(useThemeColor("muted"));
   const warning = String(useThemeColor("warning"));
   const [busy, setBusy] = useState(false);
 
-  // The screen says that the host is offline.
   if (!available) return null;
   if (query.isPending) return <Typography.Paragraph>{t("mobile.agent.folders.loading")}</Typography.Paragraph>;
   if (query.isError)
@@ -195,14 +191,7 @@ export function AgentFolders({
       queryClient.setQueryData(queryKey, changed.list);
       void haptics.notification("success");
     } catch (cause) {
-      void haptics.notification("error");
-      const text = currentText();
-      showFailureAlert(
-        cause,
-        "agent",
-        text.t("mobile.agent.folders.failed"),
-        text.errorMessage(cause, text.t("mobile.agent.folders.failed")),
-      );
+      alertFolderFailure(cause);
     } finally {
       setBusy(false);
     }
@@ -287,7 +276,6 @@ export function AgentFolders({
                   ? agentFolderParent(folder.path)
                   : t("mobile.agent.folders.notFound", { path: agentFolderParent(folder.path) })
               }
-              // A moved folder opens the browser, to pick its new place.
               onPress={folder.found ? undefined : () => openBrowser(agent, "locate", undefined, folder.path)}
               accessibilityLabel={folder.found ? undefined : `${name}, ${t("mobile.agent.folders.locate")}`}
               trailing={
@@ -337,8 +325,6 @@ export function AgentFolders({
           disabled={busy || list.excluded.length >= AGENT_FOLDER_LIMIT}
           disclosure={false}
           leading={<Plus size={18} color={muted} />}
-          // The browser opens in the first added folder that is there, else in the workspace, as the
-          // desktop picker does.
           onPress={() =>
             openBrowser(agent, "exclude", list.folders.find((folder) => folder.found)?.path ?? list.workspace)
           }
@@ -366,7 +352,6 @@ function RowAction({ label, disabled, onPress }: { label: string; disabled: bool
   );
 }
 
-/** The sentence for a folder that the host did not add, or null when it added it. */
 function folderRefusal(change: AgentFolderChange, agent: string): string | null {
   const text = currentText();
   if (change.outcome === "covered") {
@@ -384,7 +369,6 @@ function folderRefusal(change: AgentFolderChange, agent: string): string | null 
   return text.t("mobile.agent.folders.missing", { folder });
 }
 
-/** The sentence for a folder that the host did not exclude, or null when it excluded it. */
 function exclusionRefusal(change: AgentExclusionChange, agent: string): string | null {
   const text = currentText();
   if (change.outcome === "covered") {
@@ -401,10 +385,6 @@ function exclusionRefusal(change: AgentExclusionChange, agent: string): string |
   return text.t("mobile.agent.folders.missing", { folder });
 }
 
-/**
- * Agent settings > Folders > Choose folder: the folders in one folder of the host computer. A folder
- * row shows the folders in it on the same page; the header action picks the folder that it shows.
- */
 export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; available: boolean }) {
   const { t } = useText();
   const params = useLocalSearchParams<{ mode?: string; path?: string; replace?: string }>();
@@ -422,20 +402,17 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
     retry: false,
     staleTime: 0,
     gcTime: 0,
-    // The last folder stays on the page until the next one is read.
     placeholderData: keepPreviousData,
   });
   const [saving, setSaving] = useState(false);
   const folder = query.data;
   const moving = query.isPlaceholderData;
-  // The home folder and the disks do not change between folders, so they stay when a read fails.
   const [places, setPlaces] = useState<Pick<AgentFolderBrowse, "home" | "volumes"> | null>(null);
   useEffect(() => {
     if (query.data && !query.isPlaceholderData) setPlaces({ home: query.data.home, volumes: query.data.volumes });
   }, [query.data, query.isPlaceholderData]);
   const current = path ?? places?.home;
 
-  // The page shows the next folder in place: one page for the whole browse, and Back closes it.
   function go(next: string) {
     router.setParams<"/agent-info/[agentId]/folder-browser">({ path: next });
   }
@@ -478,20 +455,12 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
         params: { agentId: agent.id, serverId: agent.serverId },
       });
     } catch (cause) {
-      void haptics.notification("error");
-      const text = currentText();
-      showFailureAlert(
-        cause,
-        "agent",
-        text.t("mobile.agent.folders.failed"),
-        text.errorMessage(cause, text.t("mobile.agent.folders.failed")),
-      );
+      alertFolderFailure(cause);
     } finally {
       setSaving(false);
     }
   }
 
-  // The screen says that the host is offline.
   if (!available) return null;
   return (
     <>
@@ -543,7 +512,6 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
         </View>
       ) : null}
       {folder ? (
-        // The rows of the last folder are dimmed until the next folder is read.
         <View className="gap-5" accessibilityState={{ busy: moving }}>
           <SettingsSection title={moving && path ? path : folder.path}>
             {folder.parentPath === null ? null : (

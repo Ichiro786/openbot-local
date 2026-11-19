@@ -6,10 +6,6 @@ import { MenuView } from "@/shared/components/menu-view";
 import { haptics } from "@/shared/lib/haptics";
 import type { SettingsPickerProps, SettingsSwitchProps } from "./settings-controls.types";
 
-/**
- * Android settings controls. The Material picker of `@expo/ui` is a wide text field that wraps the
- * row label, so a choice opens a menu from the current value, as the Android Settings app does.
- */
 export function SettingsPicker<T extends string | number>({
   value,
   options,

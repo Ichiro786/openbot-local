@@ -309,6 +309,7 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.conversations.media": "Photos and files",
   "mobile.settings.conversations.swipeLeft": "Swipe left in an agent chat",
   "mobile.settings.conversations.swipeRight": "Swipe right in an agent chat",
+  "mobile.settings.conversations.swipeQuestion": "Side question",
   "mobile.settings.conversations.swipeThreads": "Threads",
   "mobile.settings.conversations.swipeBrowser": "Browser",
   "mobile.settings.conversations.swipeOff": "Off",
@@ -630,7 +631,6 @@ export const messages = defineMessages("mobile.settings", {
     "How readily agents answer with tables, charts, buttons and forms. Low: only when you ask for them or the answer would be hard to read as text. Balanced: when they clearly beat text. High: wherever they help. Never for small talk, short answers or made-up data. Needs engine 0.70.0-3 or later.",
   "mobile.settings.openbotUi.levelOffFooter":
     "Rich UI in replies is off (Settings > Local engine), so agents write plain text.",
-  // Settings > Agents: the agent defaults of a server where the reader is an owner or admin.
   "mobile.settings.agents.title": "Agents",
   "mobile.settings.agents.serversFooter":
     "Choose a server. Only the servers where you are an owner or admin show here.",
@@ -700,7 +700,8 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.shortcuts.card.noAgent.action": "Choose agent",
   "mobile.settings.shortcuts.card.locked.title": "OpenBot is locked",
   "mobile.settings.shortcuts.card.locked.action": "Open OpenBot",
-  "mobile.settings.shortcuts.footer": "Send Message in the Shortcuts app sends to this agent. The app does not open.",
+  "mobile.settings.shortcuts.footer":
+    "Send Message in the Shortcuts app sends to this agent. The app does not open. Open Agent opens its chat.",
   "mobile.settings.shortcuts.send.sent": "Sent",
   "mobile.settings.shortcuts.send.failed": "OpenBot could not send this.",
   "mobile.settings.shortcuts.send.unconfirmed": "No answer from the server. The message can be in the chat.",

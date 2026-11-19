@@ -11,18 +11,11 @@ import {
   useRatingAsk,
 } from "@/features/rating-ask/model/rating-ask";
 
-// Home settles before the ask covers it, so the ask does not look like part of the loading.
 const ASK_DELAY_MS = 1500;
 
 const ASK_ENABLED = false;
-
-// The ask shows at most once per launch, also when home shows as a screen and as a pane.
 let askedThisLaunch = false;
 
-/**
- * Counts the days on which home shows, and opens the rating ask when it is due. `ready` is a home
- * that shows its list with nothing over it: no loader, no first-run flow and no update header.
- */
 export function useRatingAskGate(ready: boolean): void {
   const isFocused = useIsFocused();
   const loaded = useRatingAsk((state) => state.ready);
@@ -34,7 +27,6 @@ export function useRatingAskGate(ready: boolean): void {
   useEffect(() => {
     if (!shown) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    // Home counts a day when it shows, and again when the app comes back to it on a later day.
     const visit = () => {
       recordRatingAskUse();
       if (timer || askedThisLaunch || !ratingAskDue()) return;

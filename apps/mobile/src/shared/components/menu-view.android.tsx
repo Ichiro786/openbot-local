@@ -33,6 +33,7 @@ import ListChecks from "lucide-react-native/icons/list-checks";
 import LogOut from "lucide-react-native/icons/log-out";
 import MailBadge from "lucide-react-native/icons/mail-badge";
 import MailOpen from "lucide-react-native/icons/mail-open";
+import MessageCircleQuestionMark from "lucide-react-native/icons/message-circle-question-mark";
 import MessagesSquare from "lucide-react-native/icons/messages-square";
 import MousePointerClick from "lucide-react-native/icons/mouse-pointer-click";
 import Pencil from "lucide-react-native/icons/pencil";
@@ -69,7 +70,6 @@ import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 export type { MenuAction, MenuComponentRef } from "@expo/ui/community/menu";
 
-/** The Lucide icon for each SF Symbol that a menu action names. */
 const ICONS: Partial<Record<string, LucideIcon>> = {
   archivebox: Archive,
   "arrow.clockwise": RotateCw,
@@ -111,6 +111,7 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   play: Play,
   plus: Plus,
   "plus.square.on.square": CopyPlus,
+  "questionmark.bubble": MessageCircleQuestionMark,
   "rectangle.portrait.and.arrow.right": LogOut,
   "square.and.arrow.up": Share,
   scope: Crosshair,
@@ -123,10 +124,6 @@ const ICONS: Partial<Record<string, LucideIcon>> = {
   xmark: X,
 };
 
-/**
- * OpenBot colors for the menu. HeroUI's `--muted`, `--danger`, `--separator` and `--default` keep the
- * HeroUI palette, because uniwind ignores the `:root` aliases in `global.css`.
- */
 type MenuColors = { text: string; muted: string; danger: string; separator: string; pressed: string };
 
 type ItemProps = {
@@ -143,7 +140,6 @@ function visible(actions: MenuAction[]): MenuAction[] {
   return actions.filter((action) => !action.attributes?.hidden);
 }
 
-/** The top-level actions in groups. Each inline action is its own group, and dividers go between groups. */
 function groups(actions: MenuAction[]): MenuAction[][] {
   const result: MenuAction[][] = [];
   let loose: MenuAction[] = [];
@@ -165,7 +161,6 @@ function MenuItem({ action, colors, onPressAction }: ItemProps) {
   const color = attributes?.destructive ? colors.danger : colors.text;
   const Icon = typeof image === "string" ? ICONS[image] : undefined;
   const iconColor = imageColor ? String(imageColor) : color;
-  // A `.fill` symbol is a solid shape, so its Lucide icon is filled too.
   const fill = typeof image === "string" && image.endsWith(".fill") ? iconColor : "none";
   const icon = Icon ? <Icon size={18} strokeWidth={2} color={iconColor} fill={fill} /> : null;
   if (subactions?.length) {
@@ -195,21 +190,12 @@ function MenuItem({ action, colors, onPressAction }: ItemProps) {
       onPress={() => onPressAction?.({ nativeEvent: { event: actionId(action) } })}
     >
       {icon}
-      {/* A long title wraps, as in the iOS menu, so a model name shows in full. */}
       <Menu.ItemTitle style={{ color: titleColor ?? color }}>{title}</Menu.ItemTitle>
       {state ? <Menu.ItemIndicator iconProps={{ color: colors.text }} /> : null}
     </Menu.Item>
   );
 }
 
-/**
- * The Android `MenuView`, with the props of `@expo/ui/community/menu`. It draws the HeroUI menu of the
- * app, because the Material menu takes the palette and shape of the device and does not match the app.
- * iOS keeps the native menu. A string `image` names an SF Symbol, and Android shows its Lucide icon.
- *
- * A closed menu that was never opened is only its trigger. A list has one menu for each row, and the
- * HeroUI menu tree of each row made the list slow to mount. The menu mounts when it opens first.
- */
 export function MenuView({
   ref,
   title,
@@ -225,7 +211,6 @@ export function MenuView({
   const anchor = useRef<ViewInstance>(null);
   const menu = useRef<MenuComponentRef>(null);
   const [mounted, setMounted] = useState(false);
-  // An open that comes before the menu mounts. The menu opens when its trigger has a layout.
   const pendingOpen = useRef(false);
   const open = useCallback(() => {
     if (menu.current) {
@@ -242,7 +227,6 @@ export function MenuView({
     return pending;
   }, []);
 
-  // The children keep the same place in the tree, so the menu mounts without a new row under it.
   return (
     <View style={style} testID={testID}>
       <Pressable
@@ -277,11 +261,9 @@ type OpenedMenuProps = Pick<
 > & {
   ref: Ref<MenuComponentRef>;
   anchor: RefObject<ViewInstance | null>;
-  /** True once when an open waited for this menu to mount. */
   takePendingOpen: () => boolean;
 };
 
-/** The HeroUI menu over its trigger. It stays mounted after it closes, so its closing motion can run. */
 function OpenedMenu({
   ref,
   anchor,
@@ -310,11 +292,7 @@ function OpenedMenu({
   const safeArea = useSafeAreaInsets();
   const trigger = useRef<MenuTriggerRef>(null);
   const [isOpen, setIsOpen] = useState(false);
-  // Where the menu opens and the height it has there. A button in the lower half of the screen, such as
-  // the filter beside a bottom search field, opens the menu above it, so the menu does not run off the
-  // bottom edge.
   const [room, setRoom] = useState<{ placement: "top" | "bottom"; height: number } | null>(null);
-  // A second call in the same tick must see the new state before React applies it.
   const openRef = useRef(false);
   // ColorOS motion draws the menu as the GlassMenu (build 10: sub-menus too; up to 14 rows a level).
   // It opens in the root GlassMenuHost (in the app window), never as a child of this anchor.
@@ -403,11 +381,6 @@ function OpenedMenu({
       ))}
     </Fragment>
   ));
-  // HeroUI does not limit the height of the menu, and moves a menu that is taller than the screen above
-  // its top edge. A long list, such as the dictation languages, scrolls in the screen instead, with the
-  // 12 px edge space of HeroUI. A sub-menu opens as a layer over the menu, so a ScrollView would clip it:
-  // a menu with a sub-menu keeps its full height. The React Native ScrollView does not get the drag in
-  // the portal of the menu; the gesture-handler ScrollView does.
   const scrolls = !visible(actions).some((action) => action.subactions?.length && !action.displayInline);
 
   return (
@@ -417,7 +390,6 @@ function OpenedMenu({
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
     >
-      {/* The trigger covers the anchor and only measures it. The anchor opens the menu on a tap or a long press. */}
       <Menu.Trigger
         ref={trigger}
         isDisabled
@@ -434,8 +406,6 @@ function OpenedMenu({
           presentation="popover"
           placement={room?.placement ?? "bottom"}
           align="start"
-          // A fixed width. With a content width, Android sizes the menu with each title on one line and
-          // then wraps a long title, so the menu is shorter than its items and the last item goes out.
           className="w-52"
           style={scrolls ? { maxHeight: room?.height ?? height - safeArea.top - safeArea.bottom - 24 } : undefined}
         >

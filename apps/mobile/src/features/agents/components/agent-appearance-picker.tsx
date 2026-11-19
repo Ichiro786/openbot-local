@@ -35,7 +35,6 @@ import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import type { AgentPhotoProps } from "./agent-photo";
 
 const PREVIEW_SIZE = 144;
-// Centred on the avatar. In a sheet with a clear header it reaches up behind the header's blur.
 const GLOW_HEIGHT = 340;
 
 export const HUE_LABELS = {
@@ -61,12 +60,10 @@ const PRESET_LABELS = {
   grey: "mobile.agent.appearance.hue.grey",
 } as const satisfies Record<AvatarColorPresetId, MobileTextKey>;
 
-/** The name of a colour in an agent colour picker. */
 export function avatarColorChoiceLabel(choice: AvatarColorChoice): MobileTextKey {
   return choice.kind === "hue" ? HUE_LABELS[choice.hue] : PRESET_LABELS[choice.preset];
 }
 
-/** The `avatarHue` and `avatarColor` that a colour choice saves. Both null is the automatic colour. */
 export interface AgentColorValue {
   hue: AvatarHue | null;
   color: AvatarColor | null;
@@ -75,28 +72,21 @@ export interface AgentColorValue {
 interface AgentAppearancePickerProps extends AgentPhotoProps {
   seed: string;
   hue: AvatarHue | null;
-  /** The agent's `avatarColor`. It wins over `hue`. */
   color: AvatarColor | null;
   name: string;
   nameField: ReactNode;
   photoField?: ReactNode;
   showFaces?: boolean;
-  /** A glow in the agent colour behind the preview. */
   colorGlow?: boolean;
   disabled: boolean;
   onSeedChange: (seed: string) => void;
   onColorChange: (value: AgentColorValue) => void;
 }
 
-/** Columns of each grid, so that the rows are full: 10 shapes, 16 eyes, and 17 colours with Automatic. */
 const SHAPE_COLUMNS = 5;
 const EYES_COLUMNS = 8;
 const COLOR_COLUMNS = 9;
 
-/**
- * The avatar editor of the desktop, in the groups of a settings sheet: style, shape, eyes and colour.
- * Only the seed and the colour are saved, so each choice saves the seed that draws the face.
- */
 export function AgentAppearancePicker({
   agentId,
   serverId,
@@ -114,8 +104,6 @@ export function AgentAppearancePicker({
   onColorChange,
 }: AgentAppearancePickerProps) {
   const { t } = useText();
-  // Build 11.2: the custom wheel (ColorOS ON, Android). While dragging, only the preview follows;
-  // release saves through onColorChange like a swatch, with the nearest hue for older peers.
   const { enabled: colorOS } = useColorOSMotion();
   const [preview, setPreview] = useState<AvatarColor | null>(null);
   const savedColor = avatarHeadColor(seed, hue, color);
@@ -129,19 +117,12 @@ export function AgentAppearancePicker({
     },
     [onColorChange],
   );
-  // A new agent has no ID yet. Its first seed names its faces, as the agent ID does on the desktop.
   const [firstSeed] = useState(seed);
   const faceKey = agentId ?? firstSeed;
-  // The saved seed says plush or flat, so the desktop and this phone draw the same style.
   const style = avatarStyleForSeed(seed);
   const { shape, expression } = bloubAvatarProfile(seed, null);
   const resetSeed = useMemo(() => avatarDefaultSeed(faceKey, style), [faceKey, style]);
 
-  /**
-   * Saves a face. The automatic colour comes from the seed, so a face on the automatic colour that the
-   * new seed would colour differently keeps its colour as a chosen hue. Back on the agent's own seed, a
-   * hue that only kept the colour of that seed is automatic again. This is what the desktop does.
-   */
   const selectSeed = useCallback(
     (next: string) => {
       if (next === seed) return;
@@ -162,7 +143,6 @@ export function AgentAppearancePicker({
     },
     [expression, faceKey, selectSeed, shape, style],
   );
-  // Stable handlers let the memoized groups skip the renders of a name change.
   const selectStyle = useCallback((next: AvatarStyle) => selectFace({ style: next }), [selectFace]);
   const resetFace = useCallback(() => selectSeed(resetSeed), [resetSeed, selectSeed]);
   const shuffleFace = useCallback(
@@ -240,7 +220,6 @@ export function AgentAppearancePicker({
   );
 }
 
-/** A group of the editor: its name, actions at the end of the name, and a card, as settings groups show. */
 export function AppearanceSection({
   title,
   actions,
@@ -249,7 +228,6 @@ export function AppearanceSection({
 }: {
   title: string;
   actions?: ReactNode;
-  /** Shows the content without the card, for a control that has its own background. */
   plain?: boolean;
   children: ReactNode;
 }) {
@@ -296,7 +274,6 @@ export function HeadingAction({
   );
 }
 
-/** Plush or Flat, as the desktop avatar editor shows them. */
 const AvatarStyleOptions = memo(function AvatarStyleOptions({
   style,
   disabled,
@@ -327,7 +304,6 @@ const AvatarStyleOptions = memo(function AvatarStyleOptions({
   );
 });
 
-/** One choice of a grid. The selected one has a light fill that shows on the grouped card in both themes. */
 export function ChoiceCell({
   columns,
   label,
@@ -376,18 +352,15 @@ interface FaceOptionsProps {
   expression: ExpressionId;
   hue: AvatarHue | null;
   color: AvatarColor | null;
-  /** The colour of the preview. Each choice shows it, so only the shape or the eyes change. */
   shownColor: string;
   disabled: boolean;
   onSelect: (face: Partial<AvatarFace>) => void;
 }
 
-/** The hue that draws `shownColor` on a choice, when the agent has no colour of its own. */
 function choiceHue(hue: AvatarHue | null, color: AvatarColor | null, shownColor: string): AvatarHue | null {
   return color === null && hue === null ? avatarHueForColor(shownColor) : hue;
 }
 
-// Memoized so typing in the name field does not re-render every choice.
 const AvatarShapeOptions = memo(function AvatarShapeOptions({
   faceKey,
   style,
@@ -445,7 +418,6 @@ const AvatarShapeOptions = memo(function AvatarShapeOptions({
             disabled={disabled}
             onPress={() => onSelect({ shape: option })}
           >
-            {/* Android redraws each picture in software on every frame of a colour fade. */}
             <AvatarThumbnail
               seed={seeds[index] ?? faceKey}
               hue={thumbnailHue}

@@ -8,7 +8,6 @@ import {
 } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import Bot from "lucide-react-native/icons/bot";
 import Globe from "lucide-react-native/icons/globe";
@@ -47,22 +46,14 @@ import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { useDiscardGuard } from "@/shared/lib/use-discard-guard";
 
-/** The wire limit of a header name. */
 const HEADER_NAME_LIMIT = 128;
 
-// Examples, the same in each language. The desktop form shows the same ones.
 const PROVIDER_ID_PLACEHOLDER = "my-provider";
 const MODEL_ID_PLACEHOLDER = "model-id";
 const HEADER_NAME_PLACEHOLDER = "Header-Name";
 
-/**
- * Server settings > Providers > a custom provider of the host. Without `customProviderId` the page
- * lists the presets, and with `preset` it is the form of a new endpoint. A host with
- * `custom-provider-edit-v1` edits a saved endpoint in place; on an older host, a saved endpoint shows
- * its settings and can be removed. The key and the header values go to the host only, and the phone
- * does not keep them.
- */
 export function ServerCustomProviderScreen() {
   const { t, errorMessage } = useText();
   const { serverId, customProviderId, preset } = useLocalSearchParams<{
@@ -87,7 +78,6 @@ export function ServerCustomProviderScreen() {
         </SettingsNote>
       </SettingsContent>
     );
-  // As on desktop: an edit from a list with no header names would remove the saved headers.
   if (saved && admin.updateCustom && saved.headerNames !== undefined)
     return (
       <CustomProviderForm
@@ -147,7 +137,6 @@ const PRESET_ROWS = [
   description: MobileTextKey;
 }[];
 
-/** The first page of the add flow, as the preset list of desktop. A preset opens the form with its values. */
 function CustomProviderPresets({
   serverId,
   registry,
@@ -183,7 +172,6 @@ function CustomProviderPresets({
           </SettingsRow>
         ))}
       </SettingsSection>
-      {/* A host without `custom-agents-v1` has no route that adds an ACP agent, so the row says where to add one. */}
       <SettingsSection
         title={t("mobile.server.customProviders.agents")}
         footer={t(
@@ -234,11 +222,9 @@ function CustomProviderPresets({
   );
 }
 
-/** Runs one change at a time, and leaves the page after it succeeds. */
 function useLeavingAction(onFailure: (cause: unknown) => void, leave: () => void = () => router.back()) {
   const locked = useRef(false);
   const [pending, setPending] = useState(false);
-  // Navigation runs a render later, once the discard guard reads `leaving`.
   const [leaving, setLeaving] = useState(false);
   const after = useRef<(() => void) | null>(null);
   const leaveRef = useRef(leave);
@@ -259,7 +245,6 @@ function useLeavingAction(onFailure: (cause: unknown) => void, leave: () => void
       operation()
         .then((next) => {
           void haptics.notification("success");
-          // The list without a removed endpoint shows after this page goes, so the page does not say "gone".
           after.current = next;
           setLeaving(true);
         })
@@ -275,7 +260,6 @@ function useLeavingAction(onFailure: (cause: unknown) => void, leave: () => void
   };
 }
 
-/** The form of a new endpoint from a preset, or of a saved endpoint that the host can edit. */
 function CustomProviderForm({
   serverId,
   admin,
@@ -296,8 +280,6 @@ function CustomProviderForm({
     }
 )) {
   const { t, errorMessage } = useText();
-  // The endpoint as the form opened it: a list that a refresh reads later does not change which
-  // header values the form keeps.
   const [opened] = useState(from);
   const saved = opened.saved;
   const [draft, setDraft] = useState<CustomProviderDraft>(() =>
@@ -306,7 +288,6 @@ function CustomProviderForm({
   const initial = useRef(draft);
   const [error, setError] = useState<string | null>(null);
   const removing = useRef(false);
-  // A new endpoint closes the preset page too, and shows the Providers page with it.
   const action = useLeavingAction(
     (cause) =>
       setError(
@@ -328,28 +309,11 @@ function CustomProviderForm({
   const dirty = customProviderDraftChanged(draft, initial.current);
   const locked = action.pending;
 
-  // Discard turns prevention off before it repeats the action, so the hook does not warn.
-  const [discarding, setDiscarding] = useState(false);
-  usePreventRemove(!discarding && (dirty || action.pending) && !action.leaving, ({ repeat }) => {
-    if (action.pending) return;
-    void haptics.notification("warning");
-    Alert.alert(t("mobile.agent.discard.title"), t("mobile.agent.discard.body"), [
-      { text: t("mobile.agent.discard.keepEditing"), style: "cancel" },
-      {
-        text: t("mobile.agent.discard.discard"),
-        style: "destructive",
-        onPress: () => {
-          setDiscarding(true);
-          repeat();
-        },
-      },
-    ]);
-  });
+  useDiscardGuard((dirty || action.pending) && !action.leaving, { busy: () => action.pending, warn: true });
 
   function edit(change: Partial<CustomProviderDraft>) {
     setDraft((current) => {
       const next = { ...current, ...change };
-      // The ID of a new endpoint follows the name until the user types one.
       return change.name !== undefined && !next.idEdited ? { ...next, id: suggestedCustomProviderId(next.name) } : next;
     });
     setError(null);
@@ -358,7 +322,6 @@ function CustomProviderForm({
   return (
     <SettingsContent>
       <Stack.Screen options={{ title: saved ? saved.name : t("mobile.server.customProviders.add") }} />
-      {/* A preset fills the form, so Add shows also before the first change. */}
       <SheetSaveAction
         dirty={saved ? dirty : dirty || ready}
         canSave={ready && !action.pending}
@@ -566,7 +529,6 @@ function SavedCustomProvider({
   );
 }
 
-/** Remove, after the user confirms it. A removal moves the agents of the endpoint off its models. */
 function RemoveCustomProviderRow({
   name,
   disabled,

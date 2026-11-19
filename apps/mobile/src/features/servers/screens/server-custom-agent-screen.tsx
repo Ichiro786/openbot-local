@@ -1,7 +1,6 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { ACP_AGENT_PRESETS, CUSTOM_AGENT_LIMITS, type CustomAgentSummary } from "@openbot/contracts/ipc";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import Trash2 from "lucide-react-native/icons/trash";
 import { useEffect, useRef, useState } from "react";
@@ -34,23 +33,17 @@ import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { useDiscardGuard } from "@/shared/lib/use-discard-guard";
 
-// Examples, the same in each language. The desktop form shows the same ones.
 const AGENT_ID_PLACEHOLDER = "my-agent";
 const COMMAND_PLACEHOLDER = "my-agent";
 const ARGUMENT_PLACEHOLDER = "acp";
 const ENV_NAME_PLACEHOLDER = "NAME";
 const USAGE_PROMPT_PLACEHOLDER = "/usage";
-/** The "Start from" choice of no preset. */
 const OTHER_PRESET = "";
 
 type CustomAgents = NonNullable<ProviderAdmin["customAgents"]>;
 
-/**
- * Server settings > Providers > a custom ACP agent of the host, or a new one without
- * `customAgentId` (`custom-agents-v1`). The host starts the command on its computer. A variable's
- * value goes to the host only, and the phone does not keep it.
- */
 export function ServerCustomAgentScreen() {
   const { t, errorMessage } = useText();
   const { serverId, customAgentId } = useLocalSearchParams<{ serverId: string; customAgentId?: string }>();
@@ -102,7 +95,6 @@ function CustomAgentForm({
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const locked = useRef(false);
-  // Navigation runs a render later, once the discard guard reads `leaving`.
   const [leaving, setLeaving] = useState(false);
   const nextList = useRef<CustomAgentSummary[] | null>(null);
   const showList = useRef(onList);
@@ -110,7 +102,6 @@ function CustomAgentForm({
   useEffect(() => {
     if (!leaving) return;
     router.back();
-    // The list without a removed agent shows after this page goes, so the page does not say "gone".
     const list = nextList.current;
     nextList.current = null;
     if (list) void showList.current(list);
@@ -121,23 +112,7 @@ function CustomAgentForm({
   const dirty = customAgentDraftChanged(draft, saved);
   const busy = pending !== null;
 
-  // Discard turns prevention off before it repeats the action, so the hook does not warn.
-  const [discarding, setDiscarding] = useState(false);
-  usePreventRemove(!discarding && (dirty || busy) && !leaving, ({ repeat }) => {
-    if (busy) return;
-    void haptics.notification("warning");
-    Alert.alert(t("mobile.agent.discard.title"), t("mobile.agent.discard.body"), [
-      { text: t("mobile.agent.discard.keepEditing"), style: "cancel" },
-      {
-        text: t("mobile.agent.discard.discard"),
-        style: "destructive",
-        onPress: () => {
-          setDiscarding(true);
-          repeat();
-        },
-      },
-    ]);
-  });
+  useDiscardGuard((dirty || busy) && !leaving, { busy: () => busy, warn: true });
 
   async function run(kind: "save" | "remove", operation: () => Promise<CustomAgentSummary[]>) {
     if (locked.current) return;
@@ -165,7 +140,6 @@ function CustomAgentForm({
   function edit(change: Partial<CustomAgentDraft>) {
     setDraft((current) => {
       const next = { ...current, ...change };
-      // The ID of a new agent follows the name until the user types one.
       return change.name !== undefined && !next.idEdited && !saved
         ? { ...next, id: suggestedCustomAgentId(next.name) }
         : next;
@@ -184,7 +158,6 @@ function CustomAgentForm({
         pendingLabel={saved ? undefined : t("mobile.server.customAgents.adding")}
         onSave={() => void run("save", async () => (await agents.save(customAgentInput(draft, saved))).agents)}
       />
-      {/* The command runs with the host's user account, so the page says so before the user adds one. */}
       <SettingsNote>{t("mobile.server.customAgents.trust")}</SettingsNote>
       {error ? (
         <Typography.Paragraph accessibilityRole="alert" type="body-xs" className="px-4 text-danger-text">
@@ -255,7 +228,6 @@ function CustomAgentForm({
           onChangeText={(command) => edit({ command })}
         />
       </View>
-      {/* A preset replaces the arguments from outside the field, so the field starts again with its rows. */}
       <ListField
         key={preset}
         title={t("mobile.server.customAgents.arguments")}

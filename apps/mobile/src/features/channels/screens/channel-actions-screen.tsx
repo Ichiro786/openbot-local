@@ -4,6 +4,7 @@ import { Typography } from "heroui-native";
 import { useRef, useState } from "react";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { Button } from "@/shared/components/button";
+import { SaveError } from "@/shared/components/save-error";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
@@ -119,11 +120,7 @@ export function ChannelActionsScreen() {
               : t("mobile.channel.actions.loading")}
         </Typography.Paragraph>
       ) : null}
-      {error ? (
-        <Typography.Paragraph accessibilityRole="alert" className="text-danger-text">
-          {error}
-        </Typography.Paragraph>
-      ) : null}
+      <SaveError error={error} />
     </SheetScrollView>
   );
 }
