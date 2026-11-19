@@ -63,7 +63,6 @@ export function colorOSChatHeaderShown(o: {
 }): boolean {
   return o.colorOS && isAndroid && o.actionsMenu === undefined && o.title === undefined && !o.kicker && !o.splitShown;
 }
-}
 
 export const ChatHeader = memo(function ChatHeader({
   target,
