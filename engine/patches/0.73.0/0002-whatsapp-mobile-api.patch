@@ -30,41 +30,6 @@ index f235b25e..0e6edc67 100644
    WORKFLOWS_CAPABILITY,
    WORKFLOWS_CHANNELS_CAPABILITY,
    WORKFLOWS_CHATS_CAPABILITY,
-@@ -727,6 +729,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
-   WORKFLOWS_MEDIA_CATALOG_CAPABILITY,
-   AGENT_ACTIVE_QUEUES_CAPABILITY,
-   AGENT_CREATE_OPERATION_CAPABILITY,
-+  WHATSAPP_MOBILE_CAPABILITY,
- ] as const;
- 
- export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
-@@ -993,7 +996,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
-     capability !== UI_BLOCK_PREVIEW_EDIT_CAPABILITY &&
-     capability !== WORKFLOWS_MEDIA_CATALOG_CAPABILITY &&
-     capability !== AGENT_ACTIVE_QUEUES_CAPABILITY &&
--    capability !== AGENT_CREATE_OPERATION_CAPABILITY,
-+    capability !== AGENT_CREATE_OPERATION_CAPABILITY &&
-+    capability !== WHATSAPP_MOBILE_CAPABILITY,
- );
- /**
-  * The capabilities that only a protocol 9 peer sends and gets. Protocols 7 and 8 read at most 128
-@@ -1129,6 +1133,7 @@ export const TEAM_PROTOCOL_V9_ONLY_CAPABILITIES: ReadonlySet<string> = new Set<T
-   WORKFLOWS_MEDIA_CATALOG_CAPABILITY,
-   AGENT_ACTIVE_QUEUES_CAPABILITY,
-   AGENT_CREATE_OPERATION_CAPABILITY,
-+  WHATSAPP_MOBILE_CAPABILITY,
- ]);
- // A v8 host reads at most 128 capabilities, so a client sends the protocol 9 ones only after it
- // negotiates protocol 9.
-@@ -1364,6 +1369,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
-       capability !== UI_BLOCK_PREVIEW_EDIT_CAPABILITY &&
-       capability !== WORKFLOWS_MEDIA_CATALOG_CAPABILITY &&
-       capability !== AGENT_ACTIVE_QUEUES_CAPABILITY &&
--      capability !== AGENT_CREATE_OPERATION_CAPABILITY,
-+      capability !== AGENT_CREATE_OPERATION_CAPABILITY &&
-+      capability !== WHATSAPP_MOBILE_CAPABILITY,
-   );
- }
 diff --git a/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts b/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts
 new file mode 100644
 index 00000000..6f10ed85
