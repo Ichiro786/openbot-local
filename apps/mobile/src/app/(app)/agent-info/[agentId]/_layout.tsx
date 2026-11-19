@@ -16,8 +16,6 @@ export default function AgentInfoLayout() {
   const page = useColorOSPageAnimation();
   const { t } = useText();
   const background = String(useCSSVariable("--openbot-bg-sheet"));
-  // Build 10: the full-screen agent page (ColorOS) is under the status bar, so its headers keep the
-  // native top inset a sheet removes.
   const full = agentPageFullScreen(useRoute().key);
   return (
     <AgentPageFullContext value={full}>
@@ -38,7 +36,6 @@ export default function AgentInfoLayout() {
           contentStyle: { backgroundColor: background },
         })}
       >
-        {/* The full-screen agent page keeps an untitled bar: its hero names the agent. */}
         <Stack.Screen name="index" options={{ title: full ? "" : t("mobile.agent.menu.info") }} />
         <Stack.Screen name="profile" options={{ title: t("mobile.agent.route.profile") }} />
         <Stack.Screen name="appearance" options={{ title: t("mobile.agent.route.appearance") }} />
@@ -62,14 +59,12 @@ export default function AgentInfoLayout() {
         <Stack.Screen name="advanced" options={{ title: t("mobile.agent.advanced.title") }} />
         <Stack.Screen name="browser-profile" options={{ title: t("mobile.agent.browserProfile.label") }} />
         <Stack.Screen name="browser-profiles" options={{ title: t("mobile.server.route.browserProfiles") }} />
-        {/* The page names its profile. */}
         <Stack.Screen name="browser-profile-edit" options={{ title: t("mobile.server.route.browserProfiles") }} />
         <Stack.Screen
           name="browser-profile-agents"
           options={{ title: t("mobile.server.browserProfiles.agentsTitle") }}
         />
         <Stack.Screen name="browser-profile-proxy" options={{ title: t("mobile.server.browserProxies.menu") }} />
-        {/* The page names its proxy, or says Add proxy. */}
         <Stack.Screen name="browser-proxy" options={{ title: t("mobile.server.browserProxies.title") }} />
         <Stack.Screen name="notifications" options={{ title: t("mobile.settings.notifications.title") }} />
         <Stack.Screen name="crop-photo" options={{ title: t("mobile.agent.route.cropPhoto") }} />

@@ -16,15 +16,10 @@ interface ChatGlassButtonProps extends PropsWithChildren {
   accessibilityLabel: string;
   accessibilityValue?: AccessibilityValue;
   className?: string;
-  /** The glass follows the system appearance unless a surface that is always dark asks for dark. */
   colorScheme?: GlassColorScheme;
   disabled?: boolean;
   fallbackBackground: ViewStyle["backgroundColor"];
   height?: number;
-  /**
-   * Hides the button in place. Glass stops rendering under any ancestor with zero opacity, so
-   * the glass itself turns to `none` with its native animation and only the icon fades.
-   */
   hidden?: boolean;
   liquidGlassAvailable: boolean;
   onPress: () => void;
@@ -37,7 +32,6 @@ interface ChatGlassButtonProps extends PropsWithChildren {
   onPressIn?: () => void;
 }
 
-/** The floating control above the composer: a glass capsule with an icon, a label, or both. */
 export function ChatGlassButton({
   accessibilityLabel,
   accessibilityValue,
@@ -114,7 +108,6 @@ export function ChatGlassButton({
       }}
     >
       {liquidGlassAvailable ? null : (
-        // The solid stand-in for glass, a layer of its own so it can fade with the icon.
         <Animated.View
           pointerEvents="none"
           style={{
@@ -139,8 +132,6 @@ export function ChatGlassButton({
         style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}
         onPress={onPress}
       >
-        {/* Only a caller that hides the button gets the fading wrapper, so a row of icon and label
-            laid out by `className` stays a direct child of the pressable everywhere else. */}
         {hidden === undefined ? (
           children
         ) : (
@@ -151,7 +142,6 @@ export function ChatGlassButton({
   );
 }
 
-/** Text on the same glass capsule as the buttons beside it, such as a position, with no action. */
 export function ChatGlassLabel({
   children,
   colorScheme,

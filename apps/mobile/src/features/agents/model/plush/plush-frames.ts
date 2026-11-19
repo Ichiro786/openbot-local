@@ -36,34 +36,12 @@ import {
   toggleDecor,
 } from "./plush-felt";
 
-/**
- * The desktop (and iOS) cap the avatar at 30 fps. Build 11.2: Android plays 60 fps, so the gaze and the
- * lids glide on 60/120 Hz panels. Every timing below is in seconds and scales with it: the 6 s loop is
- * 360 frames there, the 1.5 s dots and 3 s z's still close it, and a glide samples the same curve.
- * Frames hold geometry only (no colour, no bitmaps), so an exact `avatarColor` draws every one.
- */
 export const PLUSH_FPS = Platform.OS === "android" ? 60 : 30;
-/**
- * One loop of a state. The thinking dots pulse every 1.5 s and the z's of sleep rise every 3 s, so
- * the loop holds a whole number of both.
- */
 const LOOP_SECONDS = 6;
 const LOOP_FRAMES = LOOP_SECONDS * PLUSH_FPS;
-/**
- * The eyes play the engine on a smooth periodic clock that goes forward and back, so a loop closes
- * without a jump of the gaze or the lids. The decor keeps a linear clock. The swing is short, so an
- * idle face looks round a little and slowly; it still reaches the blink at 5.3 s. The loop starts at
- * `SETTLED`, so the still picture does not change with the swing.
- */
 const LIFE_SWING = 0.8;
-/**
- * The engine time where loops start. The entry of a state, such as the felt dot of `notify`, is
- * over, and the engine blinks once at 5.3 s, inside the swing: the loop blinks on the way forward
- * and on the way back.
- */
 const SETTLED = 4;
 
-/** What the plush shows: its body, the face and the state. The colour does not change the frames. */
 export interface PlushGeometry {
   key: string;
   shape: ShapeId;
@@ -81,7 +59,6 @@ export function plushGeometry(seed: string, mood: AvatarMood = "idle"): PlushGeo
   return { key: `${profile.shape}:${face.id}:${state}`, shape: profile.shape, radii: silhouette.radii, face, state };
 }
 
-/** One frame, ready to draw on the UI thread. Units are those of the bloub viewBox. */
 export interface PlushFrame {
   bodyAlpha: number;
   eyes: PlushEye[];
@@ -90,10 +67,8 @@ export interface PlushFrame {
   zs: PlushZ[];
 }
 
-/** What a transition continues from: the engine eyes and the decor of a frame on screen. */
 interface FrameSource {
   eyes: PlushEyeSample[];
-  /** The decor clock of the frame. */
   t: number;
   dots: DecorTrack;
   zs: DecorTrack;
@@ -150,19 +125,10 @@ function rest(geometry: PlushGeometry) {
   return { frame, source };
 }
 
-/**
- * The still face of a geometry: the first frame of its loop. A long list mounts many avatars with few
- * distinct faces, so it is sampled once per face rather than once per row.
- */
 export function plushRestFrame(geometry: PlushGeometry): PlushFrame {
   return rest(geometry).frame;
 }
 
-/**
- * The change from the frame on screen to `to`: the engine glides the face and the gaze, the decor
- * fades, and `failed` shakes "no" once. The eyes start where the source frame shows them. Returns the
- * loop frame of `to` to continue with, so the pulse of the decor goes on without a jump.
- */
 function* transitionFrames(
   from: PlushGeometry,
   to: PlushGeometry,
@@ -182,7 +148,6 @@ function* transitionFrames(
     const seconds = index / PLUSH_FPS;
     engine.setLook(enterLook(fromLook, to.state, seconds), start + seconds, 1 / PLUSH_FPS);
     const sampled = engine.sample(start + seconds);
-    // The source frame can be anywhere in a loop; the offset to it fades over the face morph.
     const remaining = (1 - Math.min(1, seconds / BotEngine.SHAPE_MORPH)) ** 5;
     const eyes = sampled.eyes.map((eye, eyeIndex) => {
       const value = eyeSample(eye);
@@ -202,7 +167,6 @@ function* transitionFrames(
   }
 }
 
-/** The loop frame that continues a transition that ends at `end`, with the pulse of its decor. */
 export function plushLoopEntry(end: FrameSource | undefined, to: PlushGeometry): number {
   if (!end) return 0;
   const track = to.state === "thinking" ? end.dots : to.state === "asleep" ? end.zs : null;
@@ -218,7 +182,6 @@ function scheduleIdle(callback: () => void) {
   return () => cancelIdleCallback(id);
 }
 
-/** Samples a sequence a few frames at a time between idle callbacks, so a list does not stop the interface. */
 function prepareFrames(source: Generator<[PlushFrame, FrameSource]>, onReady: Ready, schedule: Schedule) {
   const sequence: PlushSequence = { frames: [], sources: [] };
   let cancel = () => {};
@@ -242,10 +205,6 @@ const MAX_CACHED_LOOPS = 8;
 const loops = new Map<string, PlushSequence>();
 const pending = new Map<string, { listeners: Set<Ready>; cancel: () => void }>();
 
-/**
- * The loop of a geometry. Sampled paths are shared by the header, the activity row and later turns
- * of the same agent; pending work is shared too, since they can mount together.
- */
 export function preparePlushLoop(geometry: PlushGeometry, onReady: Ready, schedule: Schedule = scheduleIdle) {
   const key = geometry.key;
   const cached = loops.get(key);
@@ -264,7 +223,6 @@ export function preparePlushLoop(geometry: PlushGeometry, onReady: Ready, schedu
       (sequence) => {
         const oldest = loops.keys().next().value;
         if (loops.size >= MAX_CACHED_LOOPS && oldest !== undefined) loops.delete(oldest);
-        // Mounted players keep their frames after the cache drops them.
         loops.set(key, sequence);
         pending.delete(key);
         for (const listener of current.listeners) listener(sequence);
@@ -281,7 +239,6 @@ export function preparePlushLoop(geometry: PlushGeometry, onReady: Ready, schedu
   };
 }
 
-/** The change from frame `index` of `shown`, which plays `from`, to `to`. */
 export function preparePlushTransition(
   from: PlushGeometry,
   to: PlushGeometry,
@@ -294,7 +251,6 @@ export function preparePlushTransition(
   return prepareFrames(transitionFrames(from, to, source), onReady, schedule);
 }
 
-/** The sequence of one still frame. */
 export function plushStillSequence(geometry: PlushGeometry): PlushSequence {
   const { frame, source } = rest(geometry);
   return { frames: [frame], sources: [source] };

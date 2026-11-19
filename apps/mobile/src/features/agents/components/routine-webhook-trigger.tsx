@@ -7,6 +7,7 @@ import {
 import type { EventFilter } from "@openbot/contracts/ipc-events";
 import * as Clipboard from "expo-clipboard";
 import { Typography } from "heroui-native";
+import Bot from "lucide-react-native/icons/bot";
 import Check from "lucide-react-native/icons/check";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
@@ -24,11 +25,9 @@ import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 
-/** A JSON Pointer into the event, and a value it must have. */
 const POINTER_PLACEHOLDER = "/action";
 const VALUE_PLACEHOLDER = "opened";
 
-/** A filter row in the form. The ID keeps the row and its inputs mounted while the user types. */
 export interface FilterDraft extends EventFilterDraft {
   id: string;
 }
@@ -40,7 +39,6 @@ function newFilterDraft(): FilterDraft {
   return { id: `new-${nextFilterId}`, pointer: "", value: "" };
 }
 
-/** Saved filters get IDs from their position, so the rows stay mounted until the user edits them. */
 export function filterDrafts(filters: readonly EventFilter[]): FilterDraft[] {
   return filters.map((filter, index) => ({ id: `saved-${index}`, ...eventFilterDraft(filter) }));
 }
@@ -70,7 +68,6 @@ function CardNote({ children, className = "text-grouped-secondary" }: { children
   );
 }
 
-/** A compact row of the card: a label, its value, and one action beside the value. */
 function ValueRow({ label, action, children }: { label: string; action?: ReactNode; children: ReactNode }) {
   return (
     <SettingsRow trailing={action}>
@@ -100,13 +97,6 @@ function IconAction({
   );
 }
 
-/**
- * The webhook trigger as one card, as on desktop: the trigger picker in `header`, then the endpoint
- * and the signing secret. The events row shows only when an event type or a filter is set; else a
- * "Filter events" action opens it. The host makes the endpoint and the
- * signing secret; the user never types the inbound secret. `url` is undefined before the routine has
- * a saved webhook trigger, and null while the host has not made it yet.
- */
 export function RoutineWebhookTrigger({
   header,
   url,
@@ -119,11 +109,10 @@ export function RoutineWebhookTrigger({
   onFiltersChange,
   onSecretDismiss,
   onRotate,
+  agentSecret,
 }: {
-  /** The first row of the card: the picker that changes the trigger. */
   header: ReactNode;
   url: string | null | undefined;
-  /** The signing secret that the host returned one time. Null when there is nothing to show. */
   secret: string | null;
   eventType: string;
   filters: FilterDraft[];
@@ -132,8 +121,8 @@ export function RoutineWebhookTrigger({
   onEventTypeChange: (value: string) => void;
   onFiltersChange: (filters: FilterDraft[]) => void;
   onSecretDismiss: () => void;
-  /** Makes a new secret. Left out, the action is hidden. */
   onRotate?: () => void;
+  agentSecret?: { agentName: string; pending: boolean; give: () => void } | undefined;
 }) {
   const { t } = useText();
   const { copied, copy } = useCopy();
@@ -147,7 +136,6 @@ export function RoutineWebhookTrigger({
     copied === kind ? <Check size={18} color={muted} /> : <Copy size={18} color={muted} />;
   const Disclosure = eventsOpen ? ChevronDown : ChevronRight;
   const showEvents = eventsOpen || Boolean(eventType.trim()) || filters.length > 0;
-  // A save that adds the trigger returns the secret before the refreshed routine brings its URL.
   const saved = url !== undefined || secret !== null;
   return (
     <SettingsSection
@@ -175,7 +163,6 @@ export function RoutineWebhookTrigger({
           }
         >
           {url ? (
-            // The row leaves out "https://" to show more of the path. Copy gives the full URL.
             <Typography.Paragraph type="body-sm" className="font-mono" numberOfLines={1} selectable>
               {url.replace(/^https:\/\//, "")}
             </Typography.Paragraph>
@@ -195,19 +182,45 @@ export function RoutineWebhookTrigger({
               >
                 {copyIcon("secret")}
               </IconAction>
-            ) : onRotate ? (
-              <IconAction
-                label={t("mobile.agent.webhook.rotate")}
-                disabled={disabled || rotatePending}
-                onPress={() =>
-                  Alert.alert(t("mobile.agent.webhook.rotateTitle"), t("mobile.agent.webhook.rotateBody"), [
-                    { text: t("common.cancel"), style: "cancel" },
-                    { text: t("mobile.agent.webhook.rotateConfirm"), style: "destructive", onPress: onRotate },
-                  ])
-                }
-              >
-                <RefreshCw size={18} color={muted} />
-              </IconAction>
+            ) : onRotate || agentSecret ? (
+              <View className="flex-row">
+                {agentSecret ? (
+                  <IconAction
+                    label={t("mobile.agent.webhook.giveToAgent", { name: agentSecret.agentName })}
+                    disabled={disabled || rotatePending || agentSecret.pending}
+                    onPress={() =>
+                      Alert.alert(
+                        t("mobile.agent.webhook.giveTitle", { name: agentSecret.agentName }),
+                        t("mobile.agent.webhook.giveBody", { name: agentSecret.agentName }),
+                        [
+                          { text: t("common.cancel"), style: "cancel" },
+                          {
+                            text: t("mobile.agent.webhook.giveConfirm"),
+                            style: "destructive",
+                            onPress: agentSecret.give,
+                          },
+                        ],
+                      )
+                    }
+                  >
+                    <Bot size={18} color={muted} />
+                  </IconAction>
+                ) : null}
+                {onRotate ? (
+                  <IconAction
+                    label={t("mobile.agent.webhook.rotate")}
+                    disabled={disabled || rotatePending || agentSecret?.pending === true}
+                    onPress={() =>
+                      Alert.alert(t("mobile.agent.webhook.rotateTitle"), t("mobile.agent.webhook.rotateBody"), [
+                        { text: t("common.cancel"), style: "cancel" },
+                        { text: t("mobile.agent.webhook.rotateConfirm"), style: "destructive", onPress: onRotate },
+                      ])
+                    }
+                  >
+                    <RefreshCw size={18} color={muted} />
+                  </IconAction>
+                ) : null}
+              </View>
             ) : null
           }
         >

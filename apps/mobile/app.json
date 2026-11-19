@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "run.openbot.local",
-      "versionCode": 10420,
+      "versionCode": 10421,
       "icon": "./assets/icons/app-icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-foreground.png",
@@ -45,6 +45,7 @@
       "./plugins/with-high-refresh-rate",
       "./modules/openbot-engine/app.plugin.js",
       "./plugins/with-app-icons",
+      "./plugins/with-android-view-preallocation-off",
       "expo-router",
       "expo-video",
       [

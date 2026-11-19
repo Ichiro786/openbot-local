@@ -10,16 +10,11 @@ import { Button } from "@/shared/components/button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { haptics } from "@/shared/lib/haptics";
 
-/** One item of a pair field: an argument name and its value, or a model ID and its name. */
 export interface PairItem {
   key: string;
   value: string;
 }
 
-/**
- * The row keys of a list that the user edits. The list changes only through its field, so the keys
- * follow each add and remove, and a field keeps its focus when a row above it goes.
- */
 function useRowKeys(count: number) {
   const next = useRef(count);
   const [keys, setKeys] = useState(() => Array.from({ length: count }, (_, index) => index));
@@ -30,7 +25,6 @@ function useRowKeys(count: number) {
   };
 }
 
-/** One item of a list field: its inputs and the remove button. */
 function RepeatableRow({
   removeLabel,
   disabled,
@@ -63,7 +57,6 @@ function RepeatableRow({
   );
 }
 
-/** The last row of a list field. */
 function RepeatableAddRow({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
   return (
     <SettingsRow
@@ -77,7 +70,6 @@ function RepeatableAddRow({ label, disabled, onPress }: { label: string; disable
   );
 }
 
-/** A list of single values, as the desktop form has: one field for each item. */
 export function ListField({
   title,
   footer,
@@ -100,7 +92,6 @@ export function ListField({
   autoCapitalize?: TextInputProps["autoCapitalize"];
   addLabel: string;
   itemLabel: (position: number) => string;
-  /** An example value. Without it, each field shows its label. */
   itemPlaceholder?: string;
   removeLabel: (position: number) => string;
   disabled: boolean;
@@ -147,7 +138,6 @@ export function ListField({
   );
 }
 
-/** A list of name and value pairs, as the desktop form has: two fields for each item. */
 export function PairField({
   title,
   footer,

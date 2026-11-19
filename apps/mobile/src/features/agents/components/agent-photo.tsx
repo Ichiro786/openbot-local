@@ -18,10 +18,6 @@ export interface AgentPhotoProps {
   agentId?: string;
   serverId?: string;
   imageUrl?: string | null;
-  /**
-   * The `avatarUrl` of the agent record, when the caller already has the record. Without it, the photo
-   * finds the agent in the workspace. `imageUrl` wins over it.
-   */
   avatarUrl?: string | null;
   disconnected?: boolean;
 }
@@ -37,16 +33,11 @@ export function AgentPhoto({
   children,
 }: AgentPhotoProps & {
   size: number;
-  /**
-   * Whether the orbit rings turn around the photo, while the agent works. A photo has no face to show
-   * the work; the plush shows it with its felt dots. `undefined` mounts no ring layer.
-   */
   rings?: boolean | undefined;
   children: ReactNode;
 }) {
   const workspace = useMobileWorkspaceReader();
   const queryScope = useQueryScope();
-  // A list row gives the URL of its agent, so the rows do not each search all agents at each change.
   const foundAvatarUrl = useMobileWorkspaceSelector((current) =>
     imageUrl === undefined && knownAvatarUrl === undefined
       ? current.agents.find((candidate) => candidate.id === agentId && candidate.serverId === serverId)?.avatarUrl
@@ -63,7 +54,6 @@ export function AgentPhoto({
       if (!agentId || !serverId || !avatarUrl) throw new Error("The agent avatar is unavailable.");
       return workspace().loadAgentAvatar(agentId, avatarUrl, serverId);
     },
-    // A saved photo shows at once, also before the server connects.
     initialData: () =>
       agentId && serverId && avatarUrl ? (savedAgentAvatar(serverId, agentId, avatarUrl) ?? undefined) : undefined,
     staleTime: Infinity,
@@ -77,8 +67,6 @@ export function AgentPhoto({
   if (!uri || uri === failed) return children;
   const picture = (
     <View style={{ width: size, height: size }}>
-      {/* A URI means the transfer finished, not that the native image is ready. Keep the
-          generated face until this version has actually appeared, also in a recycled row. */}
       {displayed !== uri ? children : null}
       <View style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, overflow: "hidden" }}>
         <Image
@@ -94,8 +82,6 @@ export function AgentPhoto({
             if (currentUri.current === uri) setFailed(uri);
           }}
         />
-        {/* iOS does not support the native saturation style. Keep Expo's error handling
-            and use the same SVG filter as generated avatars for the offline image. */}
         {disconnected ? (
           <Svg
             width={size}
@@ -121,7 +107,6 @@ export function AgentPhoto({
       </View>
     </View>
   );
-  // The ring wrapper stays mounted when work starts and stops.
   return rings === undefined ? (
     picture
   ) : (

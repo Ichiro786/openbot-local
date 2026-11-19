@@ -2,7 +2,6 @@ import { AnimatedPressable } from "@/shared/components/animated-pressable";
 
 import type { ServerDrawerIconButtonProps } from "./server-drawer-icon-button.types";
 
-// OpenBot Local keeps the Android drawer glass of 1.4.10 (upstream #10445 reverted): plain or filled circle.
 export function ServerDrawerIconButton({
   accessibilityLabel,
   children,

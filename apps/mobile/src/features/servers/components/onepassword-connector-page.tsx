@@ -3,7 +3,7 @@ import { ONEPASSWORD_CONNECTOR_TOKEN_LIMIT } from "@openbot/contracts/team-proto
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
 import { useState } from "react";
-import { ConnectorError, ConnectorHeader } from "@/features/servers/components/connector-header";
+import { ConnectorError, ConnectorHeader, ConnectorLoading } from "@/features/servers/components/connector-header";
 import { useConnectorAction } from "@/features/servers/model/use-server-connectors";
 import {
   SettingsContent,
@@ -24,10 +24,6 @@ const STATUS_KEYS = {
   connected: "mobile.server.connectors.statusConnected",
 } as const;
 
-/**
- * Marketplace › Apps › 1Password of a joined server. The host connects with a service
- * account token that the user pastes here. The token goes to the host once; this phone keeps no copy.
- */
 export function OnePasswordConnectorPage({
   server,
   query,
@@ -41,16 +37,7 @@ export function OnePasswordConnectorPage({
   const [token, setToken] = useState("");
   const status = query.data;
   const host = server.name;
-  if (!status)
-    return (
-      <SettingsContent>
-        <SettingsNote>
-          {query.isError
-            ? errorMessage(query.error, t("mobile.server.connectors.readFailed"))
-            : t("mobile.server.connectors.loading")}
-        </SettingsNote>
-      </SettingsContent>
-    );
+  if (!status) return <ConnectorLoading query={query} />;
   const trimmed = token.trim();
   const connect = () =>
     void action

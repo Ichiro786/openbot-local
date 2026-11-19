@@ -13,21 +13,15 @@ import { pill } from "@/shared/motion/tokens";
 import { useBlurLive } from "@/shared/motion/useBlurLive";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
-/** The height of the bottom search capsules: home search and the Marketplace field. */
 export const GLASS_CAPSULE_HEIGHT = 52;
 const CSS_EASE_SMOOTH = cubicBezier(0.32, 0.72, 0, 1);
-/** How long a tint takes to come in and to go, as the task result of home search. */
 const TINT_IN = 380;
 const TINT_OUT = 280;
 
-/** The shadow of the solid capsule. */
 const CAPSULE_SHADOW = "0 6px 18px rgba(0, 0, 0, 0.07)";
-/** The blur radius of the Android capsule, near the 18 px of the design; the native limit is 25. */
 const BLUR_RADIUS = 24;
-/** Android 12 and later draw the blur. Earlier versions keep the solid glass. */
 export const ANDROID_BLUR = isAndroid && Number(Platform.Version) >= 31;
 
-/** Glass where the system has it; a solid capsule elsewhere, and with Reduce Transparency on. */
 export function GlassCapsule({
   liquidGlass,
   fallbackBackground,
@@ -54,31 +48,18 @@ export function GlassCapsule({
   blurPaused?: boolean;
   fallbackBackground: unknown;
   width?: number;
-  /** A capsule beside the chat composer takes its resting height, so the two match. */
   height?: number;
-  /**
-   * A color over the glass, such as the agent color of a task result. Pass it before it shows, so the
-   * tint is mounted and fades in.
-   */
   tint?: string;
-  /** False fades the tint out. The tint keeps its color while it fades. */
   tintShown?: boolean;
-  /** The glass comes and goes with the native glass animation, for a capsule that mounts on screen. */
   animateGlass?: boolean;
-  /** With `animateGlass`: the glass dissolves before the capsule unmounts. */
   glassHidden?: boolean;
 }>) {
-  // Android has no glass: the capsule blurs the content under it and lays the milky fill of the
-  // design over the blur. iOS without Liquid Glass, or with Reduce Transparency, keeps the solid capsule.
   const milky = useChromeGlass();
   const { theme } = useUniwind();
   const blurFill = String(useCSSVariable("--openbot-bg-chrome-blur"));
   const blurs = ANDROID_BLUR && !liquidGlass && blurTarget !== undefined && !blurPaused;
   const colorOS = useColorOSMotion().enabled;
   const frost = colorOSFrost && colorOS && blurs;
-  // Build 15.2: the frost fill and rim show two frames after the blur (re)starts, as every other frost does.
-  // A restarted blur draws nothing for its first frames, and the light frost fill over it showed the rows
-  // sharp ("clear" frames after Back from a chat). Until then the solid fill stays.
   const frostShown = useBlurLive(frost);
   const dark = theme === "dark";
   useBlurBudget(blurs, "glass-capsule");
@@ -107,17 +88,12 @@ export function GlassCapsule({
       ]}
     >
       {isAndroid && !liquidGlass ? (
-        // The blur stays mounted while the field is solid: a `BlurView` that mounts paints its tint
-        // and the window background for a frame. The solid fill then covers it, and the blur method
-        // `none` stops the blur, which otherwise blurs the whole target on each frame that it changes.
         <>
           {ANDROID_BLUR && blurTarget ? (
             <BlurView
               blurTarget={blurTarget}
               blurMethod={blurs ? "dimezisBlurViewSdk31Plus" : "none"}
               intensity={BLUR_RADIUS}
-              // Downsample before blurring: the capsule is 52 dp tall, so full-resolution blur of the
-              // whole list on every scroll frame only spends RenderThread time nobody sees.
               blurReductionFactor={4}
               tint={theme === "dark" ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
@@ -141,8 +117,6 @@ export function GlassCapsule({
           {frostShown ? <FrostRim height={height} dark={dark} /> : <ChromeGlassSheen />}
         </>
       ) : null}
-      {/* The tint lies over the glass, as in the prototype. The native glass tint cannot animate, and
-          the tint must fade in and out with the result. */}
       {tint ? (
         <Animated.View
           pointerEvents="none"
