@@ -79,7 +79,6 @@ import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-ch
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
-import { useStreamedMessages } from "@/features/chat/components/use-streamed-messages";
 import {
   type ChatBubbleMessage,
   type ChatMarkerGroup,
@@ -1503,7 +1502,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   foreground,
   historyState,
   catchingUp = false,
-  messages: incomingMessages,
+  messages,
   messageAliases,
   referenceMessages,
   hasOlder,
@@ -1543,11 +1542,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   const { t, format, sourceText } = useText();
   const isFocused = useIsFocused();
   const colorOSOn = useColorOSMotion().enabled && isAndroid;
-  const messages = useStreamedMessages(
-    JSON.stringify([target.serverId, target.kind, target.id]),
-    incomingMessages,
-    colorOSOn && isFocused && online && appActive,
-  );
   const timeOffset = useSharedValue(0);
   const [timesMounted, setTimesMounted] = useState(false);
   const timeReveal = useMemo<ChatTimeReveal>(
