@@ -11,13 +11,16 @@ import Reply from "lucide-react-native/icons/reply";
 import Square from "lucide-react-native/icons/square";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Volume2 from "lucide-react-native/icons/volume-2";
-import { type PropsWithChildren, type RefObject, useMemo, useState } from "react";
+import { type PropsWithChildren, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { type AccessibilityState, Pressable, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
   LayoutAnimationConfig,
   ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
   ZoomIn,
   ZoomOut,
 } from "react-native-reanimated";
@@ -28,6 +31,7 @@ import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-
 import { Button } from "@/shared/components/button";
 import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
+import { useMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { currentText, useText } from "@/shared/lib/text";
 import { press as colorOSPress } from "@/shared/motion/tokens";
@@ -61,6 +65,47 @@ const COLOROS_PRESSED = { transform: [{ scale: colorOSPress.scale }] };
 
 function pressInTick() {
   void haptics.impact("light");
+}
+
+function reactionKey(reaction: ConversationReaction): string {
+  return reaction.actor.kind === "agent"
+    ? `agent:${reaction.actor.agentId}:${reaction.emoji}`
+    : `user:${reaction.emoji}`;
+}
+
+function useReactionPops(
+  reactions: readonly ConversationReaction[],
+  ready: boolean,
+): (reaction: ConversationReaction) => boolean {
+  const seen = useRef<ReadonlySet<string> | null>(null);
+  if (ready && seen.current === null) seen.current = new Set(reactions.map(reactionKey));
+  const known = seen.current;
+  return (reaction) => known !== null && !known.has(reactionKey(reaction));
+}
+
+function ReactionGlyph({ emoji, pop }: { emoji: string; pop: boolean }) {
+  const { transforms } = useMotion();
+  const shown = useSharedValue(pop ? 0 : 1);
+  useEffect(() => {
+    if (!pop) {
+      shown.set(1);
+      return;
+    }
+    shown.set(0);
+    shown.set(withSpring(1, springs.fastSpatial));
+  }, [pop, shown]);
+  const style = useAnimatedStyle(() => {
+    const value = shown.get();
+    return {
+      opacity: Math.min(1, Math.max(0, value)),
+      transform: transforms ? [{ scale: 0.6 + 0.4 * value }] : [],
+    };
+  });
+  return (
+    <Animated.View style={style}>
+      <Typography>{emoji}</Typography>
+    </Animated.View>
+  );
 }
 
 function ActionButton({
@@ -184,6 +229,7 @@ export function ChatMessageActions({
         ]
       : (reactions ?? []);
   const own = shown.find((reaction) => reaction.actor.kind === "user")?.emoji ?? null;
+  const pops = useReactionPops(shown, true);
 
   const react = (emoji: string | null) => {
     if (!onReact) return;
@@ -219,7 +265,7 @@ export function ChatMessageActions({
               accessibilityLabel={t("mobile.chat.message.removeReaction", { emoji: reaction.emoji })}
               onPress={() => react(null)}
             >
-              <Typography>{reaction.emoji}</Typography>
+              <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
             </ActionButton>
           ) : (
             <View
@@ -236,7 +282,7 @@ export function ChatMessageActions({
               }
               className="px-2"
             >
-              <Typography>{reaction.emoji}</Typography>
+              <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
             </View>
           ),
         )}
@@ -390,6 +436,7 @@ export function useMessageActions(input: MessageActionsInput | null) {
         ]
       : (reactions ?? []);
   const own = shown.find((reaction) => reaction.actor.kind === "user")?.emoji ?? null;
+  const pops = useReactionPops(shown, input !== null);
   const onReact = input?.onReact;
   const react = onReact
     ? (emoji: string | null) => {
@@ -440,6 +487,7 @@ export function useMessageActions(input: MessageActionsInput | null) {
   // Build 11.3 batch2: the ColorOS glass message menu offers the same Send to channel and Delete.
   return {
     shown,
+    pops,
     react,
     open,
     sendToChannel: input?.sendToChannel,
@@ -453,11 +501,13 @@ export function ChatMessageReactions({
   align,
   reactions,
   agentsById,
+  pops,
   onReact,
 }: {
   align: "start" | "end";
   reactions: readonly ConversationReaction[];
   agentsById: ReadonlyMap<string, MobileAgent>;
+  pops: (reaction: ConversationReaction) => boolean;
   onReact?: (emoji: string | null) => void;
 }) {
   const { t } = useText();
@@ -479,7 +529,7 @@ export function ChatMessageReactions({
             className="h-7 items-center justify-center px-1"
             style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
           >
-            <Typography>{reaction.emoji}</Typography>
+            <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
           </Pressable>
         ) : (
           <View
@@ -496,7 +546,7 @@ export function ChatMessageReactions({
             }
             className="h-7 justify-center px-1"
           >
-            <Typography>{reaction.emoji}</Typography>
+            <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
           </View>
         ),
       )}
