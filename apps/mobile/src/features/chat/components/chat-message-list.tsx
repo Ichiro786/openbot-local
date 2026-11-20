@@ -238,6 +238,7 @@ const USER_ORIGIN = { transformOrigin: "bottom right" } as const;
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 const REPLY_APPEAR = { duration: 220, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.Never };
 const BUBBLE_CORNER = { borderCurve: "circular", borderRadius: 22 } as const;
+const OUTBOX_DIM = 0.55;
 
 function ChatBubble({
   children,
@@ -604,12 +605,16 @@ const MessageRow = memo(function MessageRow({
   selecting = false,
   arriving,
   revealed,
+  entered,
+  dimmed,
   shared,
 }: {
   message: MessageRowMessage;
   isFirstUser: boolean;
   arriving: boolean;
   revealed: boolean;
+  entered: Set<string>;
+  dimmed: Set<string>;
   source?: ChatMessage;
   questionForm?: QuestionPromptController;
   upload?: ChatUpload;
@@ -624,6 +629,31 @@ const MessageRow = memo(function MessageRow({
   const actionsControl = useRef<MessageActionsControl | null>(null);
   const [selectionHeight, setSelectionHeight] = useState(0);
   const waiting = awaitingFirstWord(message, shared, arriving, revealed);
+  const playsEntrance = arriving && !entered.has(message.id);
+  useEffect(() => {
+    entered.add(message.id);
+  }, [entered, message.id]);
+  const outboxDimmed = outbox !== undefined && outbox.message.state !== "failed";
+  const confirmOpacity = useSharedValue(1);
+  const confirmFading = useRef(false);
+  const confirmStyleOn = !outbox && !isFirstUser && (confirmFading.current || dimmed.has(message.id));
+  useEffect(() => {
+    if (outboxDimmed) {
+      dimmed.add(message.id);
+      confirmOpacity.set(OUTBOX_DIM);
+      return;
+    }
+    if (outbox) {
+      dimmed.delete(message.id);
+      confirmOpacity.set(1);
+      return;
+    }
+    if (!dimmed.has(message.id)) return;
+    confirmFading.current = true;
+    confirmOpacity.set(withTiming(1, timings.defaultEffects));
+    dimmed.delete(message.id);
+  }, [outboxDimmed, outbox, dimmed, message.id, confirmOpacity]);
+  const confirmStyle = useAnimatedStyle(() => ({ opacity: confirmOpacity.get() }));
   const bubble = message.kind === "message" && !outbox && !message.streaming && !waiting ? message : null;
   const selectable = Boolean(bubble?.body.trim()) && shared.canSelectText;
   const messageActions = useMessageActions(
@@ -872,7 +902,7 @@ const MessageRow = memo(function MessageRow({
       <Animated.View
         key={message.id}
         entering={
-          arriving && !isFirstUser
+          playsEntrance && !isFirstUser
             ? message.author === "user"
               ? shared.colorOSEntrance
                 ? colorOSUserEntrance
@@ -892,6 +922,7 @@ const MessageRow = memo(function MessageRow({
           { borderCurve: "circular" },
           // Build 11.2: the ColorOS sent bubble scales about the send-button corner.
           shared.colorOSEntrance && message.author === "user" ? USER_ORIGIN : undefined,
+          confirmStyleOn ? confirmStyle : undefined,
           isFirstUser ? firstMessageStyle : undefined,
         ]}
       >
@@ -1051,6 +1082,7 @@ const MessageRow = memo(function MessageRow({
           align={message.author === "user" ? "end" : "start"}
           reactions={messageActions.shown}
           agentsById={agentsById}
+          pops={messageActions.pops}
           onReact={messageActions.react}
         />
       </View>
@@ -1160,6 +1192,8 @@ interface RowContextValue {
   highlightedRowId: string | null;
   highlightColor: string;
   highlightShown: Set<string>;
+  entered: Set<string>;
+  dimmed: Set<string>;
 }
 
 const FOCUS_HIGHLIGHT_OPACITY = 0.16;
@@ -1278,6 +1312,8 @@ function ChatRow({ item }: { item: VisibleMessage }) {
         selecting={message.id === row.selectingMessageId}
         arriving={row.arrivals.has(message.id)}
         revealed={row.revealedIds.has(message.id)}
+        entered={row.entered}
+        dimmed={row.dimmed}
         shared={row.shared}
       />
     );
@@ -1720,6 +1756,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   focusHandlers.current = { openAt: motion.openAt, onFocusPlaced };
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
   const highlightShown = useRef(new Set<string>());
+  const enteredRows = useRef(new Set<string>());
+  const dimmedRows = useRef(new Set<string>());
   const highlightColor = String(useCSSVariable("--openbot-accent"));
   useEffect(() => {
     if (!focusId || !motion.listPlaced || placedFocus.current === focusId) return;
@@ -2011,6 +2049,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       highlightedRowId,
       highlightColor,
       highlightShown: highlightShown.current,
+      entered: enteredRows.current,
+      dimmed: dimmedRows.current,
     }),
     [
       shared,

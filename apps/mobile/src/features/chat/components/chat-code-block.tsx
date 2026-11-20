@@ -5,9 +5,12 @@ import { useThemeColor } from "heroui-native/hooks";
 import Check from "lucide-react-native/icons/check";
 import Copy from "lucide-react-native/icons/copy";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { type ColorValue, Text, View, type ViewStyle } from "react-native";
+import { type ColorValue, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useCSSVariable } from "uniwind";
 import { useFontScale } from "@/shared/lib/font-scale";
+import { useMotion } from "@/shared/lib/motion";
+import { springs } from "@/shared/lib/motion-tokens";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { CODE_LAYOUT_STYLE, CODE_TEXT_STYLE } from "@/shared/lib/text-direction";
@@ -25,6 +28,51 @@ function streamingHighlightInterval(length: number): number {
 }
 
 const ANDROID_MAX_COLORED_RUNS = 300;
+const COPY_GLYPH_SIZE = 14;
+
+function CopyGlyph({
+  progress,
+  inverse,
+  transforms,
+  children,
+}: {
+  progress: SharedValue<number>;
+  inverse: boolean;
+  transforms: boolean;
+  children: ReactNode;
+}) {
+  const style = useAnimatedStyle(() => {
+    const shown = inverse ? 1 - progress.get() : progress.get();
+    return {
+      opacity: Math.min(1, Math.max(0, shown)),
+      transform: transforms ? [{ scale: 0.6 + 0.4 * shown }] : [],
+    };
+  });
+  return <Animated.View style={[StyleSheet.absoluteFill, copyGlyphStyles.center, style]}>{children}</Animated.View>;
+}
+
+function CopyCheckIcon({ copied, color }: { copied: boolean; color: string }) {
+  const { transforms } = useMotion();
+  const check = useSharedValue(copied ? 1 : 0);
+  useEffect(() => {
+    check.set(withSpring(copied ? 1 : 0, springs.fastSpatial));
+  }, [copied, check]);
+  return (
+    <View style={copyGlyphStyles.box}>
+      <CopyGlyph progress={check} inverse transforms={transforms}>
+        <Copy size={COPY_GLYPH_SIZE} color={color} />
+      </CopyGlyph>
+      <CopyGlyph progress={check} inverse={false} transforms={transforms}>
+        <Check size={COPY_GLYPH_SIZE} color={color} />
+      </CopyGlyph>
+    </View>
+  );
+}
+
+const copyGlyphStyles = StyleSheet.create({
+  box: { width: COPY_GLYPH_SIZE, height: COPY_GLYPH_SIZE },
+  center: { alignItems: "center", justifyContent: "center" },
+});
 
 export interface CodeRun {
   offset: number;
@@ -170,7 +218,7 @@ function CodeBlockFrame({
           accessibilityLabel={copied ? t("mobile.chat.code.copied") : t("mobile.chat.code.copy")}
           onPress={copy}
         >
-          {copied ? <Check size={14} color={String(muted)} /> : <Copy size={14} color={String(muted)} />}
+          <CopyCheckIcon copied={copied} color={String(muted)} />
         </Button>
       </View>
       <View
