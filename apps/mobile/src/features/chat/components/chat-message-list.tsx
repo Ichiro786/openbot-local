@@ -40,6 +40,7 @@ import Animated, {
   Extrapolation,
   FadeIn,
   FadeInDown,
+  FadeOut,
   interpolate,
   Keyframe,
   ReduceMotion,
@@ -193,6 +194,7 @@ const DRAW_SCREENS = 1;
 const ADAPTIVE_RENDER = { enterVelocity: 1.5, exitVelocity: 0.5 };
 const KEEP_VISIBLE_POSITION = { data: true, size: true };
 const FOLLOW_END = { animated: false, on: { dataChange: true, itemLayout: true, footerLayout: true, layout: true } };
+const FOLLOW_REPLY = { animated: true, on: { dataChange: true, itemLayout: true, footerLayout: true, layout: true } };
 
 // A just-sent message rises into place on the M3 Expressive default spatial spring (ζ 0.8, k 380,
 // mass 1), so it lands with a hint of overshoot. Only rows in the arrival set get it, and the list does
@@ -235,6 +237,11 @@ const COLOROS_AGENT_ENTRANCE = FadeInDown.duration(timings.defaultEffects.durati
   .withInitialValues({ opacity: 0, transform: [{ translateY: 8 }] })
   .reduceMotion(ReduceMotion.System);
 const USER_ORIGIN = { transformOrigin: "bottom right" } as const;
+const SETTLE_IN = FadeIn.duration(timings.defaultEffects.duration)
+  .easing(timings.defaultEffects.easing)
+  .reduceMotion(ReduceMotion.System);
+const NOTICE_IN = FadeIn.duration(150).easing(timings.fastEffects.easing).reduceMotion(ReduceMotion.System);
+const NOTICE_OUT = FadeOut.duration(150).easing(timings.fastEffects.easing).reduceMotion(ReduceMotion.System);
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 const REPLY_APPEAR = { duration: 220, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.Never };
 const BUBBLE_CORNER = { borderCurve: "circular", borderRadius: 22 } as const;
@@ -607,6 +614,7 @@ const MessageRow = memo(function MessageRow({
   revealed,
   entered,
   dimmed,
+  actionsHeld = false,
   shared,
 }: {
   message: MessageRowMessage;
@@ -615,6 +623,7 @@ const MessageRow = memo(function MessageRow({
   revealed: boolean;
   entered: Set<string>;
   dimmed: Set<string>;
+  actionsHeld?: boolean;
   source?: ChatMessage;
   questionForm?: QuestionPromptController;
   upload?: ChatUpload;
@@ -633,6 +642,9 @@ const MessageRow = memo(function MessageRow({
   useEffect(() => {
     entered.add(message.id);
   }, [entered, message.id]);
+  const actionsWereHeld = useRef(false);
+  if (actionsHeld) actionsWereHeld.current = true;
+  const [failureArrives] = useState(() => !(message.kind === "message" && message.status === "failed"));
   const outboxDimmed = outbox !== undefined && outbox.message.state !== "failed";
   const confirmOpacity = useSharedValue(1);
   const confirmFading = useRef(false);
@@ -905,7 +917,7 @@ const MessageRow = memo(function MessageRow({
           playsEntrance && !isFirstUser
             ? message.author === "user"
               ? shared.colorOSEntrance
-                ? colorOSUserEntrance
+                ? undefined
                 : USER_MESSAGE_ENTRANCE
               : // Playback reveals its own words, and a reply that streamed in place is already shown.
                 !enabled && !message.streaming
@@ -920,8 +932,6 @@ const MessageRow = memo(function MessageRow({
         }
         style={[
           { borderCurve: "circular" },
-          // Build 11.2: the ColorOS sent bubble scales about the send-button corner.
-          shared.colorOSEntrance && message.author === "user" ? USER_ORIGIN : undefined,
           confirmStyleOn ? confirmStyle : undefined,
           isFirstUser ? firstMessageStyle : undefined,
         ]}
@@ -1093,10 +1103,29 @@ const MessageRow = memo(function MessageRow({
     source?.kind === "message"
       ? mentionDraft(source.body).text || t("mobile.chat.reply.attachment")
       : t("mobile.chat.reply.unavailable");
+  const colorOSUser = shared.colorOSEntrance && message.author === "user";
+  const actionRow =
+    bubble && longPressMenu && !actionsHeld ? (
+      <ChatMessageActions
+        align={message.author === "user" ? "end" : "start"}
+        copyText={messageCopyText(message)}
+        createdAt={message.createdAt}
+        reactions={message.reactions}
+        agentsById={agentsById}
+        onReact={shared.canReact ? (emoji) => actions.react(message, emoji) : undefined}
+        onReply={shared.canReply ? () => actions.reply(message) : undefined}
+        onSelectText={selectable ? () => actions.selectText(message) : undefined}
+        selecting={selecting}
+        readAloudId={canReadAloud && message.author === "agent" ? message.id : undefined}
+        longPressMenu
+        controlRef={actionsControl}
+      />
+    ) : null;
   return (
-    <View
+    <Animated.View
       key={message.id}
       ref={selecting ? actions.selectionArea : undefined}
+      entering={colorOSUser && playsEntrance && !isFirstUser ? colorOSUserEntrance : undefined}
       className={
         message.author === "agent"
           ? "max-w-full self-start gap-1"
@@ -1104,6 +1133,7 @@ const MessageRow = memo(function MessageRow({
             ? "max-w-full self-end gap-1"
             : "max-w-[92%] self-end gap-1"
       }
+      style={colorOSUser ? USER_ORIGIN : undefined}
     >
       {message.replyToMessageId ? (
         <View className={`flex-row items-center gap-1 ${message.author === "user" ? "self-end" : "self-start"}`}>
@@ -1144,27 +1174,23 @@ const MessageRow = memo(function MessageRow({
           {withReactions}
         </ChatMessageGesture>
       )}
-      {message.author === "user" && message.status === "failed" ? <TurnFailure reason={message.failureReason} /> : null}
-      {outbox ? <ChatOutboxStatus status={outbox} /> : null}
-      {bubble && longPressMenu ? (
-        <ChatMessageActions
-          align={message.author === "user" ? "end" : "start"}
-          copyText={messageCopyText(message)}
-          createdAt={message.createdAt}
-          reactions={message.reactions}
-          agentsById={agentsById}
-          onReact={shared.canReact ? (emoji) => actions.react(message, emoji) : undefined}
-          onReply={shared.canReply ? () => actions.reply(message) : undefined}
-          onSelectText={selectable ? () => actions.selectText(message) : undefined}
-          selecting={selecting}
-          readAloudId={canReadAloud && message.author === "agent" ? message.id : undefined}
-          longPressMenu
-          controlRef={actionsControl}
+      {message.author === "user" && message.status === "failed" ? (
+        <TurnFailure
+          reason={message.failureReason}
+          entering={shared.colorOSEntrance && failureArrives ? NOTICE_IN : undefined}
         />
+      ) : null}
+      {outbox ? <ChatOutboxStatus status={outbox} exiting={shared.colorOSEntrance ? NOTICE_OUT : undefined} /> : null}
+      {bubble && longPressMenu ? (
+        actionRow && actionsWereHeld.current ? (
+          <Animated.View entering={shared.colorOSEntrance ? SETTLE_IN : undefined}>{actionRow}</Animated.View>
+        ) : (
+          actionRow
+        )
       ) : messageActions.open && shared.screenReaderEnabled ? (
         <ChatMessageActionsButton align={message.author === "user" ? "end" : "start"} onOpen={messageActions.open} />
       ) : null}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -1194,6 +1220,7 @@ interface RowContextValue {
   highlightShown: Set<string>;
   entered: Set<string>;
   dimmed: Set<string>;
+  heldActionsId: string | null;
 }
 
 const FOCUS_HIGHLIGHT_OPACITY = 0.16;
@@ -1290,6 +1317,7 @@ function MessageWithTime({
 function ChatRow({ item }: { item: VisibleMessage }) {
   const row = useContext(RowContext);
   const timeReveal = useContext(ChatTimeRevealContext);
+  const [stepsArrive] = useState(() => !row?.turnSummaries?.has(item.id));
   if (!row) return null;
   const message = row.rowsById.get(item.id) ?? item;
   const response = row.responseIds.has(message.id);
@@ -1314,9 +1342,17 @@ function ChatRow({ item }: { item: VisibleMessage }) {
         revealed={row.revealedIds.has(message.id)}
         entered={row.entered}
         dimmed={row.dimmed}
+        actionsHeld={message.id === row.heldActionsId}
         shared={row.shared}
       />
     );
+  const steps = turn ? (
+    <ChatTurnStepsRow
+      summary={turn}
+      muted={row.shared.themeMuted}
+      onPress={openTurn ? () => openTurn(turn.turnId) : undefined}
+    />
+  ) : null;
   return (
     <Animated.View
       style={[ROW_STYLE, response ? row.responseStyle : undefined]}
@@ -1334,13 +1370,11 @@ function ChatRow({ item }: { item: VisibleMessage }) {
       {message.id === row.unreadLineRowId ? (
         <UnreadLineRow rowId={message.id} color={row.unreadLineColor} animated={row.unreadLineAnimated} />
       ) : null}
-      {turn ? (
-        <ChatTurnStepsRow
-          summary={turn}
-          muted={row.shared.themeMuted}
-          onPress={openTurn ? () => openTurn(turn.turnId) : undefined}
-        />
-      ) : null}
+      {steps && stepsArrive && row.shared.colorOSEntrance ? (
+        <Animated.View entering={SETTLE_IN}>{steps}</Animated.View>
+      ) : (
+        steps
+      )}
       {message.kind === "message" && timeReveal ? (
         <MessageWithTime createdAt={message.createdAt} reveal={timeReveal.offset}>
           {messageRow}
@@ -1415,12 +1449,19 @@ function messageCopyText(message: ChatBubbleMessage): string {
   ).trim();
 }
 
-function TurnFailure({ reason }: { reason: string | undefined }) {
+function TurnFailure({
+  reason,
+  entering,
+}: {
+  reason: string | undefined;
+  entering: ComponentProps<typeof Animated.View>["entering"];
+}) {
   const { t, errorMessage } = useText();
   const [danger] = useCSSVariable(["--openbot-danger-text"]);
   const text = errorMessage(reason, t("mobile.chat.failure.fallback"));
   return (
-    <View
+    <Animated.View
+      entering={entering}
       accessible
       accessibilityRole="alert"
       accessibilityLabel={`${t("mobile.chat.failure.title")}. ${text}`}
@@ -1430,7 +1471,7 @@ function TurnFailure({ reason }: { reason: string | undefined }) {
       <Typography.Paragraph type="body-xs" numberOfLines={6} className="shrink text-danger-text">
         {text}
       </Typography.Paragraph>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -2023,59 +2064,6 @@ export const ChatMessageList = memo(function ChatMessageList({
     [routineGroupsState],
   );
   const listRows = useListRows(rows, routineRowType);
-  const rowsById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-  const rowContext = useMemo<RowContextValue>(
-    () => ({
-      shared,
-      rowsById,
-      arrivals,
-      revealedIds,
-      responseIds,
-      responseVisible,
-      responseStyle,
-      firstUserId,
-      messagesById,
-      promptController,
-      upload,
-      outboxStatuses,
-      selectingMessageId,
-      turnSummaries,
-      onOpenTurn,
-      dayLabels,
-      branchDivider: rowBranchDivider,
-      unreadLineRowId,
-      unreadLineColor,
-      unreadLineAnimated: unreadLineAnimated.current,
-      highlightedRowId,
-      highlightColor,
-      highlightShown: highlightShown.current,
-      entered: enteredRows.current,
-      dimmed: dimmedRows.current,
-    }),
-    [
-      shared,
-      rowsById,
-      arrivals,
-      revealedIds,
-      responseIds,
-      responseVisible,
-      responseStyle,
-      firstUserId,
-      messagesById,
-      promptController,
-      upload,
-      outboxStatuses,
-      selectingMessageId,
-      turnSummaries,
-      onOpenTurn,
-      dayLabels,
-      rowBranchDivider,
-      unreadLineRowId,
-      unreadLineColor,
-      highlightedRowId,
-      highlightColor,
-    ],
-  );
   const showThinking = useThinkingDisplayPreference((state) => state.enabled);
   const activitySpec = (activity?: MobileAgentActivity): ChatActivitySpec | null => {
     const latestThinking = messages.findLast(
@@ -2150,6 +2138,65 @@ export const ChatMessageList = memo(function ChatMessageList({
     (activities?.length ? activities : [activity]).flatMap((entry) => activitySpec(entry) ?? []),
   );
 
+  const heldActionsId =
+    longPressMenu && activityRows.length > 0
+      ? (rows.slice(tailIndex + 1).findLast((row) => row.kind === "message" && row.author === "agent")?.id ?? null)
+      : null;
+  const rowsById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const rowContext = useMemo<RowContextValue>(
+    () => ({
+      shared,
+      rowsById,
+      arrivals,
+      revealedIds,
+      responseIds,
+      responseVisible,
+      responseStyle,
+      firstUserId,
+      messagesById,
+      promptController,
+      upload,
+      outboxStatuses,
+      selectingMessageId,
+      turnSummaries,
+      onOpenTurn,
+      dayLabels,
+      branchDivider: rowBranchDivider,
+      unreadLineRowId,
+      unreadLineColor,
+      unreadLineAnimated: unreadLineAnimated.current,
+      highlightedRowId,
+      highlightColor,
+      highlightShown: highlightShown.current,
+      entered: enteredRows.current,
+      dimmed: dimmedRows.current,
+      heldActionsId,
+    }),
+    [
+      shared,
+      rowsById,
+      arrivals,
+      revealedIds,
+      responseIds,
+      responseVisible,
+      responseStyle,
+      firstUserId,
+      messagesById,
+      promptController,
+      upload,
+      outboxStatuses,
+      selectingMessageId,
+      turnSummaries,
+      onOpenTurn,
+      dayLabels,
+      rowBranchDivider,
+      unreadLineRowId,
+      unreadLineColor,
+      highlightedRowId,
+      highlightColor,
+      heldActionsId,
+    ],
+  );
   const startReached = useRef(() => {});
   startReached.current = () => {
     if (motion.historyVisible && canLoadOlder && !olderError) onLoadOlder();
@@ -2174,6 +2221,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     listRef,
     startsAtEnd: listStartsAtEnd,
     followsEnd,
+    followMode,
     composerHeight,
     keyboardLiftBehavior,
     onContentSizeChange,
@@ -2181,6 +2229,11 @@ export const ChatMessageList = memo(function ChatMessageList({
     onScrollBeginDrag,
     onScrollEndDrag,
   } = motion;
+  const followConfig = !followsEnd
+    ? false
+    : followMode === "reply" && colorOSOn && !reducedMotion
+      ? FOLLOW_REPLY
+      : FOLLOW_END;
   const list = useMemo(
     () => (
       <KeyboardAwareLegendList
@@ -2199,7 +2252,7 @@ export const ChatMessageList = memo(function ChatMessageList({
         initialScrollAtEnd={listStartsAtEnd}
         anchoredEndSpace={anchoredEndSpace}
         maintainVisibleContentPosition={KEEP_VISIBLE_POSITION}
-        maintainScrollAtEnd={followsEnd ? FOLLOW_END : false}
+        maintainScrollAtEnd={followConfig}
         sharedValues={sharedValues}
         contentInsetEndAdjustment={composerHeight}
         keyboardOffset={keyboardOffset}
@@ -2234,7 +2287,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       drawDistance,
       listStartsAtEnd,
       anchoredEndSpace,
-      followsEnd,
+      followConfig,
       sharedValues,
       composerHeight,
       keyboardOffset,
