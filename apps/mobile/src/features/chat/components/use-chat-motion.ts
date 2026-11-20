@@ -82,9 +82,11 @@ export function useChatMotion(
   const keyboardDismissed = useSharedValue(false);
   const colorOS = useColorOSMotion().enabled;
   const fallback = useSharedValue(isAndroid && colorOS && !reducedMotion);
+  const colorOSAndroid = useSharedValue(isAndroid && colorOS);
   useEffect(() => {
     fallback.set(isAndroid && colorOS && !reducedMotion);
-  }, [fallback, colorOS, reducedMotion]);
+    colorOSAndroid.set(isAndroid && colorOS);
+  }, [fallback, colorOSAndroid, colorOS, reducedMotion]);
 
   const keyboardEvents = useSharedValue(0);
 
@@ -625,6 +627,10 @@ export function useChatMotion(
     () => scrollOffset.get(),
     (y) => {
       if (!revealed.get() || scrolledUp.get()) return;
+      if (colorOSAndroid.get() && !dragging.get()) {
+        lowestOffset.set(y);
+        return;
+      }
       lowestOffset.set(Math.max(lowestOffset.get(), y));
       if (y >= lowestOffset.get() - 24) return;
       scrolledUp.set(true);
@@ -775,6 +781,10 @@ export function useChatMotion(
     setPinnedToLatest(true);
     scrollToLatest();
   }, [scrollToLatest]);
+  const openingFollowOn = openingFollow && !holdOpening;
+  const followsEnd =
+    (requiredInputId !== null && keyboardLiftBehavior === "whenAtEnd") || openingFollowOn || pinnedToLatest;
+  const followMode: "opening" | "reply" | null = openingFollowOn ? "opening" : followsEnd ? "reply" : null;
 
   return useMemo(
     () => ({
@@ -792,10 +802,8 @@ export function useChatMotion(
       keyboardProgress,
       anticipateKeyboard,
       keyboardLiftBehavior,
-      followsEnd:
-        (requiredInputId !== null && keyboardLiftBehavior === "whenAtEnd") ||
-        (openingFollow && !holdOpening) ||
-        pinnedToLatest,
+      followsEnd,
+      followMode,
       scrollOffset,
       dragging,
       atEnd,
@@ -832,9 +840,8 @@ export function useChatMotion(
       keyboardProgress,
       anticipateKeyboard,
       keyboardLiftBehavior,
-      requiredInputId,
-      openingFollow,
-      pinnedToLatest,
+      followsEnd,
+      followMode,
       scrollOffset,
       dragging,
       atEnd,

@@ -2,8 +2,9 @@ import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import CircleX from "lucide-react-native/icons/circle-x";
 import Clock from "lucide-react-native/icons/clock";
-import type { PropsWithChildren } from "react";
+import type { ComponentProps, PropsWithChildren } from "react";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
 import { useText } from "@/shared/lib/text";
@@ -58,7 +59,13 @@ export function OutboxMessageMenu({
   );
 }
 
-export function ChatOutboxStatus({ status }: { status: OutboxRowStatus }) {
+export function ChatOutboxStatus({
+  status,
+  exiting,
+}: {
+  status: OutboxRowStatus;
+  exiting?: ComponentProps<typeof Animated.View>["exiting"];
+}) {
   const { t } = useText();
   const muted = useThemeColor("muted");
   const [danger] = useCSSVariable(["--openbot-danger-text"]);
@@ -73,7 +80,8 @@ export function ChatOutboxStatus({ status }: { status: OutboxRowStatus }) {
       ? t("mobile.chat.outbox.failedHold")
       : t("mobile.chat.outbox.unconfirmed");
   return (
-    <View
+    <Animated.View
+      exiting={exiting}
       accessible
       accessibilityRole={failed ? "alert" : "text"}
       accessibilityLabel={text}
@@ -91,6 +99,6 @@ export function ChatOutboxStatus({ status }: { status: OutboxRowStatus }) {
       >
         {text}
       </Typography.Paragraph>
-    </View>
+    </Animated.View>
   );
 }
