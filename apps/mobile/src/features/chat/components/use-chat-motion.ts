@@ -31,6 +31,7 @@ function afterLayout(): Promise<void> {
 const ANDROID_PLACE_FRAMES = 2;
 const ANDROID_PLACE_TIMEOUT_MS = 250;
 const KEYBOARD_SETTLE_MS = 450;
+const SEND_STILL_FRAMES = 3;
 
 const CATCH_UP_HOLD_MS = 450;
 
@@ -511,15 +512,19 @@ export function useChatMotion(
     };
     const step = () => {
       if (generation !== sendGeneration.current) return;
-      const sizes = `${content.get()}:${composerHeight.get()}`;
+      const sizes = `${content.get()}:${composerHeight.get()}:${scrollOffset.get()}`;
       stillFrames = sizes === lastSizes ? stillFrames + 1 : 0;
       lastSizes = sizes;
-      if ((keyboardMoving.get() || stillFrames < 2) && Date.now() - started < KEYBOARD_SETTLE_MS) {
+      if ((keyboardMoving.get() || stillFrames < SEND_STILL_FRAMES) && Date.now() - started < KEYBOARD_SETTLE_MS) {
         sendScrollFrame.current = requestAnimationFrame(step);
         return;
       }
       sendScrollFrame.current = null;
-      const scroll = listRef.current?.scrollToEnd({ animated: send.fromLatest && !reducedMotion });
+      if (stillFrames < SEND_STILL_FRAMES || atEnd.get()) {
+        finish();
+        return;
+      }
+      const scroll = listRef.current?.scrollToEnd({ animated: !reducedMotion });
       if (scroll) void scroll.then(finish, finish);
       else finish();
     };
@@ -530,7 +535,7 @@ export function useChatMotion(
       if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
       sendScrollFrame.current = null;
     };
-  }, [lastUserId, colorOS, content, composerHeight, keyboardMoving, reducedMotion, reveal]);
+  }, [lastUserId, colorOS, content, composerHeight, scrollOffset, atEnd, keyboardMoving, reducedMotion, reveal]);
   const onAnchorReady = useCallback(
     (info: AnchorReadyInfo, anchorMaxSize?: number) => {
       const send = pending.current;
@@ -672,7 +677,7 @@ export function useChatMotion(
     sendScrollFrame.current = null;
     openingFollowNow.current = false;
     setOpeningFollow(false);
-    setPinnedToLatest(false);
+    setPinnedToLatest(isAndroid && colorOS);
     followLatest.current = true;
     setKeyboardLiftBehavior("whenAtEnd");
     const baseline = current.current.lastUserId;

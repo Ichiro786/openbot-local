@@ -173,6 +173,7 @@ interface ChatComposerProps {
   voiceAvatar?: ReactNode;
   voicePalette?: VoicePalette;
   contextMeter?: ComposerContextMeter;
+  keepsKeyboardOnSend?: boolean;
 }
 
 const NO_FILES: ChatAttachments["items"] = [];
@@ -248,6 +249,7 @@ export const ChatComposer = memo(function ChatComposer({
   voiceAvatar,
   voicePalette,
   contextMeter,
+  keepsKeyboardOnSend = false,
 }: ChatComposerProps) {
   const { t, format, sourceText } = useText();
   const still = useSharedValue(0);
@@ -558,6 +560,10 @@ export const ChatComposer = memo(function ChatComposer({
   }, [files, sendGate]);
 
   useLayoutEffect(() => {
+    if (keepsKeyboardOnSend && draft) sendGate.edit();
+  }, [keepsKeyboardOnSend, draft, sendGate]);
+
+  useLayoutEffect(() => {
     if (sendRetryVersion > 0) sendGate.allowRetry();
   }, [sendGate, sendRetryVersion]);
 
@@ -709,7 +715,7 @@ export const ChatComposer = memo(function ChatComposer({
 
   function requestSend(): void {
     if (disabled || preparing) return;
-    const action = sendGate.request();
+    const action = keepsKeyboardOnSend ? (sendGate.submit() ? "send" : "none") : sendGate.request();
     if (action === "blur") inputRef.current?.blur();
     else if (action === "send") onSend(latestTextRef.current);
   }

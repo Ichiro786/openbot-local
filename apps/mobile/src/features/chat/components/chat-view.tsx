@@ -975,7 +975,7 @@ export function ChatView({
     setSelection(null);
     if (detached) showLatest(false);
     if (!sendsToQueue && ready) motion.beginSend();
-    Keyboard.dismiss();
+    if (target.kind !== "agent") Keyboard.dismiss();
     void haptics.send();
     setShowStarter(false);
     return outbox.add(
@@ -1469,6 +1469,7 @@ export function ChatView({
                     }
                     bottomInset={insets.bottom}
                     disabled={!canSend}
+                    keepsKeyboardOnSend={target.kind === "agent"}
                     attachments={attachments}
                     draft={draft}
                     fallbackBackground={fieldBackground}
