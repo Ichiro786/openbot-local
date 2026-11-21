@@ -1,5 +1,5 @@
 diff --git a/src/backend/acp-client.ts b/src/backend/acp-client.ts
-index 432dd5124..d4d78cd34 100644
+index 432dd5124..2dbb8906d 100644
 --- a/src/backend/acp-client.ts
 +++ b/src/backend/acp-client.ts
 @@ -204,6 +204,9 @@ interface ClientEvents {
@@ -144,7 +144,7 @@ index 432dd5124..d4d78cd34 100644
        (mcp) =>
          Effect.gen({ self: this }, function* () {
            try {
-+            const openedAt = Date.now();
++            const openStartedAt = Date.now();
              if (this.#sessionProcesses)
 -              transport = providerResult(yield* Effect.result(this.#startSessionProcess(() => threadRef)));
 +              transport = providerResult(
@@ -163,9 +163,9 @@ index 432dd5124..d4d78cd34 100644
 +            logger.info("ACP session opened.", {
 +              provider: this.provider,
 +              method: resume && requestedThreadId ? (this.#supportsSessionResume ? "resume" : "load") : "new",
-+              processMs: processAt - openedAt,
++              processMs: processAt - openStartedAt,
 +              sessionMs: Date.now() - processAt,
-+              totalMs: Date.now() - openedAt,
++              totalMs: Date.now() - openStartedAt,
 +            });
              return { thread: { id } };
            } catch (error) {
