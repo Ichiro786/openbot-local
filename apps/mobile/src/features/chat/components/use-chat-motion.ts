@@ -684,6 +684,9 @@ export function useChatMotion(
     const first = baseline === null;
     pending.current = { baseline, first, fromLatest: atLatestNow.current };
     if (isAndroid && colorOS) {
+      scrolledUp.set(false);
+      lowestOffset.set(scrollOffset.get());
+      setUserScrolled(false);
       // No header anchor: even the first reply stays visible beside its sent message.
       firstOpacity.set(1);
       responseOpacity.set(1);
@@ -693,7 +696,7 @@ export function useChatMotion(
       responseOpacity.set(0);
       setResponseVisible(false);
     }
-  }, [colorOS, firstOpacity, responseOpacity]);
+  }, [colorOS, firstOpacity, responseOpacity, scrolledUp, lowestOffset, scrollOffset]);
   const cancelSend = useCallback(() => {
     sendGeneration.current += 1;
     pending.current = null;

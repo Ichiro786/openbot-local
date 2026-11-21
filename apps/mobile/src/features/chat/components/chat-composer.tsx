@@ -1,4 +1,5 @@
 import { rankAgentMentions } from "@openbot/contracts/agent-mention-rank";
+import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { GlassView } from "expo-glass-effect";
 import { router, useIsFocused } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
@@ -947,7 +948,7 @@ export const ChatComposer = memo(function ChatComposer({
                 >
                   <Reply color={String(muted)} size={16} style={MIRROR_IN_RTL} />
                   <Typography.Paragraph numberOfLines={1} type="body-sm" className="flex-1 text-text-secondary">
-                    {mentionDraft(shownReply.body).text || t("mobile.chat.reply.attachment")}
+                    {markdownPreviewText(mentionDraft(shownReply.body).text) || t("mobile.chat.reply.attachment")}
                   </Typography.Paragraph>
                   <Button
                     isIconOnly

@@ -4,7 +4,11 @@ import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
-import { markdownInlinePlainText, markdownPlainText } from "@openbot/contracts/markdown-preview-text";
+import {
+  markdownInlinePlainText,
+  markdownPlainText,
+  markdownPreviewText,
+} from "@openbot/contracts/markdown-preview-text";
 import { useIsFocused } from "expo-router";
 import { Spinner, Typography } from "heroui-native";
 import CircleX from "lucide-react-native/icons/circle-x";
@@ -212,7 +216,8 @@ const AGENT_MESSAGE_ENTRANCE = FadeIn.duration(timings.defaultEffects.duration)
 /**
  * Build 11.2 (ColorOS motion, Android; reduced motion passes none): a sent bubble grows out of the
  * composer corner: it moves in on the spatial spring from 20 dp toward the end side and 12 dp lower,
- * scales 0.92 -> 1 about its bottom right (the send button side), and fades in over 120 ms. Transforms
+ * scales 0.92 -> 1 about its bottom right (the send button side), and fades in over 120 ms, after 80 ms
+ * while the list starts to glide it out from under the composer. Transforms
  * and opacity only, on the UI thread, so the list's layout (and its room for the row) never changes
  * during it. Declared before any worklet that could reach it (worklets 0.13 + release Hermes: build 8).
  */
@@ -225,6 +230,7 @@ const COLOROS_USER_FADE = { duration: 120, easing: timings.fastEffects.easing };
 const COLOROS_USER_SHIFT_X = 20 * END_X;
 const COLOROS_USER_SHIFT_Y = 12;
 const COLOROS_USER_SCALE = 0.92;
+const COLOROS_USER_DELAY_MS = 80;
 function colorOSUserEntrance(_values: EntryAnimationsValues) {
   "worklet";
   return {
@@ -237,11 +243,11 @@ function colorOSUserEntrance(_values: EntryAnimationsValues) {
       ],
     },
     animations: {
-      opacity: withTiming(1, COLOROS_USER_FADE),
+      opacity: withDelay(COLOROS_USER_DELAY_MS, withTiming(1, COLOROS_USER_FADE)),
       transform: [
-        { translateX: withSpring(0, COLOROS_USER_SPRING) },
-        { translateY: withSpring(0, COLOROS_USER_SPRING) },
-        { scale: withSpring(1, COLOROS_USER_SPRING) },
+        { translateX: withDelay(COLOROS_USER_DELAY_MS, withSpring(0, COLOROS_USER_SPRING)) },
+        { translateY: withDelay(COLOROS_USER_DELAY_MS, withSpring(0, COLOROS_USER_SPRING)) },
+        { scale: withDelay(COLOROS_USER_DELAY_MS, withSpring(1, COLOROS_USER_SPRING)) },
       ],
     },
   };
@@ -1116,7 +1122,7 @@ const MessageRow = memo(function MessageRow({
     );
   const replyPreview =
     source?.kind === "message"
-      ? mentionDraft(source.body).text || t("mobile.chat.reply.attachment")
+      ? markdownPreviewText(mentionDraft(source.body).text) || t("mobile.chat.reply.attachment")
       : t("mobile.chat.reply.unavailable");
   const colorOSUser = shared.colorOSEntrance && message.author === "user";
   const actionRow =
@@ -2093,7 +2099,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     );
     const latestStep =
       showThinking && !replying && latestThinking?.kind === "thinking" ? latestThinking.steps.at(-1) : undefined;
-    const thinkingDetail = latestStep && !latestStep.progress ? latestStep.text.replace(/\s+/gu, " ").trim() : null;
+    const thinkingDetail = latestStep && !latestStep.progress ? markdownInlinePlainText(latestStep.text) : null;
     const activityLabel =
       sending && !activity
         ? t("common.sending")
@@ -2119,7 +2125,7 @@ export const ChatMessageList = memo(function ChatMessageList({
             : activity?.phase === "responding"
               ? t("mobile.chat.activity.responding")
               : activity?.detail
-                ? sourceText(activity.detail)
+                ? markdownInlinePlainText(sourceText(activity.detail))
                 : replying
                   ? t("mobile.chat.activity.responding")
                   : t("mobile.chat.activity.thinking");
