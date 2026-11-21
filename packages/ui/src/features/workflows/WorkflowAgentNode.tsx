@@ -5,6 +5,7 @@ import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { PickerMenu, type PickerOption } from "./WorkflowPicker";
+import { AnswerAction, AnswerProblems, AnswerSummary } from "./workflow-answer-parts";
 import { useBoard } from "./workflow-board";
 import { InputPictures } from "./workflow-input-pictures";
 import type { WorkflowCatalogs } from "./workflow-model";
@@ -21,6 +22,7 @@ import {
   useTextField,
   wfProviderLogo,
 } from "./workflow-node-parts";
+import { StepSettingsAction } from "./workflow-step-settings";
 
 function agentModelName(catalogs: WorkflowCatalogs, agent: AgentProfile): string {
   return modelOption(catalogs.models, agent.model)?.name ?? agent.model;
@@ -148,7 +150,12 @@ export function AgentNode(props: { id: string; agentId?: string; task?: string }
       kind="agent"
       inputs={["text", "image", "file"]}
       output="text"
-      toolbar={<NodeToolbar id={props.id} name={t("workflow.agent.name")} locked={locked()} onLock={setLocked} />}
+      toolbar={
+        <NodeToolbar id={props.id} name={t("workflow.agent.name")} locked={locked()} onLock={setLocked}>
+          <AnswerAction id={props.id} field="answer" locked={locked()} />
+          <StepSettingsAction id={props.id} kind="agent" />
+        </NodeToolbar>
+      }
     >
       <Field class="wfn-field-task">
         <Show when={pictures().length > 0}>
@@ -172,6 +179,8 @@ export function AgentNode(props: { id: string; agentId?: string; task?: string }
           <Show when={agent()}>{(found) => <AgentModel agent={found()} />}</Show>
         </div>
       </Field>
+      <AnswerSummary id={props.id} field="answer" />
+      <AnswerProblems id={props.id} />
       <ResultField id={props.id} running={run.running()} />
     </NodeShell>
   );

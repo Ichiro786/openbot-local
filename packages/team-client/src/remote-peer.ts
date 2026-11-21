@@ -608,6 +608,11 @@ export function createRemoteTeamPeer(
         renewSignal(state, actions);
       void runPeerEffect(peerCall(() => actions.current.onNetworkRestored?.())).catch(() => undefined);
     },
+    eventsFailed() {
+      const state = peer;
+      if (state && !state.closed)
+        failPeer(state, referenced(sourceText("error.remote.connectionDropped"), "events/failed"), actions);
+    },
     networkMoved() {
       const state = peer;
       if (active && state && !state.closed)
@@ -1606,7 +1611,9 @@ export function createRemoteTeamPeer(
                     channelSeenSubtasks: true,
                     channelTaskWaits: true,
                     mcpManyServers: true,
+                    providerManyAccounts: true,
                     routineResultsWhatsApp: true,
+                    storageWorkflowFiles: true,
                   }),
                 )
               : yield* peerDecode(() =>
@@ -1766,7 +1773,12 @@ export function createRemoteTeamPeer(
           ? null
           : sideRoute
             ? yield* peerDecode(() =>
-                sideRoute.request(path, body, { channelIsolation: true, channelPicture: true, channelBrowser: true }),
+                sideRoute.request(path, body, {
+                  channelIsolation: true,
+                  channelPicture: true,
+                  channelBrowser: true,
+                  providerManyAccounts: true,
+                }),
               )
             : // A caller names a provider and model on agent creation only when the host advertises
               yield* peerDecode(() =>
