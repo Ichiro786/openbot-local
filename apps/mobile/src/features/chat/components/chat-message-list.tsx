@@ -211,23 +211,38 @@ const AGENT_MESSAGE_ENTRANCE = FadeIn.duration(timings.defaultEffects.duration)
   .reduceMotion(ReduceMotion.System);
 /**
  * Build 11.2 (ColorOS motion, Android; reduced motion passes none): a sent bubble grows out of the
- * composer corner: it rises on the spatial spring from 28 dp lower, scales 0.96 -> 1 about its bottom
- * right (the send button side), and fades in over 160 ms. Transforms and opacity only, on the UI
- * thread, so the list's layout (and its room for the row) never changes during it. Declared before
- * any worklet that could reach it (worklets 0.13 + release Hermes: build 8).
+ * composer corner: it moves in on the spatial spring from 20 dp toward the end side and 12 dp lower,
+ * scales 0.92 -> 1 about its bottom right (the send button side), and fades in over 120 ms. Transforms
+ * and opacity only, on the UI thread, so the list's layout (and its room for the row) never changes
+ * during it. Declared before any worklet that could reach it (worklets 0.13 + release Hermes: build 8).
  */
 const COLOROS_USER_SPRING = {
   mass: springs.defaultSpatial.mass,
   stiffness: springs.defaultSpatial.stiffness,
   damping: springs.defaultSpatial.damping,
 };
+const COLOROS_USER_FADE = { duration: 120, easing: timings.fastEffects.easing };
+const COLOROS_USER_SHIFT_X = 20 * END_X;
+const COLOROS_USER_SHIFT_Y = 12;
+const COLOROS_USER_SCALE = 0.92;
 function colorOSUserEntrance(_values: EntryAnimationsValues) {
   "worklet";
   return {
-    initialValues: { opacity: 0, transform: [{ translateY: 28 }, { scale: 0.96 }] },
+    initialValues: {
+      opacity: 0,
+      transform: [
+        { translateX: COLOROS_USER_SHIFT_X },
+        { translateY: COLOROS_USER_SHIFT_Y },
+        { scale: COLOROS_USER_SCALE },
+      ],
+    },
     animations: {
-      opacity: withTiming(1, { duration: 160 }),
-      transform: [{ translateY: withSpring(0, COLOROS_USER_SPRING) }, { scale: withSpring(1, COLOROS_USER_SPRING) }],
+      opacity: withTiming(1, COLOROS_USER_FADE),
+      transform: [
+        { translateX: withSpring(0, COLOROS_USER_SPRING) },
+        { translateY: withSpring(0, COLOROS_USER_SPRING) },
+        { scale: withSpring(1, COLOROS_USER_SPRING) },
+      ],
     },
   };
 }
