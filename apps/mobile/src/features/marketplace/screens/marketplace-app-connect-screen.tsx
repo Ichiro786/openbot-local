@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Linking, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { RELAY_PASTE_PLACEHOLDER } from "@/features/servers/model/use-mcp-sign-in-relay";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { Button } from "@/shared/components/button";
@@ -21,8 +22,6 @@ import { ListingIcon } from "../components/marketplace-parts";
 import { appListings } from "../model/marketplace-listings";
 import { pluginConnectMethod } from "../model/plugin-connect";
 import { usePluginConnect } from "../model/use-plugin-connect";
-
-const PASTE_PLACEHOLDER = "http://localhost/callback?code=…";
 
 export function MarketplaceAppConnectScreen() {
   const { t } = useText();
@@ -143,7 +142,7 @@ export function MarketplaceAppConnectScreen() {
               </Typography.Paragraph>
               <SheetFormField
                 label={t("mobile.marketplace.app.pasteLabel")}
-                placeholder={PASTE_PLACEHOLDER}
+                placeholder={RELAY_PASTE_PLACEHOLDER}
                 value={address}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -156,7 +155,7 @@ export function MarketplaceAppConnectScreen() {
             <Button
               className="bg-action"
               feedbackVariant="scale"
-              isDisabled={!address.trim()}
+              isDisabled={!address.trim() || connect.pasting}
               onPress={() => void connect.paste(address)}
             >
               <Button.Label className="text-action-foreground">{t("mobile.marketplace.app.finishSignIn")}</Button.Label>

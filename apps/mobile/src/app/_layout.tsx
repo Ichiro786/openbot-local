@@ -19,6 +19,7 @@ import { installAppLock } from "@/features/app-lock/model/app-lock";
 import { UpdateRequiredOverlay } from "@/features/app-update/components/update-required-overlay";
 import { DevelopmentConnectLinkHandler } from "@/features/auth/components/development-connect-link-handler";
 import { MobileSessionProvider, useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { backgroundRefreshNative } from "@/features/background-refresh/background-refresh-native";
 import { loadOnboardingProgress } from "@/features/onboarding/model/onboarding-progress";
 import { resetNotificationAvatars } from "@/features/push-notifications/notification-avatars";
 import { installNotificationHandler } from "@/features/push-notifications/use-notification-taps";
@@ -93,6 +94,7 @@ installQuickActions();
 installShortcuts();
 installAppLock();
 installNotificationHandler();
+backgroundRefreshNative?.install();
 
 // A normal launch is already in the foreground: start the two reads the splash waits for now, before
 // the first commit, instead of after it. The effect below reads them again for a background launch.

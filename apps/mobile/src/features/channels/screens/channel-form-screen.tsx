@@ -16,6 +16,7 @@ import { Pressable, View } from "react-native";
 import { useUniwind } from "uniwind";
 import { ChannelAvatar } from "@/features/channels/components/channel-avatar";
 import { ChannelContextActions } from "@/features/channels/components/channel-context-actions";
+import { ChannelFoldersRow } from "@/features/channels/components/channel-folders";
 import { useChannels } from "@/features/channels/components/use-channels";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { SettingsPicker } from "@/features/settings/components/settings-controls";
@@ -100,6 +101,7 @@ function ChannelForm({
   const agents = useMobileWorkspaceSelector((current) => current.agents);
   const role = useMobileWorkspaceSelector((current) => current.servers.find((server) => server.id === serverId)?.role);
   const canManage = role !== "member";
+  const canManageFolders = useMobileWorkspaceSelector((current) => current.canManageChannelFolders(serverId));
   const { theme } = useUniwind();
   const openAgentPicker = useChannelAgentPicker((state) => state.open);
   const foreground = String(useThemeColor("foreground"));
@@ -332,6 +334,9 @@ function ChannelForm({
           >
             <Typography.Paragraph>{t("mobile.channel.form.routines")}</Typography.Paragraph>
           </SettingsRow>
+          {canManageFolders ? (
+            <ChannelFoldersRow serverId={serverId} channelId={channelId} available={available} disabled={saving} />
+          ) : null}
         </SettingsSection>
       ) : null}
       {!create && channel && !channel.archived && contextActionsSupported ? (

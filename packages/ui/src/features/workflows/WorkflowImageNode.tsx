@@ -22,6 +22,7 @@ import {
 } from "./workflow-media-step";
 import { download, NodeShell, NodeToolbar, ToolAction, type WfnInputPort } from "./workflow-node-parts";
 import { CardPicture, CardPictureLoading } from "./workflow-picture";
+import { StepSettingsAction } from "./workflow-step-settings";
 
 function aspectRatio(aspect: Aspect): string {
   return aspect.replace(":", " / ");
@@ -106,6 +107,7 @@ export function ImageNode(props: { id: string; image?: string | undefined; promp
   const backgroundText = () => t(BACKGROUND_TEXT[specs().transparent ? "transparent" : "solid"]);
   const fileName = () => (kind() === "video" ? "video.mp4" : "image.png");
   const [viewer, setViewer] = createSignal<ImageLightboxOpening>();
+  const [videoReady, setVideoReady] = createSignal<string>();
   let media: HTMLElement | undefined;
   const openViewer = () => {
     const shown = board.shown(props.id);
@@ -155,6 +157,7 @@ export function ImageNode(props: { id: string; image?: string | undefined; promp
         style={{ "--wfn-aspect": frameRatio().css, "--wfn-width": cardWidth(frameRatio().value) }}
         toolbar={
           <NodeToolbar id={props.id} name={text("name")} locked={step.locked()} onLock={step.setLocked}>
+            <StepSettingsAction id={props.id} kind="image" />
             <Show when={kind() === "image" && shownUrl()}>
               <ToolAction
                 text={t("workflow.node.toolbar.view")}
@@ -226,6 +229,9 @@ export function ImageNode(props: { id: string; image?: string | undefined; promp
                   label={prompt() || text("description")}
                   durationSeconds={specs().duration}
                   fullControls
+                  loading={videoReady() !== url()}
+                  onMetadata={() => setVideoReady(url())}
+                  onError={() => setVideoReady(url())}
                   ref={(element) => {
                     media = element;
                   }}
