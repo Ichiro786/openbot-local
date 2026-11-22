@@ -1,5 +1,6 @@
 import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import { isAgentTaskOpen, taskNeedsYou } from "@openbot/team-client/agent-tasks";
+import { BlurView } from "expo-blur";
 import { type Href, router, useFocusEffect } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, useNavigation } from "expo-router/react-navigation";
@@ -38,6 +39,7 @@ import {
   Keyboard,
   Pressable,
   ScrollView,
+  StyleSheet,
   TextInput,
   type TextInputInstance,
   View,
@@ -58,13 +60,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { useCSSVariable } from "uniwind";
+import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { openChatFromPane, useChatListPane } from "@/features/agents/components/chat-list-pane-context";
 import { reportMobileNotification } from "@/features/analytics/failure-reports";
 import { MobileSearchResults, SearchCaption } from "@/features/search/components/mobile-search-results";
 import { setHomeSearchOpener } from "@/features/search/model/home-search-request";
-import { useAppDrawerShown } from "@/features/servers/components/app-drawer-activity";
+import { useAppDrawerMoving } from "@/features/servers/components/app-drawer-activity";
 import { useAppDrawer } from "@/features/servers/components/app-drawer-shell";
 import { TaskListRow } from "@/features/servers/components/task-list-row";
 import { taskStartId } from "@/features/servers/model/task-start-id";
@@ -78,8 +80,10 @@ import { BlurSwap } from "@/shared/components/blur-swap";
 import { useBottomFieldMetrics } from "@/shared/components/bottom-field-metrics";
 import { ANDROID_BLUR, GLASS_CAPSULE_HEIGHT, GlassCapsule } from "@/shared/components/glass-capsule";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
+import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { haptics } from "@/shared/lib/haptics";
 import { useReducedMotion, useTransitionMode } from "@/shared/lib/motion";
+import { isAndroid } from "@/shared/lib/platform";
 import { selectionColorProps } from "@/shared/lib/selection-color";
 import { currentText, useText } from "@/shared/lib/text";
 import { fieldDirectionStyle } from "@/shared/lib/text-direction";
@@ -89,6 +93,8 @@ import { useGlassMenuFrostOpen } from "@/shared/motion/GlassMenu";
 import { HomeEdgeBlur } from "@/shared/motion/HomeEdgeBlur";
 import { type LiveZoom, liveZoomOf, useHomeCovered } from "@/shared/motion/liveZoom";
 import { edges } from "@/shared/motion/tokens";
+import { useBlurLive } from "@/shared/motion/useBlurLive";
+import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
 function openSearchedChat(pane: ReturnType<typeof useChatListPane>, agentId: string): void {
   const open = () => router.push({ pathname: "/chat/[agentId]", params: { agentId } });
@@ -402,9 +408,26 @@ export function HomeSearchList({
   );
 }
 
-export function HomeSearchResults({ search, barHeight }: { search: HomeSearch; barHeight: number }) {
+export function HomeSearchResults({
+  search,
+  barHeight,
+  blurTarget,
+}: {
+  search: HomeSearch;
+  barHeight: number;
+  blurTarget?: RefObject<ViewInstance | null>;
+}) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  const dark = useUniwind().theme === "dark";
+  const colorOS = useColorOSMotion().enabled;
+  const drawerMoving = useAppDrawerMoving();
+  const covered = useHomeCovered();
+  const frosted = isAndroid && ANDROID_BLUR && colorOS && Boolean(blurTarget);
+  const blurRunning =
+    frosted && search.open && search.settled && !drawerMoving && !covered && Boolean(blurTarget?.current);
+  const blurLive = useBlurLive(blurRunning);
+  useBlurBudget(blurLive, "home-search-results");
   const { progress, closing } = search;
   const style = useAnimatedStyle(() => {
     const value = progress.get();
@@ -417,12 +440,26 @@ export function HomeSearchResults({ search, barHeight }: { search: HomeSearch; b
   if (!search.mounted && !search.prepared) return null;
   return (
     <Animated.View
-      className="absolute inset-0 bg-background"
+      className={frosted ? "absolute inset-0" : "absolute inset-0 bg-background"}
       pointerEvents={search.open ? "auto" : "none"}
       accessibilityElementsHidden={!search.open}
       importantForAccessibility={search.open ? "auto" : "no-hide-descendants"}
-      style={search.settled ? undefined : style}
+      style={[
+        frosted ? { backgroundColor: dark ? "rgba(0, 0, 0, 0.72)" : "rgba(255, 255, 255, 0.78)" } : undefined,
+        search.settled ? undefined : style,
+      ]}
     >
+      {frosted && blurTarget?.current ? (
+        <BlurView
+          pointerEvents="none"
+          blurTarget={blurTarget}
+          blurMethod={blurRunning ? "dimezisBlurViewSdk31Plus" : "none"}
+          intensity={32}
+          blurReductionFactor={4}
+          tint={dark ? "dark" : "light"}
+          style={[StyleSheet.absoluteFill, { opacity: blurLive ? 1 : 0 }]}
+        />
+      ) : null}
       <KeyboardAwareScrollView
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="never"
@@ -964,10 +1001,10 @@ function useHomeAtRest(): boolean {
  * the motion. Only the capsule reads the drawer state, so the field itself does not render again.
  */
 function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeof GlassCapsule>) {
-  const drawerShown = useAppDrawerShown();
+  const drawerMoving = useAppDrawerMoving();
   // Build 11.3 simple zoom: home stays drawn under a zoomed chat; its blurs pause while a chat covers it.
   const covered = useHomeCovered();
-  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown || covered} colorOSFrost />;
+  return <GlassCapsule {...props} blurPaused={blurPaused || drawerMoving || covered} colorOSFrost />;
 }
 
 /** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
@@ -975,13 +1012,13 @@ function HomeSearchEdge({
   paused,
   ...props
 }: { paused: boolean } & Omit<ComponentProps<typeof HomeEdgeBlur>, "paused">) {
-  const drawerShown = useAppDrawerShown();
+  const drawerMoving = useAppDrawerMoving();
   // Build 10: a frosted glass menu (••• or an agent row's long-press) is one more blur over the pill,
   // so the edge pauses while it is open and home runs at most two.
   const menuFrost = useGlassMenuFrostOpen();
   const covered = useHomeCovered();
   return (
-    <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost || covered} menuOpen={menuFrost || covered} />
+    <HomeEdgeBlur {...props} paused={paused || drawerMoving || menuFrost || covered} menuOpen={menuFrost || covered} />
   );
 }
 
