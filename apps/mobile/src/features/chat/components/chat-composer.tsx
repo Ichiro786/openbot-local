@@ -111,6 +111,7 @@ const TOOLBAR_HEIGHT = COMPOSER_TOOLBAR_HEIGHT;
 const FIELD_VERTICAL_PADDING = COMPOSER_FIELD_VERTICAL_PADDING;
 const ATTACHMENT_BLOCK_HEIGHT = 120;
 const SHAPE_DURATION = 120;
+const EXPAND_DURATION = 180;
 const CONTROL_SIZE = 40;
 const TOOLBAR_PADDING = 8;
 const CONTROL_GAP = 4;
@@ -408,6 +409,7 @@ export const ChatComposer = memo(function ChatComposer({
     held.set(
       withTiming(anchored ? 1 : 0, {
         duration: reducedMotion ? 0 : SHAPE_DURATION,
+        easing: SHAPE_EASING_FN,
         reduceMotion: ReduceMotion.System,
       }),
     );
@@ -442,8 +444,47 @@ export const ChatComposer = memo(function ChatComposer({
       }
     },
   );
+  const keyboardExpansion = useSharedValue(0);
+  const keyboardExpansionTarget = useSharedValue(0);
+  useAnimatedReaction(
+    () => keyboardProgress.get(),
+    (progress, previous) => {
+      if (!isAndroid || !resizes) {
+        keyboardExpansion.set(Math.min(1, Math.max(0, progress)));
+        return;
+      }
+      const target =
+        progress <= 0.01
+          ? 0
+          : progress >= 0.99
+            ? 1
+            : previous === null
+              ? progress > 0.5
+                ? 1
+                : 0
+              : progress > previous
+                ? 1
+                : progress < previous
+                  ? 0
+                  : -1;
+      if (target < 0 || target === keyboardExpansionTarget.get()) return;
+      keyboardExpansionTarget.set(target);
+      if (reducedMotion) {
+        keyboardExpansion.set(target);
+        return;
+      }
+      keyboardExpansion.set(
+        withTiming(target, {
+          duration: EXPAND_DURATION,
+          easing: SHAPE_EASING_FN,
+          reduceMotion: ReduceMotion.System,
+        }),
+      );
+    },
+    [resizes, reducedMotion],
+  );
   const expansion = useDerivedValue(() =>
-    resizes ? Math.max(Math.min(1, keyboardProgress.get()), held.get(), replyHold.get()) : 1,
+    resizes ? Math.max(keyboardExpansion.get(), held.get(), replyHold.get()) : 1,
   );
   const replyStyle = useAnimatedStyle(() => {
     const progress = Math.min(replyPresence.get(), expansion.get());
@@ -619,6 +660,16 @@ export const ChatComposer = memo(function ChatComposer({
     transform: [{ rotate: `${45 * plusTurn.get()}deg` }],
   }));
   const restingPlus = resizes && !hasDraft && !focused && !replyActive;
+  const expandedFrostTarget = !resizes || focused || anchored || replyActive;
+  const expandedFrostHeight =
+    fieldHeight + (stacked ? TOOLBAR_HEIGHT : 0) + (attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0);
+  const frostSize = useMemo(
+    () => ({
+      width: Math.round((expandedFrostTarget ? cardWidth : restWidth) * 2) / 2,
+      height: Math.round((expandedFrostTarget ? expandedFrostHeight : restHeight) * 2) / 2,
+    }),
+    [expandedFrostTarget, cardWidth, restWidth, expandedFrostHeight, restHeight],
+  );
   const plusDrawn = CONTROL_SIZE * (restingPlus ? REST_CONTROL_SCALE : 1);
   const plusInset = (CONTROL_SIZE - plusDrawn) / 2;
   const attachmentAnchor = {
@@ -914,6 +965,7 @@ export const ChatComposer = memo(function ChatComposer({
                 shown={!voiceOpen && !frostMenu}
                 solid={String(fallbackBackground)}
                 radius={CARD_RADIUS}
+                size={frostSize}
               />
             ) : null}
             <NativeText
@@ -925,7 +977,7 @@ export const ChatComposer = memo(function ChatComposer({
               style={{
                 position: "absolute",
                 left: FIELD_INSET,
-                right: FIELD_INSET,
+                width: Math.max(0, cardWidth - FIELD_INSET * 2),
                 top: 0,
                 opacity: 0,
                 fontSize: 16,
