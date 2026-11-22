@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useCallback, useEffect, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useUniwind } from "uniwind";
@@ -25,6 +25,7 @@ export function ComposerFrost({
   shown,
   solid,
   radius,
+  size,
 }: {
   target: RefObject<ViewInstance | null>;
   /** False while the screen must not draw this blur (a two-blur menu, the voice mode). */
@@ -32,9 +33,11 @@ export function ComposerFrost({
   /** The card's own solid fill, shown while the frost is not. */
   solid: string;
   radius: number;
+  size?: { width: number; height: number };
 }) {
   const dark = useUniwind().theme === "dark";
   const [ready, setReady] = useState(false);
+  const markReady = useCallback(() => setReady(true), []);
   const visible = useSharedValue(0);
   // Build 11.3 simple zoom: no blur starts during a zoom open (it would re-render under the moving chat).
   const settled = useLiveZoomSettled();
@@ -53,7 +56,11 @@ export function ComposerFrost({
   return (
     <>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: solid }, solidStyle]} />
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, frostStyle]} onLayout={() => setReady(true)}>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, frostStyle]}
+        onLayout={ready ? undefined : markReady}
+      >
         {ANDROID_BLUR && target.current ? (
           <BlurView
             blurTarget={target}
@@ -74,7 +81,7 @@ export function ComposerFrost({
           ]}
         />
         {/* Build 11: soft edge glints (spec §1) in place of the drawn top hairline. */}
-        <GlintRim radius={radius} dark={dark} />
+        <GlintRim radius={radius} dark={dark} size={size} />
       </Animated.View>
     </>
   );

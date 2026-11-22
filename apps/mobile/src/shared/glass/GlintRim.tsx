@@ -17,6 +17,7 @@ export const GlintRim = memo(function GlintRim({
   dark,
   lens = true,
   strength = 1,
+  size: fixedSize,
 }: {
   /** Corner radius; a value ≥ half the height draws a circle or capsule. */
   radius: number;
@@ -25,21 +26,32 @@ export const GlintRim = memo(function GlintRim({
   lens?: boolean;
   /** Scales both glints (a menu card's long edges read brighter, so it may ask for less). */
   strength?: number;
+  size?: Size;
 }) {
   const id = `glint-${useId().replaceAll(":", "")}`;
-  const [size, setSize] = useState<Size | null>(null);
+  const [measured, setMeasured] = useState<Size | null>(null);
+  const size = fixedSize ?? measured;
   const onLayout = ({ nativeEvent: { layout } }: LayoutChangeEvent) => {
     const width = Math.round(layout.width * 2) / 2;
     const height = Math.round(layout.height * 2) / 2;
-    if (width !== size?.width || height !== size?.height) setSize({ width, height });
+    if (width !== measured?.width || height !== measured?.height) setMeasured({ width, height });
   };
   const { rim } = glass;
   const alphaA = (dark ? rim.glintA.alpha : rim.lightA) * strength;
   const alphaB = (dark ? rim.glintB.alpha : rim.lightB) * strength;
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={onLayout}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={fixedSize ? undefined : onLayout}>
       {size && size.width > 0 && size.height > 0 ? (
-        <GlintSvg id={id} size={size} radius={radius} alphaA={alphaA} alphaB={alphaB} lens={lens} dark={dark} />
+        <GlintSvg
+          id={id}
+          size={size}
+          radius={radius}
+          alphaA={alphaA}
+          alphaB={alphaB}
+          lens={lens}
+          dark={dark}
+          stretch={fixedSize !== undefined}
+        />
       ) : null}
     </View>
   );
@@ -53,6 +65,7 @@ function GlintSvg({
   alphaB,
   lens,
   dark,
+  stretch,
 }: {
   id: string;
   size: Size;
@@ -61,6 +74,7 @@ function GlintSvg({
   alphaB: number;
   lens: boolean;
   dark: boolean;
+  stretch: boolean;
 }) {
   const { rim } = glass;
   const r = Math.min(radius, width / 2, height / 2);
@@ -98,7 +112,13 @@ function GlintSvg({
     />
   );
   return (
-    <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+    <Svg
+      width={stretch ? "100%" : width}
+      height={stretch ? "100%" : height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={StyleSheet.absoluteFill}
+    >
       <Defs>
         <RadialGradient
           id={`${id}-a`}
