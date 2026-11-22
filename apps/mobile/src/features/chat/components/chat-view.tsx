@@ -17,7 +17,7 @@ import { type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, u
 import { Keyboard, useColorScheme, View, type ViewInstance } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardGestureArea } from "react-native-keyboard-controller";
-import Animated, { FadeIn, FadeOut, ReduceMotion, useSharedValue } from "react-native-reanimated";
+import Animated, { Easing, FadeInDown, FadeOutDown, ReduceMotion, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { MobileConversationAnalytics } from "@/features/analytics/conversation";
@@ -184,8 +184,15 @@ export interface ChatViewProps {
 
 const CHAT_BACK_EDGE_WIDTH = 24;
 const LATEST_BUTTON_STYLE = { position: "absolute", top: -56, alignSelf: "center" } as const;
-const LATEST_BUTTON_IN = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
-const LATEST_BUTTON_OUT = FadeOut.duration(120).reduceMotion(ReduceMotion.System);
+const LATEST_BUTTON_IN = FadeInDown.springify()
+  .stiffness(560)
+  .damping(38)
+  .mass(1)
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }, { scale: 0.84 }] })
+  .reduceMotion(ReduceMotion.System);
+const LATEST_BUTTON_OUT = FadeOutDown.duration(130)
+  .easing(Easing.in(Easing.cubic))
+  .reduceMotion(ReduceMotion.System);
 const BACKDROP_UNDO_TOP = 64;
 const SWIPE_FORWARD_DISTANCE = 72;
 const SWIPE_FORWARD_FLICK_DISTANCE = 32;
