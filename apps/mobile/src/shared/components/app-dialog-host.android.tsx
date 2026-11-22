@@ -4,7 +4,7 @@ import { Dialog } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import { FadeOut } from "react-native-reanimated";
+import { Easing, FadeOut, ReduceMotion, ZoomIn } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { Button } from "@/shared/components/button";
@@ -148,9 +148,17 @@ function AppDialog({ request }: { request: AppDialogRequest }) {
           className="w-full max-w-sm gap-5"
           style={{ maxHeight: height * 0.85 }}
           animation={{
-            exiting: FadeOut.duration(120).withCallback(() => {
-              scheduleOnRN(finish);
-            }),
+            entering: ZoomIn.springify()
+              .stiffness(560)
+              .damping(38)
+              .mass(1)
+              .withInitialValues({ opacity: 0, transform: [{ scale: 0.92 }] })
+              .reduceMotion(ReduceMotion.System),
+            exiting: FadeOut.duration(130)
+              .easing(Easing.in(Easing.cubic))
+              .withCallback(() => {
+                scheduleOnRN(finish);
+              }),
           }}
           background={
             <Dialog.ContentBackground>

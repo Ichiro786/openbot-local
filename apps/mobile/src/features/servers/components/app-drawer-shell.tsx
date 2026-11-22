@@ -56,8 +56,9 @@ const DRAWER_SURFACE_MIN_RADIUS = 34;
 const DRAWER_SURFACE_ROUNDING_PROGRESS = 0.15;
 const NAVIGATE_AT_PROGRESS = 0.05;
 const DRAWER_SPRING = {
-  dampingRatio: 0.8,
-  duration: 300,
+  stiffness: 380,
+  damping: 38,
+  mass: 1,
   overshootClamping: true,
   reduceMotion: ReduceMotion.System,
 } as const;
