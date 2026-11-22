@@ -47,10 +47,10 @@ import { useColorOSMotion } from "./useColorOSMotion";
  * two nested translated views (top edge, bottom edge) under one scale: transforms only, on the UI
  * thread, no layout per frame. The curve is critically damped (no overshoot, a gentle first frame).
  */
-const OPEN_MS = 270;
-const CLOSE_MS = 260;
+const OPEN_MS = 300;
+const CLOSE_MS = 270;
 /** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
-const CRIT_K = 7.4;
+const CRIT_K = 5.4;
 const CRIT_NORM = 1 - (1 + CRIT_K) * Math.exp(-CRIT_K);
 function crit(t: number): number {
   "worklet";
@@ -93,7 +93,7 @@ const GESTURE_SCALE = 0.14;
 const GESTURE_RADIUS = 28;
 const GESTURE_SHIFT = 0.06;
 /** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
-const SHELL_FADE_MS = 160;
+const SHELL_FADE_MS = 120;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
 const SPRING_BACK = { damping: 22, stiffness: 260 };
@@ -256,8 +256,6 @@ function useLiveZoomMotion(
       // ColorOS turned off, or home is no longer under the chat (a screen was pushed over it): the stack's way.
       if (!activeNow.current || zoom.nativeClose) return false;
       if (st.leaving) {
-        // A repeated Back never waits for the close: the chat pops now.
-        api.popNow();
         return true;
       }
       if (!navigation.isFocused()) return false;
@@ -333,12 +331,6 @@ function useLiveZoomMotion(
       }),
       navigation.addListener("blur", () => {
         api.dropGesture();
-        // A screen was pushed over the chat: home is detached under it from now on (LiveZoom.nativeClose).
-        // The options re-read it, so the chat's pop takes the normal animation.
-        if (!st.leaving && !zoom.nativeClose) {
-          zoom.nativeClose = true;
-          navigation.setOptions({});
-        }
       }),
     ];
     return () => {
@@ -350,7 +342,7 @@ function useLiveZoomMotion(
       st.recover = null;
       releaseLiveZoomHome(routeKey);
     };
-  }, [api, navigation, routeKey, st, zoom]);
+  }, [api, navigation, routeKey, st]);
 
   // System Back without the predictive callback (3-button navigation, or while it is off): this
   // listener runs before React Navigation's. Off while a chat listener takes Back first (held).
@@ -430,13 +422,14 @@ function LiveZoomFrame({
   const originH = useSharedValue(zoom.origin.height);
   const resolveOrigin = useCallback(() => {
     resolveZoomOrigin(zoom, (rect) => {
+      if (visible.get() < 0.85) return;
       zoom.origin = rect;
       originX.set(rect.x);
       originY.set(rect.y);
       originW.set(rect.width);
       originH.set(rect.height);
     });
-  }, [zoom, originX, originY, originW, originH]);
+  }, [zoom, visible, originX, originY, originW, originH]);
   // One commit after the open (the chat's frosts start), one at a close's start (they stop).
   const [settled, setSettled] = useState(false);
   const onSettled = useCallback(() => setSettled(true), []);
@@ -460,7 +453,7 @@ function LiveZoomFrame({
   const chatLaidOut = useCallback(() => {
     openTraceMark("chat laid out (shell fade starts)");
     shellOpacity.set(
-      withTiming(0, { duration: SHELL_FADE_MS, easing: Easing.linear }, (finished) => {
+      withTiming(0, { duration: SHELL_FADE_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
         if (finished) scheduleOnRN(setShellGone, true);
       }),
     );

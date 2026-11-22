@@ -1123,7 +1123,9 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
         </LargeTitleBar>
       )}
 
-      {searchShows ? <HomeSearchResults search={search} barHeight={searchBarOffset} /> : null}
+      {searchShows ? (
+        <HomeSearchResults search={search} barHeight={searchBarOffset} blurTarget={barBlurTarget} />
+      ) : null}
 
       {searchShows && !updateHeader.expanded ? <HomeSearchBar search={search} blurTarget={barBlurTarget} /> : null}
 

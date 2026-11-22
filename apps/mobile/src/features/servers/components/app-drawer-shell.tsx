@@ -32,7 +32,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
-import { AppDrawerShownContext, AppDrawerShownOnUIContext } from "@/features/servers/components/app-drawer-activity";
+import { AppDrawerMovingContext, AppDrawerShownOnUIContext } from "@/features/servers/components/app-drawer-activity";
 import { ServerDrawerContent } from "@/features/servers/components/server-drawer-content";
 import {
   useMobileWorkspaceActions,
@@ -325,7 +325,7 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
 
   return (
     <AppDrawerContext.Provider value={contextValue}>
-      <AppDrawerShownContext.Provider value={drawerPhase !== "closed"}>
+      <AppDrawerMovingContext.Provider value={drawerPhase === "moving"}>
         <AppDrawerShownOnUIContext.Provider value={drawerShownOnUI}>
           <GestureDetector gesture={closingGesture}>
             <View className="flex-1 bg-sidebar">
@@ -405,7 +405,7 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
             </View>
           </GestureDetector>
         </AppDrawerShownOnUIContext.Provider>
-      </AppDrawerShownContext.Provider>
+      </AppDrawerMovingContext.Provider>
     </AppDrawerContext.Provider>
   );
 }

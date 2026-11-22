@@ -234,7 +234,7 @@ export function ColorOSChatHeader({
         fadeHeight={bandHeight}
         shapes={cutOuts}
         // Build 14: from the chat's first frame (the blur starts after the open, and stops for its close).
-        scrim={Boolean(frostTarget) && !menuDouble}
+        scrim={Boolean(frostTarget) && !menuDouble && !plusMenu}
         style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT }]}
       />
       <View
