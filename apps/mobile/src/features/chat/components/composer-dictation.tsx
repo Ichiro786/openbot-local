@@ -14,6 +14,7 @@ import Animated, {
   useFrameCallback,
   useSharedValue,
   withRepeat,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -21,7 +22,7 @@ import { formatTimer } from "@/shared/lib/countdown";
 import { useReducedMotion } from "@/shared/lib/motion";
 
 export const LONG_PRESS_MS = 400;
-const PRESS_IN = { duration: 100, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
+const PRESS_SPRING = { stiffness: 600, damping: 39, mass: 1, reduceMotion: ReduceMotion.System };
 const WAVE_BAR = 3;
 const WAVE_PITCH = 5;
 const WAVE_HEIGHT = 22;
@@ -75,13 +76,13 @@ export function DictationMic({
           .enabled(enabled)
           .hitSlop(4)
           .onBegin(() => {
-            pressed.set(withTiming(1, PRESS_IN));
+            pressed.set(withSpring(1, PRESS_SPRING));
           })
           .onEnd((_event, success) => {
             if (success) scheduleOnRN(press);
           })
           .onFinalize(() => {
-            pressed.set(withTiming(0, PRESS_IN));
+            pressed.set(withSpring(0, PRESS_SPRING));
           }),
       ),
     [enabled, active, pressed, press, longPress],

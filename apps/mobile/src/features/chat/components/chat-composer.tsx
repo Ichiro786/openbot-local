@@ -103,6 +103,8 @@ import type { ComposerDictation } from "./use-composer-dictation";
 import { VoiceCallBar } from "./voice-call-bar";
 
 const PLUS_CLOSE_SPRING = { duration: 220, dampingRatio: 1 };
+const REPLY_SPRING = { stiffness: 520, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const REPLY_OUT_EASING = Easing.in(Easing.cubic);
 const MAX_INPUT_LINES = 5;
 const ROW_CONTROL_INSET = 48;
 const FIELD_INSET = 16;
@@ -425,12 +427,16 @@ export const ChatComposer = memo(function ChatComposer({
     replyActiveValue.set(replyActive);
     const timing = { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System };
     replyPresence.set(
-      withTiming(replyActive ? 1 : 0, timing, (finished) => {
-        if (finished && !replyActive) scheduleOnRN(setShownReply, null);
-      }),
+      replyActive
+        ? reducedMotion
+          ? 1
+          : withSpring(1, REPLY_SPRING)
+        : withTiming(0, { duration: shapeDuration, easing: REPLY_OUT_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
+            if (finished && !replyActive) scheduleOnRN(setShownReply, null);
+          }),
     );
     if (!replyActive || disabled) replyHold.set(withTiming(replyActive ? 1 : 0, timing));
-  }, [replyActive, replyActiveValue, replyPresence, replyHold, shapeDuration, disabled]);
+  }, [replyActive, replyActiveValue, replyPresence, replyHold, shapeDuration, disabled, reducedMotion]);
   useAnimatedReaction(
     () => keyboardProgress.get(),
     (progress, previous) => {
@@ -487,8 +493,12 @@ export const ChatComposer = memo(function ChatComposer({
     resizes ? Math.max(keyboardExpansion.get(), held.get(), replyHold.get()) : 1,
   );
   const replyStyle = useAnimatedStyle(() => {
-    const progress = Math.min(replyPresence.get(), expansion.get());
-    return { height: replyRowHeight.get() * progress, opacity: progress };
+    const progress = Math.min(1, Math.max(0, Math.min(replyPresence.get(), expansion.get())));
+    return {
+      height: replyRowHeight.get() * progress,
+      opacity: progress,
+      transform: [{ translateY: (1 - progress) * 8 }],
+    };
   });
   const cardStyle = useAnimatedStyle(() => {
     const voiced = morph.get();
