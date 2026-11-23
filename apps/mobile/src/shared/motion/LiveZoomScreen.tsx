@@ -96,7 +96,7 @@ const GESTURE_SHIFT = 0.06;
 const SHELL_FADE_MS = 120;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
-const SPRING_BACK = { damping: 22, stiffness: 260 };
+const SPRING_BACK = { stiffness: 1400, damping: 67, mass: 1 };
 /**
  * Build 14 (video 97 frames 370-379: the drag stepped at 60 Hz at its start): each progress event (they
  * reach JS at most once a frame, fewer when it is busy) is followed on the UI thread over this long, so

@@ -412,7 +412,7 @@ function GlassMenuOverlay({
   // effect after its first paint.
   useLayoutEffect(() => {
     if (!reduceMotion) open.set(withSpring(1, menu.openSpring));
-    fade.set(withTiming(1, { duration: menu.contentFadeInMs }));
+    fade.set(withTiming(1, { duration: 90, easing: Easing.out(Easing.cubic) }));
     return () => {
       if (safety.current) clearTimeout(safety.current);
     };
@@ -455,7 +455,7 @@ function GlassMenuOverlay({
     closingNow.set(true);
     safety.current = setTimeout(() => finish(id), CLOSE_SAFETY_MS);
     fade.set(
-      withTiming(0, { duration: menu.closeMs, easing: Easing.in(Easing.quad) }, () => {
+      withTiming(0, { duration: 120, easing: Easing.in(Easing.cubic) }, () => {
         runOnJS(finish)(id);
       }),
     );

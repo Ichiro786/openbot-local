@@ -27,8 +27,10 @@ const PRESS_IN = {
 };
 // Build 10: TalkBack's touch and hold opens the message menu too.
 const HOLD_ACTIONS = [{ name: "longpress" as const }];
-const RELEASE = { duration: 300, dampingRatio: 0.7, reduceMotion: ReduceMotion.System };
-const SETTLE = { duration: 400, dampingRatio: 1, reduceMotion: ReduceMotion.System };
+const RELEASE = { stiffness: 600, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const SETTLE = { stiffness: 520, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const REPLY_THRESHOLD = 64;
+const REPLY_RESET_THRESHOLD = 56;
 const TIMES_SETTLE = { duration: 450, dampingRatio: 0.78, reduceMotion: ReduceMotion.System };
 const TIMES_OVERSCROLL = 0.4;
 const REPLY_OVERSCROLL = 0.15;
@@ -56,10 +58,18 @@ export function ChatMessageGesture({
   const bubble = useRef<ViewInstance | null>(null);
   const offset = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const thresholdCrossed = useSharedValue(false);
   const bubbleStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.get() * END_X }, { scale: pressScale.get() }],
   }));
-  const iconStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, offset.get() / 64) }));
+  const iconStyle = useAnimatedStyle(() => {
+    const progress = Math.min(1, offset.get() / REPLY_THRESHOLD);
+    const crossed = thresholdCrossed.get();
+    return {
+      opacity: progress,
+      transform: [{ translateX: (progress - 1) * 10 * END_X }, { scale: crossed ? 1.12 : 0.65 + 0.35 * progress }],
+    };
+  });
   const [iconShown, setIconShown] = useState(false);
   const handlers = useRef({ onReply, onSelectText, onHold });
   handlers.current = { onReply, onSelectText, onHold };
@@ -73,6 +83,9 @@ export function ChatMessageGesture({
       void haptics.impact();
       handlers.current.onReply?.();
     };
+    const tickThreshold = () => {
+      void haptics.impact("light");
+    };
     const hold = (x: number, y: number) => {
       void haptics.longPress();
       const { onHold: open, onSelectText: select } = handlers.current;
@@ -84,15 +97,26 @@ export function ChatMessageGesture({
       .activeOffsetX(16 * END_X)
       .failOffsetX(-8 * END_X)
       .failOffsetY([-12, 12])
-      .onStart(() => scheduleOnRN(setIconShown, true))
+      .onStart(() => {
+        thresholdCrossed.set(false);
+        scheduleOnRN(setIconShown, true);
+      })
       .onUpdate((event) => {
-        offset.set(resisted(event.translationX * END_X, 64, REPLY_OVERSCROLL));
+        const raw = event.translationX * END_X;
+        offset.set(resisted(raw, REPLY_THRESHOLD, REPLY_OVERSCROLL));
+        if (!thresholdCrossed.get() && raw >= REPLY_THRESHOLD) {
+          thresholdCrossed.set(true);
+          scheduleOnRN(tickThreshold);
+        } else if (thresholdCrossed.get() && raw < REPLY_RESET_THRESHOLD) {
+          thresholdCrossed.set(false);
+        }
       })
       .onEnd((event) => {
         const distance = event.translationX * END_X;
-        if (distance >= 64 || (distance >= 24 && event.velocityX * END_X >= 650)) scheduleOnRN(reply);
+        if (distance >= REPLY_THRESHOLD || (distance >= 24 && event.velocityX * END_X >= 650)) scheduleOnRN(reply);
       })
       .onFinalize(() => {
+        thresholdCrossed.set(false);
         offset.set(withSpring(0, SETTLE));
       });
     const times = Gesture.Pan()
@@ -127,7 +151,7 @@ export function ChatMessageGesture({
         pressScale.set(withSpring(1, RELEASE));
       });
     return Gesture.Race(swipe, times, press);
-  }, [canReply, canHold, canRevealTime, offset, pressScale, listSwipe, timeReveal]);
+  }, [canReply, canHold, canRevealTime, offset, pressScale, thresholdCrossed, listSwipe, timeReveal]);
 
   return (
     <View className={align === "end" ? "max-w-full self-end" : "max-w-[92%] self-start"}>

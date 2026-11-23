@@ -1,16 +1,16 @@
-import { AlertDialog, Column, Host, Text as ComposeText, TextButton } from "@expo/ui/jetpack-compose";
+import { AlertDialog, Column, Text as ComposeText, Host, TextButton } from "@expo/ui/jetpack-compose";
 import { BlurView } from "expo-blur";
 import { Dialog } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Keyboard, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import { FadeOut } from "react-native-reanimated";
+import { Easing, FadeOut, ReduceMotion, ZoomIn } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { Button } from "@/shared/components/button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
-import { appDialogs, type AppDialogRequest } from "@/shared/lib/app-dialog-state";
+import { type AppDialogRequest, appDialogs } from "@/shared/lib/app-dialog-state";
 import { APP_FONT } from "@/shared/lib/app-font";
 import { useText } from "@/shared/lib/text";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
@@ -148,9 +148,17 @@ function AppDialog({ request }: { request: AppDialogRequest }) {
           className="w-full max-w-sm gap-5"
           style={{ maxHeight: height * 0.85 }}
           animation={{
-            exiting: FadeOut.duration(120).withCallback(() => {
-              scheduleOnRN(finish);
-            }),
+            entering: ZoomIn.springify()
+              .stiffness(560)
+              .damping(38)
+              .mass(1)
+              .withInitialValues({ transform: [{ scale: 0.92 }] })
+              .reduceMotion(ReduceMotion.System),
+            exiting: FadeOut.duration(130)
+              .easing(Easing.in(Easing.cubic))
+              .withCallback(() => {
+                scheduleOnRN(finish);
+              }),
           }}
           background={
             <Dialog.ContentBackground>

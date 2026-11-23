@@ -253,9 +253,11 @@ function colorOSUserEntrance(_values: EntryAnimationsValues) {
   };
 }
 /** Build 11.2 (ColorOS): a reply that arrives whole fades in and slides up 8 dp on the effects timing. */
-const COLOROS_AGENT_ENTRANCE = FadeInDown.duration(timings.defaultEffects.duration)
-  .easing(timings.defaultEffects.easing)
-  .withInitialValues({ opacity: 0, transform: [{ translateY: 8 }] })
+const COLOROS_AGENT_ENTRANCE = FadeInDown.springify()
+  .stiffness(420)
+  .damping(36)
+  .mass(1)
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 10 }] })
   .reduceMotion(ReduceMotion.System);
 const USER_ORIGIN = { transformOrigin: "bottom right" } as const;
 const SETTLE_IN = FadeIn.duration(timings.defaultEffects.duration)

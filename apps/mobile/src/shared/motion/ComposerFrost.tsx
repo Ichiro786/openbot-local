@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import { type RefObject, useCallback, useEffect, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
@@ -49,7 +49,7 @@ export function ComposerFrost({
   useBlurBudget(live, "composer-frost");
   useEffect(() => {
     // Paused: the glass goes at once with its blur (fading the fill alone would show unblurred text).
-    visible.set(withTiming(on ? 1 : 0, { duration: on ? composerFrost.fadeInMs : 0 }));
+    visible.set(on ? withTiming(1, { duration: composerFrost.fadeInMs, easing: Easing.out(Easing.cubic) }) : 0);
   }, [on, visible]);
   const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
   const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));
