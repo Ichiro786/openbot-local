@@ -973,7 +973,7 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
                 alwaysBounceVertical={false}
                 contentContainerClassName={items.length > 0 ? undefined : "grow"}
                 contentContainerStyle={{
-                  paddingTop: scroll.ownsInset ? headerHeight : 0,
+                  paddingTop: scroll.ownsInset ? headerHeight + (isAndroid ? 8 : 0) : 0,
                   paddingBottom: insets.bottom + HOME_SEARCH_HEIGHT + 24,
                 }}
                 scrollEventThrottle={16}

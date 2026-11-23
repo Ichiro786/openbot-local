@@ -1,3 +1,4 @@
+import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useThemeColor } from "heroui-native/hooks";
@@ -25,7 +26,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { supportLog } from "@/features/support/model/support-log";
+import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import {
@@ -48,7 +51,9 @@ import { useColorOSMotion } from "./useColorOSMotion";
  * thread, no layout per frame. The curve is critically damped (no overshoot, a gentle first frame).
  */
 const OPEN_MS = 300;
-const CLOSE_MS = 270;
+const CLOSE_MS = 310;
+const CLOSE_EASING = Easing.bezier(0.32, 0, 0.2, 1);
+const BLOB_TARGET_SIZE = 56;
 /** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
 const CRIT_K = 5.4;
 const CRIT_NORM = 1 - (1 + CRIT_K) * Math.exp(-CRIT_K);
@@ -89,9 +94,9 @@ const START_RADIUS = 24;
  * already shows home around the card: build 12 video 97 kept it at ~0.99 for the whole drag), its corner,
  * and how far it shifts it toward the finger.
  */
-const GESTURE_SCALE = 0.14;
-const GESTURE_RADIUS = 28;
-const GESTURE_SHIFT = 0.06;
+const GESTURE_SCALE = 0.12;
+const GESTURE_RADIUS = 32;
+const GESTURE_SHIFT = 0;
 /** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
 const SHELL_FADE_MS = 120;
 /** Home dims at most this much under the open chat. */
@@ -281,15 +286,15 @@ function useLiveZoomMotion(
       // From where it is (mid-open, or shrunk by the gesture) to closed, on the close's curve: it leaves
       // at once and lands softly in the element. The same eased point, so a close mid-open does not jump.
       // The gesture's extra shrink and shift go with it, so the card lands exactly on the element.
-      const from = closing.get() > 0 ? visible.get() : 1 - critInverse(1 - crit(visible.get()));
+      const from = closing.get() > 0 ? visible.get() : Math.min(1, Math.max(0.05, crit(visible.get())));
       closing.set(1);
       visible.set(from);
-      const duration = CLOSE_MS * from;
-      if (gesture.get() > 0) gesture.set(withTiming(0, { duration, easing: Easing.out(Easing.quad) }));
-      // The worklet callback captures the bare function only, never the api object.
+      const duration = Math.max(120, CLOSE_MS * from);
+      if (gesture.get() > 0)
+        gesture.set(withTiming(0, { duration: Math.min(140, duration), easing: Easing.out(Easing.cubic) }));
       const done = api.closed;
       visible.set(
-        withTiming(0, { duration, easing: Easing.linear }, (finished) => {
+        withTiming(0, { duration, easing: CLOSE_EASING }, (finished) => {
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -395,11 +400,13 @@ function useLiveZoomMotion(
 function LiveZoomFrame({
   zoom,
   routeKey,
+  agentId,
   shell,
   children,
 }: {
   zoom: LiveZoom;
   routeKey: string;
+  agentId?: string;
   /**
    * Build 13 (Syed: "it takes time to open"): the chat's skeleton at its final layout. With it, the
    * route's first commit is only this light shell, so the zoom starts on the tap's next frames; the chat
@@ -410,6 +417,11 @@ function LiveZoomFrame({
   children: ReactNode;
 }) {
   const background = String(useThemeColor("background") ?? "#000");
+  const agent = useMobileWorkspaceSelector((current) =>
+    agentId ? current.agents.find((item) => item.id === agentId) : undefined,
+  );
+  const blobFill = agent ? avatarHeadColor(agent.avatarSeed, agent.avatarHue, agent.avatarColor) : background;
+  const blobAvatarSize = Math.round(Math.min(useWindowDimensions().width, 360) * 0.76);
   const { width, height } = useWindowDimensions();
   const visible = useSharedValue(0);
   const gesture = useSharedValue(0);
@@ -463,33 +475,58 @@ function LiveZoomFrame({
   // in the chat's own coordinates, and its centre on screen.
   const card = useDerivedValue(() => {
     const clock = visible.get();
-    const open = closing.get() > 0 ? 1 - crit(1 - clock) : crit(clock);
+    const isClosing = closing.get() > 0;
     const drag = 1 - (1 - gesture.get()) ** 3;
+    const centreX = originX.get() + originW.get() / 2;
+    if (isClosing) {
+      const t = 1 - clock;
+      const circleProgress = Math.min(1, t / 0.58);
+      const blobSize = Math.min(originW.get(), originH.get(), BLOB_TARGET_SIZE);
+      const targetScale = Math.max(0.12, blobSize / width);
+      const scale = 1 - (1 - targetScale) * t;
+      const half = height / 2 - (height / 2 - width / 2) * circleProgress;
+      const targetY = originY.get() + Math.min(originH.get() / 2, blobSize / 2 + 4);
+      const travel = t * t * (3 - 2 * t);
+      const total = scale * (1 - GESTURE_SCALE * drag);
+      const circleRadius = (width / 2) * circleProgress;
+      return {
+        clock,
+        open: clock,
+        closing: true,
+        t,
+        scale: total,
+        half: Math.min(height / 2, Math.max(width / 2, half)),
+        x: (centreX - width / 2) * travel,
+        y: (targetY - height / 2) * travel,
+        radius: Math.max(circleRadius, (GESTURE_RADIUS * drag) / total),
+      };
+    }
+    const open = crit(clock);
     const startScale = Math.min(MAX_START_SCALE, Math.max(MIN_START_SCALE, originW.get() / width));
     const scale = startScale + (1 - startScale) * open;
     const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
-    const centreX = originX.get() + originW.get() / 2;
     const centreY = originY.get() + originH.get() / 2;
     const total = scale * (1 - GESTURE_SCALE * drag);
     return {
       clock,
       open,
+      closing: false,
+      t: 0,
       scale: total,
       half: Math.min(height / 2, half),
       x: (centreX - width / 2) * (1 - open) + edge.get() * drag * width * GESTURE_SHIFT,
       y: (centreY - height / 2) * (1 - open),
-      // The corner on screen, drawn in the scaled card's own units.
       radius: (START_RADIUS * (1 - open) + GESTURE_RADIUS * drag) / total,
     };
   });
   const cardStyle = useAnimatedStyle(() => {
     const c = card.get();
+    const opacity = c.closing ? Math.min(1, Math.max(0, (1 - c.t) / 0.14)) : Math.min(1, c.clock / CARD_FADE_SHARE);
     return {
-      opacity: Math.min(1, c.clock / CARD_FADE_SHARE),
+      opacity,
       transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
     };
   });
-  // The window's top edge (and its top corners), then its bottom edge (and bottom corners).
   const topClipStyle = useAnimatedStyle(() => {
     const c = card.get();
     return { borderRadius: c.radius, transform: [{ translateY: height / 2 - c.half }] };
@@ -498,11 +535,22 @@ function LiveZoomFrame({
     const c = card.get();
     return { borderRadius: c.radius, transform: [{ translateY: 2 * c.half - height }] };
   });
-  // The chat stays where it is on screen inside the moving window; it fades in over the opaque card.
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
+    const opacity = c.closing
+      ? Math.min(1, Math.max(0, 1 - c.t / 0.42))
+      : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
     return {
-      opacity: Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE)),
+      opacity,
+      transform: [{ translateY: height / 2 - c.half }],
+    };
+  });
+  const blobOverlayStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    if (!c.closing) return { opacity: 0 };
+    const opacity = Math.min(1, Math.max(0, (c.t - 0.18) / 0.34));
+    return {
+      opacity,
       transform: [{ translateY: height / 2 - c.half }],
     };
   });
@@ -535,6 +583,22 @@ function LiveZoomFrame({
                 </Animated.View>
               )}
             </Animated.View>
+            {agent ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFill, styles.blobOverlay, { backgroundColor: blobFill }, blobOverlayStyle]}
+              >
+                <BloubAvatar
+                  agentId={agent.id}
+                  serverId={agent.serverId}
+                  hue={agent.avatarHue}
+                  color={agent.avatarColor}
+                  seed={agent.avatarSeed}
+                  size={blobAvatarSize}
+                  animateIdle={false}
+                />
+              </Animated.View>
+            ) : null}
           </Animated.View>
         </Animated.View>
       </Animated.View>
@@ -564,10 +628,12 @@ export function withLiveZoom<P extends object>(
         : "channelId" in params
           ? params.channelId
           : undefined;
+    const agentId = params && "agentId" in params && typeof params.agentId === "string" ? params.agentId : undefined;
     return (
       <LiveZoomFrame
         zoom={zoom}
         routeKey={routeKey}
+        agentId={agentId}
         shell={Shell ? <Shell chatId={typeof id === "string" ? id : undefined} /> : undefined}
       >
         <Screen {...props} />
@@ -581,4 +647,5 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   clip: { overflow: "hidden" },
   dim: { backgroundColor: "#000" },
+  blobOverlay: { alignItems: "center", justifyContent: "center" },
 });

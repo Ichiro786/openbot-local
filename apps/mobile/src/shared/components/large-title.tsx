@@ -110,7 +110,7 @@ export function LargeTitle({
   );
   return (
     <View
-      className={isAndroid ? "px-5 pt-2" : "px-5"}
+      className={isAndroid ? "px-5 pt-4" : "px-5"}
       style={{ paddingBottom: TITLE_BOTTOM_PADDING }}
       onLayout={(event) => titleHeight.set(event.nativeEvent.layout.height)}
     >

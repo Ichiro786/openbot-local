@@ -36,7 +36,7 @@ const PILL_HEIGHT = 32;
 /** Build 11.3: Avatar size grows the header avatar at most 10 % (it overlaps the pill by 4 dp). */
 const HEADER_AVATAR_MAX_SCALE = 1.1;
 /** Row top below the status bar; the plush fur reaches ~3 dp above the avatar box. */
-const ROW_TOP = 4;
+const ROW_TOP = 12;
 const ROW_HEIGHT = AVATAR - OVERLAP + PILL_HEIGHT;
 /** The 48 dp side boxes are centred on the avatar + pill group. */
 const SIDE_TOP = (ROW_HEIGHT - 48) / 2;
