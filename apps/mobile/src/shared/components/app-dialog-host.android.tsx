@@ -1,4 +1,4 @@
-import { AlertDialog, Column, Host, Text as ComposeText, TextButton } from "@expo/ui/jetpack-compose";
+import { AlertDialog, Column, Text as ComposeText, Host, TextButton } from "@expo/ui/jetpack-compose";
 import { BlurView } from "expo-blur";
 import { Dialog } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
@@ -10,7 +10,7 @@ import { useCSSVariable, useUniwind } from "uniwind";
 import { Button } from "@/shared/components/button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
-import { appDialogs, type AppDialogRequest } from "@/shared/lib/app-dialog-state";
+import { type AppDialogRequest, appDialogs } from "@/shared/lib/app-dialog-state";
 import { APP_FONT } from "@/shared/lib/app-font";
 import { useText } from "@/shared/lib/text";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
@@ -152,7 +152,7 @@ function AppDialog({ request }: { request: AppDialogRequest }) {
               .stiffness(560)
               .damping(38)
               .mass(1)
-              .withInitialValues({ opacity: 0, transform: [{ scale: 0.92 }] })
+              .withInitialValues({ transform: [{ scale: 0.92 }] })
               .reduceMotion(ReduceMotion.System),
             exiting: FadeOut.duration(130)
               .easing(Easing.in(Easing.cubic))

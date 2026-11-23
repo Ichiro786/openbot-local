@@ -49,9 +49,7 @@ export function ComposerFrost({
   useBlurBudget(live, "composer-frost");
   useEffect(() => {
     // Paused: the glass goes at once with its blur (fading the fill alone would show unblurred text).
-    visible.set(
-      on ? withTiming(1, { duration: composerFrost.fadeInMs, easing: Easing.out(Easing.cubic) }) : 0,
-    );
+    visible.set(on ? withTiming(1, { duration: composerFrost.fadeInMs, easing: Easing.out(Easing.cubic) }) : 0);
   }, [on, visible]);
   const frostStyle = useAnimatedStyle(() => ({ opacity: visible.get() }));
   const solidStyle = useAnimatedStyle(() => ({ opacity: 1 - visible.get() }));

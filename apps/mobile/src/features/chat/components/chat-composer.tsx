@@ -431,9 +431,13 @@ export const ChatComposer = memo(function ChatComposer({
         ? reducedMotion
           ? 1
           : withSpring(1, REPLY_SPRING)
-        : withTiming(0, { duration: shapeDuration, easing: REPLY_OUT_EASING, reduceMotion: ReduceMotion.System }, (finished) => {
-            if (finished && !replyActive) scheduleOnRN(setShownReply, null);
-          }),
+        : withTiming(
+            0,
+            { duration: shapeDuration, easing: REPLY_OUT_EASING, reduceMotion: ReduceMotion.System },
+            (finished) => {
+              if (finished && !replyActive) scheduleOnRN(setShownReply, null);
+            },
+          ),
     );
     if (!replyActive || disabled) replyHold.set(withTiming(replyActive ? 1 : 0, timing));
   }, [replyActive, replyActiveValue, replyPresence, replyHold, shapeDuration, disabled, reducedMotion]);

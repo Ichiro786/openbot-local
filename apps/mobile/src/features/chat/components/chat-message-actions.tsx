@@ -62,7 +62,7 @@ const PICKER_IN = FadeInDown.springify()
   .mass(springs.fastSpatial.mass)
   .stiffness(springs.fastSpatial.stiffness)
   .damping(springs.fastSpatial.damping)
-  .withInitialValues({ opacity: 0, transform: [{ translateY: 8 }, { scale: 0.94 }] })
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 8 }] })
   .reduceMotion(ReduceMotion.System);
 const PICKER_OUT = FadeOut.duration(120).easing(Easing.in(Easing.cubic)).reduceMotion(ReduceMotion.System);
 const ICON_SIZE = 18;

@@ -67,10 +67,7 @@ export function ChatMessageGesture({
     const crossed = thresholdCrossed.get();
     return {
       opacity: progress,
-      transform: [
-        { translateX: (progress - 1) * 10 * END_X },
-        { scale: crossed ? 1.12 : 0.65 + 0.35 * progress },
-      ],
+      transform: [{ translateX: (progress - 1) * 10 * END_X }, { scale: crossed ? 1.12 : 0.65 + 0.35 * progress }],
     };
   });
   const [iconShown, setIconShown] = useState(false);

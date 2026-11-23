@@ -188,11 +188,9 @@ const LATEST_BUTTON_IN = FadeInDown.springify()
   .stiffness(560)
   .damping(38)
   .mass(1)
-  .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }, { scale: 0.84 }] })
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] })
   .reduceMotion(ReduceMotion.System);
-const LATEST_BUTTON_OUT = FadeOutDown.duration(130)
-  .easing(Easing.in(Easing.cubic))
-  .reduceMotion(ReduceMotion.System);
+const LATEST_BUTTON_OUT = FadeOutDown.duration(130).easing(Easing.in(Easing.cubic)).reduceMotion(ReduceMotion.System);
 const BACKDROP_UNDO_TOP = 64;
 const SWIPE_FORWARD_DISTANCE = 72;
 const SWIPE_FORWARD_FLICK_DISTANCE = 32;
