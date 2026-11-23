@@ -397,7 +397,7 @@ export const ServerDrawerContent = memo(function ServerDrawerContent({
       <View className="flex-1">
         <View
           className="absolute top-0 right-0 left-0 z-20 pr-3 pb-1"
-          style={{ paddingTop: Math.max(topInset, 16) }}
+          style={{ paddingTop: Math.max(topInset + 12, 24) }}
           onLayout={(event) => {
             const measured = event.nativeEvent.layout.height;
             setHeaderHeight((current) => (current === measured ? current : measured));

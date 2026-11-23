@@ -1,4 +1,5 @@
 import { type McpServerConfig, relayCallbackQuery } from "@openbot/contracts/ipc";
+import { openBrowserAsync } from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 import { Linking } from "react-native";
 import { relayPage } from "@/features/servers/model/provider-admin";
@@ -6,6 +7,7 @@ import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-w
 import { useText } from "@/shared/lib/text";
 
 const RELAY_POLL_MS = 1_000;
+const RELAY_AUTHORIZE_TIMEOUT_MS = 30_000;
 
 export const RELAY_PASTE_PLACEHOLDER = "http://localhost/callback?code=…";
 
@@ -24,6 +26,8 @@ export function useMcpSignInRelay(serverId: string) {
   const [pasting, setPasting] = useState(false);
   const activeFlow = useRef<string | null>(null);
   const mounted = useRef(true);
+  const relayAction = useRef(mcpSignInRelay);
+  relayAction.current = mcpSignInRelay;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -31,20 +35,30 @@ export function useMcpSignInRelay(serverId: string) {
       const flowId = activeFlow.current;
       activeFlow.current = null;
       if (flowId)
-        void mcpSignInRelay(serverId)
+        void relayAction
+          .current(serverId)
           .cancel(flowId)
           .catch(() => undefined);
     };
-  }, [mcpSignInRelay, serverId]);
+  }, [serverId]);
+
+  function openSignInPage(url: string) {
+    void openBrowserAsync(url).catch(() =>
+      Linking.openURL(url).catch(() => {
+        if (mounted.current) setError(t("mobile.marketplace.app.openFailed"));
+      }),
+    );
+  }
 
   async function signIn(config: McpServerConfig): Promise<void> {
     setError(null);
-    const relay = mcpSignInRelay(serverId);
+    const relay = relayAction.current(serverId);
     const flowId = await relay.start(config);
     activeFlow.current = flowId;
     try {
       setState({ phase: "waiting", flowId });
       let opened = false;
+      const startedAt = Date.now();
       while (mounted.current && activeFlow.current === flowId) {
         const status = await relay.status(flowId);
         if (status.result) {
@@ -57,7 +71,9 @@ export function useMcpSignInRelay(serverId: string) {
           if ("error" in page) throw new Error(t(page.error));
           opened = true;
           setState({ phase: "signIn", flowId, url: page.url, state: page.state, paste: page.paste });
-          await Linking.openURL(page.url).catch(() => setError(t("mobile.marketplace.app.openFailed")));
+          openSignInPage(page.url);
+        } else if (!opened && Date.now() - startedAt >= RELAY_AUTHORIZE_TIMEOUT_MS) {
+          throw new Error(t("mobile.marketplace.app.openFailed"));
         }
         await pause();
       }
@@ -96,7 +112,7 @@ export function useMcpSignInRelay(serverId: string) {
 
   function reopen() {
     if (state.phase !== "signIn") return;
-    void Linking.openURL(state.url).catch(() => setError(t("mobile.marketplace.app.openFailed")));
+    openSignInPage(state.url);
   }
 
   return { state, error, setError, mounted, pasting, signIn, paste, reopen };
