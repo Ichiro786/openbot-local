@@ -183,7 +183,9 @@ export function ServerStorageScreen() {
           query.isError
             ? errorMessage(query.error, t("mobile.server.storage.loadFailed"))
             : freeBytes !== null
-              ? t("mobile.server.storage.free", { size: format.fileSize(freeBytes) })
+              ? t("mobile.server.storage.free", {
+                  size: planGb !== null ? format.fileSize(freeBytes) : format.diskSize(freeBytes),
+                })
               : undefined
         }
       >
