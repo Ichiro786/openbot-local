@@ -56,6 +56,7 @@ export type ZoomOrigin = { x: number; y: number; width: number; height: number }
 type MeasureSource = (done: (rect: ZoomOrigin) => void) => void;
 /** Every mounted zoom source, by chat: a close re-finds its element by the chat's id. */
 const sources = new Map<string, Set<MeasureSource>>();
+const avatarSources = new Map<string, Set<MeasureSource>>();
 
 /** Called by a chat row while mounted: the zoom of that chat can find it again for its close. */
 export function registerZoomSource(chatId: string, measure: MeasureSource): () => void {
@@ -70,6 +71,30 @@ export function registerZoomSource(chatId: string, measure: MeasureSource): () =
     current?.delete(measure);
     if (current?.size === 0) sources.delete(chatId);
   };
+}
+
+export function registerZoomAvatar(chatId: string, measure: MeasureSource): () => void {
+  let set = avatarSources.get(chatId);
+  if (!set) {
+    set = new Set();
+    avatarSources.set(chatId, set);
+  }
+  set.add(measure);
+  return () => {
+    const current = avatarSources.get(chatId);
+    current?.delete(measure);
+    if (current?.size === 0) avatarSources.delete(chatId);
+  };
+}
+
+export function resolveZoomAvatar(chatId: string | undefined, done: (rect: ZoomOrigin) => void): boolean {
+  if (chatId === undefined) return false;
+  const [first] = avatarSources.get(chatId) ?? [];
+  if (!first) return false;
+  first((rect) => {
+    if (rect.width > 0 && rect.height > 0) done(rect);
+  });
+  return true;
 }
 
 /**
@@ -94,6 +119,7 @@ const ARM_MS = 3000;
 let armed: {
   until: number;
   origin: ZoomOrigin;
+  avatarOrigin?: ZoomOrigin;
   chatId?: string;
   measure?: MeasureSource;
   expire: ReturnType<typeof setTimeout>;
@@ -104,6 +130,7 @@ const homeHolds = new Map<string, () => void>();
 export type LiveZoom = {
   /** The tapped element's window rect (updated in place when a close re-finds it). */
   origin: ZoomOrigin;
+  avatarOrigin?: ZoomOrigin;
   chatId?: string;
   measure?: MeasureSource;
   /**
@@ -129,13 +156,17 @@ function dropArmed(): void {
  */
 export function armLiveZoom(origin: ZoomOrigin, chatId?: string, measure?: MeasureSource): void {
   dropArmed();
-  armed = {
+  const entry: NonNullable<typeof armed> = {
     until: Date.now() + ARM_MS,
     origin,
     chatId,
     measure,
     expire: setTimeout(dropArmed, ARM_MS),
   };
+  armed = entry;
+  resolveZoomAvatar(chatId, (rect) => {
+    entry.avatarOrigin = rect;
+  });
 }
 
 /** For the options of a chat-like route: its zoom, decided the first time the route is seen. */
@@ -146,7 +177,12 @@ export function liveZoomFor(routeKey: string | undefined): LiveZoom | undefined 
     if (!current || Date.now() >= current.until) return false;
     armed = null;
     clearTimeout(current.expire);
-    return { origin: current.origin, chatId: current.chatId, measure: current.measure };
+    return {
+      origin: current.origin,
+      avatarOrigin: current.avatarOrigin,
+      chatId: current.chatId,
+      measure: current.measure,
+    };
   });
   return zoom || undefined;
 }

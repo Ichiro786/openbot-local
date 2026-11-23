@@ -27,6 +27,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
+import { useAvatarScale } from "@/features/settings/model/avatar-size";
 import { supportLog } from "@/features/support/model/support-log";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { openTraceMark } from "@/shared/lib/open-trace";
@@ -37,6 +38,7 @@ import {
   LiveZoomSettledContext,
   liveZoomOf,
   releaseLiveZoomHome,
+  resolveZoomAvatar,
   resolveZoomOrigin,
 } from "./liveZoom";
 import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } from "./predictiveBack";
@@ -53,7 +55,7 @@ import { useColorOSMotion } from "./useColorOSMotion";
 const OPEN_MS = 300;
 const CLOSE_MS = 310;
 const CLOSE_EASING = Easing.bezier(0.32, 0, 0.2, 1);
-const BLOB_TARGET_SIZE = 56;
+const MORPH_AVATAR_BASE = 128;
 /** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
 const CRIT_K = 5.4;
 const CRIT_NORM = 1 - (1 + CRIT_K) * Math.exp(-CRIT_K);
@@ -420,28 +422,58 @@ function LiveZoomFrame({
   const agent = useMobileWorkspaceSelector((current) =>
     agentId ? current.agents.find((item) => item.id === agentId) : undefined,
   );
+  const hasAgent = Boolean(agent);
+  const avatarScale = useAvatarScale((state) => state.scale);
   const blobFill = agent ? avatarHeadColor(agent.avatarSeed, agent.avatarHue, agent.avatarColor) : background;
-  const blobAvatarSize = Math.round(Math.min(useWindowDimensions().width, 360) * 0.76);
   const { width, height } = useWindowDimensions();
   const visible = useSharedValue(0);
   const gesture = useSharedValue(0);
   const edge = useSharedValue(1);
   const closing = useSharedValue(0);
-  // The source element's window rect: the open's, then the one a close re-finds.
   const originX = useSharedValue(zoom.origin.x);
   const originY = useSharedValue(zoom.origin.y);
   const originW = useSharedValue(zoom.origin.width);
   const originH = useSharedValue(zoom.origin.height);
+  const initialClose = zoom.avatarOrigin ?? zoom.origin;
+  const closeX = useSharedValue(initialClose.x);
+  const closeY = useSharedValue(initialClose.y);
+  const closeW = useSharedValue(initialClose.width);
+  const closeH = useSharedValue(initialClose.height);
+  useEffect(() => {
+    if (zoom.avatarOrigin) return;
+    resolveZoomAvatar(zoom.chatId, (rect) => {
+      zoom.avatarOrigin = rect;
+      closeX.set(rect.x);
+      closeY.set(rect.y);
+      closeW.set(rect.width);
+      closeH.set(rect.height);
+    });
+  }, [zoom, closeX, closeY, closeW, closeH]);
   const resolveOrigin = useCallback(() => {
+    const resolved = resolveZoomAvatar(zoom.chatId, (rect) => {
+      if (visible.get() < 0.35) return;
+      zoom.avatarOrigin = rect;
+      closeX.set(rect.x);
+      closeY.set(rect.y);
+      closeW.set(rect.width);
+      closeH.set(rect.height);
+    });
+    if (resolved) return;
     resolveZoomOrigin(zoom, (rect) => {
-      if (visible.get() < 0.85) return;
+      if (visible.get() < 0.35) return;
       zoom.origin = rect;
       originX.set(rect.x);
       originY.set(rect.y);
       originW.set(rect.width);
       originH.set(rect.height);
+      if (!zoom.avatarOrigin) {
+        closeX.set(rect.x);
+        closeY.set(rect.y);
+        closeW.set(rect.width);
+        closeH.set(rect.height);
+      }
     });
-  }, [zoom, visible, originX, originY, originW, originH]);
+  }, [zoom, visible, originX, originY, originW, originH, closeX, closeY, closeW, closeH]);
   // One commit after the open (the chat's frosts start), one at a close's start (they stop).
   const [settled, setSettled] = useState(false);
   const onSettled = useCallback(() => setSettled(true), []);
@@ -481,12 +513,13 @@ function LiveZoomFrame({
     if (isClosing) {
       const t = 1 - clock;
       const circleProgress = Math.min(1, t / 0.58);
-      const blobSize = Math.min(originW.get(), originH.get(), BLOB_TARGET_SIZE);
-      const targetScale = Math.max(0.12, blobSize / width);
-      const scale = 1 - (1 - targetScale) * t;
-      const half = height / 2 - (height / 2 - width / 2) * circleProgress;
-      const targetY = originY.get() + Math.min(originH.get() / 2, blobSize / 2 + 4);
+      const targetDiameter = Math.min(closeW.get(), closeH.get()) * (hasAgent ? avatarScale : 1);
+      const targetScale = Math.max(0.05, targetDiameter / width);
       const travel = t * t * (3 - 2 * t);
+      const scale = 1 - (1 - targetScale) * travel;
+      const half = height / 2 - (height / 2 - width / 2) * circleProgress;
+      const targetCentreX = closeX.get() + closeW.get() / 2;
+      const targetCentreY = closeY.get() + closeH.get() / 2;
       const total = scale * (1 - GESTURE_SCALE * drag);
       const circleRadius = (width / 2) * circleProgress;
       return {
@@ -496,8 +529,8 @@ function LiveZoomFrame({
         t,
         scale: total,
         half: Math.min(height / 2, Math.max(width / 2, half)),
-        x: (centreX - width / 2) * travel,
-        y: (targetY - height / 2) * travel,
+        x: (targetCentreX - width / 2) * travel,
+        y: (targetCentreY - height / 2) * travel,
         radius: Math.max(circleRadius, (GESTURE_RADIUS * drag) / total),
       };
     }
@@ -521,7 +554,11 @@ function LiveZoomFrame({
   });
   const cardStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing ? Math.min(1, Math.max(0, (1 - c.t) / 0.14)) : Math.min(1, c.clock / CARD_FADE_SHARE);
+    const opacity = c.closing
+      ? hasAgent
+        ? 1
+        : Math.min(1, Math.max(0, (1 - c.t) / 0.08))
+      : Math.min(1, c.clock / CARD_FADE_SHARE);
     return {
       opacity,
       transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
@@ -535,6 +572,11 @@ function LiveZoomFrame({
     const c = card.get();
     return { borderRadius: c.radius, transform: [{ translateY: 2 * c.half - height }] };
   });
+  const cardSurfaceStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    if (!c.closing || !hasAgent) return { opacity: 1 };
+    return { opacity: Math.min(1, Math.max(0, 1 - (c.t - 0.42) / 0.3)) };
+  });
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
     const opacity = c.closing
@@ -545,13 +587,21 @@ function LiveZoomFrame({
       transform: [{ translateY: height / 2 - c.half }],
     };
   });
-  const blobOverlayStyle = useAnimatedStyle(() => {
+  const blobFillStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!c.closing) return { opacity: 0 };
-    const opacity = Math.min(1, Math.max(0, (c.t - 0.18) / 0.34));
+    if (!c.closing || !hasAgent) return { opacity: 0 };
+    const fadeIn = Math.min(1, Math.max(0, (c.t - 0.14) / 0.24));
+    const fadeOut = Math.min(1, Math.max(0, 1 - (c.t - 0.52) / 0.28));
     return {
-      opacity,
-      transform: [{ translateY: height / 2 - c.half }],
+      opacity: Math.min(fadeIn, fadeOut),
+    };
+  });
+  const blobAvatarStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    if (!c.closing || !hasAgent) return { opacity: 0 };
+    return {
+      opacity: Math.min(1, Math.max(0, (c.t - 0.18) / 0.34)),
+      transform: [{ scale: width / MORPH_AVATAR_BASE }],
     };
   });
   const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * card.get().open }));
@@ -560,11 +610,11 @@ function LiveZoomFrame({
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
       <Animated.View style={[StyleSheet.absoluteFill, cardStyle]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.clip, topClipStyle]}>
-          <Animated.View
-            style={[StyleSheet.absoluteFill, styles.clip, { backgroundColor: background }, bottomClipStyle]}
-          >
-            {/* While the open runs, the chat is drawn once into a GPU layer and each frame only composites
-                it (moved, faded); off once settled, before the frosts and deferred content come on. */}
+          <Animated.View style={[StyleSheet.absoluteFill, styles.clip, bottomClipStyle]}>
+            <Animated.View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { backgroundColor: background }, cardSurfaceStyle]}
+            />
             <Animated.View renderToHardwareTextureAndroid={!settled} style={[StyleSheet.absoluteFill, contentStyle]}>
               <LiveZoomSettledContext.Provider value={settled}>
                 {chatShown ? (
@@ -586,21 +636,26 @@ function LiveZoomFrame({
             {agent ? (
               <Animated.View
                 pointerEvents="none"
-                style={[StyleSheet.absoluteFill, styles.blobOverlay, { backgroundColor: blobFill }, blobOverlayStyle]}
-              >
-                <BloubAvatar
-                  agentId={agent.id}
-                  serverId={agent.serverId}
-                  hue={agent.avatarHue}
-                  color={agent.avatarColor}
-                  seed={agent.avatarSeed}
-                  size={blobAvatarSize}
-                  animateIdle={false}
-                />
-              </Animated.View>
+                style={[StyleSheet.absoluteFill, { backgroundColor: blobFill }, blobFillStyle]}
+              />
             ) : null}
           </Animated.View>
         </Animated.View>
+        {agent ? (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.blobOverlay, blobAvatarStyle]}>
+            <BloubAvatar
+              agentId={agent.id}
+              serverId={agent.serverId}
+              hue={agent.avatarHue}
+              color={agent.avatarColor}
+              seed={agent.avatarSeed}
+              avatarUrl={agent.avatarUrl}
+              size={MORPH_AVATAR_BASE}
+              maxScale={1}
+              animateIdle={false}
+            />
+          </Animated.View>
+        ) : null}
       </Animated.View>
     </View>
   );
