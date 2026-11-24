@@ -42,6 +42,7 @@ export const SidebarSectionHeader = memo(function SidebarSectionHeader({
   unread,
   visibleSectionIds,
   collapsed,
+  first,
   onToggle,
 }: {
   id: string;
@@ -53,6 +54,7 @@ export const SidebarSectionHeader = memo(function SidebarSectionHeader({
   unread: number;
   visibleSectionIds: readonly string[];
   collapsed: boolean;
+  first: boolean;
   onToggle: (sectionId: string) => void;
 }) {
   const { t, format } = useText();
@@ -152,7 +154,7 @@ export const SidebarSectionHeader = memo(function SidebarSectionHeader({
   const showUnread = custom && collapsed && unread > 0;
   const toggleLabel = t(collapsed ? "mobile.agent.section.expand" : "mobile.agent.section.collapse", { name });
   return (
-    <View className="pt-2.5 pr-3 pb-0.5 pl-5">
+    <View className={first ? "pr-3 pl-5" : "pt-7.5 pr-3 pl-5"}>
       <View className="flex-row items-center">
         <Pressable
           accessibilityRole="button"

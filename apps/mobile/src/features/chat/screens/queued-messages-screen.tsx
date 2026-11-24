@@ -117,7 +117,7 @@ export function QueuedMessagesScreen() {
               }
               onPress={() => open(item)}
             >
-              <Typography numberOfLines={2}>{queuedMessagePreview(item)}</Typography>
+              <Typography numberOfLines={2}>{queuedMessagePreview(item, t)}</Typography>
             </SettingsRow>
           ))}
         </SettingsSection>

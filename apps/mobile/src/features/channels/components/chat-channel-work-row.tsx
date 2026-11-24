@@ -11,10 +11,12 @@ import { useText } from "@/shared/lib/text";
 export function ChatChannelWorkRow({
   channel,
   activity,
+  agentId,
   serverId,
 }: {
   channel: ChannelSummary;
   activity: MobileAgentActivity;
+  agentId: string;
   serverId: string;
 }) {
   const { t } = useText();
@@ -34,7 +36,13 @@ export function ChatChannelWorkRow({
         style={({ pressed }) => ({ borderCurve: "continuous", opacity: pressed ? 0.6 : 1 })}
         onPress={() => {
           void haptics.selection();
-          router.push({ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } });
+          router.push({
+            pathname: "/channel/[channelId]",
+            params:
+              activity.phase === "waiting" && activity.reason === "question"
+                ? { channelId: channel.id, serverId, questionAgentId: agentId }
+                : { channelId: channel.id, serverId },
+          });
         }}
       >
         {activity.phase === "waiting" ? null : <ThinkingDots color={String(accent)} size={5} />}

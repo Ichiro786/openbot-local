@@ -265,6 +265,9 @@ const SETTLE_IN = FadeIn.duration(timings.defaultEffects.duration)
   .reduceMotion(ReduceMotion.System);
 const NOTICE_IN = FadeIn.duration(150).easing(timings.fastEffects.easing).reduceMotion(ReduceMotion.System);
 const NOTICE_OUT = FadeOut.duration(150).easing(timings.fastEffects.easing).reduceMotion(ReduceMotion.System);
+const PROGRESS_UPDATE_ENTRANCE = FadeIn.duration(220)
+  .easing(Easing.bezier(0.23, 1, 0.32, 1))
+  .reduceMotion(ReduceMotion.System);
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 const REPLY_APPEAR = { duration: 220, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.Never };
 const BUBBLE_CORNER = { borderCurve: "circular", borderRadius: 22 } as const;
@@ -837,6 +840,7 @@ const MessageRow = memo(function MessageRow({
     playback,
     animationEnabled: shared.animationActive && arriving,
     align: message.kind === "message" && message.author === "user" ? ("end" as const) : ("start" as const),
+    literalWordStars: message.kind === "message" && message.author === "user",
   };
   const rawBody =
     message.kind === "message" ? (
@@ -944,12 +948,14 @@ const MessageRow = memo(function MessageRow({
               ? shared.colorOSEntrance
                 ? undefined
                 : USER_MESSAGE_ENTRANCE
-              : // Playback reveals its own words, and a reply that streamed in place is already shown.
-                !enabled && !message.streaming
-                ? shared.colorOSEntrance
-                  ? COLOROS_AGENT_ENTRANCE
-                  : AGENT_MESSAGE_ENTRANCE
-                : undefined
+              : message.progress && shared.playbackActive
+                ? PROGRESS_UPDATE_ENTRANCE
+                : // Playback reveals its own words, and a reply that streamed in place is already shown.
+                  !enabled && !message.streaming
+                  ? shared.colorOSEntrance
+                    ? COLOROS_AGENT_ENTRANCE
+                    : AGENT_MESSAGE_ENTRANCE
+                  : undefined
             : undefined
         }
         className={
