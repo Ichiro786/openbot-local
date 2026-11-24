@@ -96,9 +96,10 @@ import { edges } from "@/shared/motion/tokens";
 import { useBlurLive } from "@/shared/motion/useBlurLive";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 
-function openSearchedChat(pane: ReturnType<typeof useChatListPane>, agentId: string): void {
-  const open = () => router.push({ pathname: "/chat/[agentId]", params: { agentId } });
-  if (pane) openChatFromPane(pane, agentId, open);
+function openSearchedChat(pane: ReturnType<typeof useChatListPane>, agent: MobileAgent): void {
+  const open = () =>
+    router.push({ pathname: "/chat/[agentId]", params: { agentId: agent.id, serverId: agent.serverId } });
+  if (pane) openChatFromPane(pane, agent.id, open);
   else open();
 }
 
@@ -1089,7 +1090,7 @@ function HomeSearchIdle({ onLeave, canUseTasks }: { onLeave: () => void; canUseT
   const openChat = useCallback(
     (agent: MobileAgent) => {
       onLeave();
-      openSearchedChat(pane, agent.id);
+      openSearchedChat(pane, agent);
     },
     [onLeave, pane],
   );
@@ -1145,7 +1146,7 @@ function TaskEditorPage({ agent, search }: { agent: MobileAgent; search: HomeSea
   const [before = "", after = ""] = t("mobile.search.thread.newFor", { name: NAME_MARK }).split(NAME_MARK);
   const message = () => {
     search.leave();
-    openSearchedChat(pane, agent.id);
+    openSearchedChat(pane, agent);
   };
   return (
     <View className="pb-2">
