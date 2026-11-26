@@ -189,12 +189,6 @@
   }
 
   /* The routine canvas fills the card, so its board follows the card's rounded corner. */
-  .app-window > .app-frame-edge .diagram-view-body {
-    border-top: 0;
-    border-right: 0;
-    border-radius: 0 0 calc(var(--openbot-radius-card) - 1px) 0;
-  }
-
   /* The top row controls are flat: one height and one radius, with no line. A control fills on hover,
    * and an open control keeps a stronger fill. */
   .app-window > .app-frame-edge .conversation-header-actions {

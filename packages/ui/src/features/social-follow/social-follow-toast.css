@@ -1,7 +1,3 @@
-.social-follow-toast-host {
-  width: var(--width);
-}
-
 .social-follow-toast {
   position: relative;
   display: grid;

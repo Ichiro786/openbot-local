@@ -11,6 +11,7 @@ import {
   agentFolderParent,
   agentPermissionLevel,
   agentProviderDescriptor,
+  typedHostFolder,
 } from "@openbot/contracts/ipc";
 import { keepPreviousData, type UseQueryResult, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,6 +41,7 @@ import {
 } from "@/features/workspace/context/mobile-workspace-context";
 import { queryKeys } from "@/features/workspace/model/query-keys";
 import { Button } from "@/shared/components/button";
+import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
 import { Alert } from "@/shared/lib/alert";
 import { haptics } from "@/shared/lib/haptics";
@@ -412,7 +414,7 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
     placeholderData: keepPreviousData,
   });
   const [saving, setSaving] = useState(false);
-  const folder = query.data;
+  const typed = useTypedHostFolder(query);
   const moving = query.isPlaceholderData;
 
   function go(next: string) {
@@ -420,20 +422,21 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
   }
 
   async function choose(): Promise<void> {
-    if (!folder || moving || saving) return;
+    const target = typed.target;
+    if (!target || moving || saving) return;
     setSaving(true);
     try {
       let list: AgentFolderList;
       let refusal: string | null;
       if (mode === "exclude") {
-        const change = await excludeAgentFolder({ agentId: agent.id, path: folder.path }, agent.serverId);
+        const change = await excludeAgentFolder({ agentId: agent.id, path: target }, agent.serverId);
         list = change.list;
         refusal = exclusionRefusal(change, agent.name);
       } else {
         const change = await addAgentFolder(
           {
             agentId: agent.id,
-            path: folder.path,
+            path: target,
             ...(mode === "locate" && params.replace ? { replace: params.replace } : {}),
           },
           agent.serverId,
@@ -468,7 +471,7 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
     <>
       <SheetSaveAction
         dirty
-        canSave={Boolean(folder) && !moving}
+        canSave={Boolean(typed.target) && !moving}
         pending={saving}
         label={t(
           mode === "exclude"
@@ -479,19 +482,38 @@ export function AgentFolderBrowser({ agent, available }: { agent: MobileAgent; a
         )}
         onSave={() => void choose()}
       />
-      <FolderBrowserListing query={query} path={path} busy={saving} onGo={go} />
+      <FolderBrowserListing query={query} path={path} typed={typed} busy={saving} onGo={go} />
     </>
   );
+}
+
+export interface TypedHostFolder {
+  text: string;
+  setText: (text: string) => void;
+  target: string | null;
+}
+
+export function useTypedHostFolder(query: UseQueryResult<AgentFolderBrowse>): TypedHostFolder {
+  const [loaded, setLoaded] = useState<Pick<AgentFolderBrowse, "path" | "home"> | null>(null);
+  const [text, setText] = useState("");
+  useEffect(() => {
+    if (!query.data || query.isPlaceholderData) return;
+    setLoaded({ path: query.data.path, home: query.data.home });
+    setText(query.data.path);
+  }, [query.data, query.isPlaceholderData]);
+  return { text, setText, target: loaded ? (typedHostFolder(text, loaded) ?? loaded.path) : null };
 }
 
 export function FolderBrowserListing({
   query,
   path,
+  typed,
   busy,
   onGo,
 }: {
   query: UseQueryResult<AgentFolderBrowse>;
   path: string | null;
+  typed: TypedHostFolder;
   busy: boolean;
   onGo: (path: string) => void;
 }) {
@@ -504,6 +526,10 @@ export function FolderBrowserListing({
     if (query.data && !query.isPlaceholderData) setPlaces({ home: query.data.home, volumes: query.data.volumes });
   }, [query.data, query.isPlaceholderData]);
   const current = path ?? places?.home;
+  function goTyped() {
+    if (moving || !typed.target || typed.target === folder?.path) return;
+    onGo(typed.target);
+  }
   return (
     <>
       {places ? (
@@ -539,6 +565,20 @@ export function FolderBrowserListing({
             <Button.Label>{t("mobile.agent.folders.retry")}</Button.Label>
           </Button>
         </View>
+      ) : null}
+      {typed.target !== null ? (
+        <SheetFormField
+          label={t("mobile.agent.folders.path")}
+          hideLabel
+          appearance="soft"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy}
+          returnKeyType="go"
+          value={typed.text}
+          onChangeText={typed.setText}
+          onSubmitEditing={goTyped}
+        />
       ) : null}
       {folder ? (
         <View className="gap-5" accessibilityState={{ busy: moving }}>

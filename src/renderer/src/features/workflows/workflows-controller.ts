@@ -377,10 +377,11 @@ export function createWorkflowsController(host: WorkflowHost, analytics?: () => 
     },
     onCreate: (input) => {
       flush();
-      write(async () => {
+      return queued(async () => {
         const created = await tracked("create", () => host.workflows.create(input));
         await load(created.summary.id);
-      });
+        return true;
+      }).catch(() => false);
     },
     onRename: (workflowId, title) => {
       tracked("rename", () => host.workflows.rename({ workflowId, title })).catch(report);

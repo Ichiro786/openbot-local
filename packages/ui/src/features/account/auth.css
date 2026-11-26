@@ -154,11 +154,6 @@
   margin-top: 24px;
 }
 
-.account-login-footer {
-  display: grid;
-  gap: 4px;
-}
-
 .account-login-local-data {
   margin: 4px 0 0;
   color: var(--openbot-text-muted);

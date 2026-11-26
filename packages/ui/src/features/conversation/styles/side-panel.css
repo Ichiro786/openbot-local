@@ -5,7 +5,7 @@
   inset-inline-end: 0;
   display: flex;
   align-items: center;
-  gap: var(--openbot-space-1);
+  gap: var(--openbot-space-0-5);
   width: var(--side-panel-width, 380px);
   height: var(--left-header-height, 38px);
   min-width: 0;
@@ -38,8 +38,13 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--openbot-space-0-5);
+  gap: var(--openbot-space-1);
   color: var(--openbot-text-muted);
+}
+
+.side-panel-actions > .ui-button {
+  width: var(--openbot-control-sm);
+  height: var(--openbot-control-sm);
 }
 
 .side-panel-actions svg {
@@ -177,6 +182,7 @@
 
 .side-panel-header > .side-panel-tabs {
   --side-panel-tab-fade: calc(var(--openbot-space-8) * 2);
+  --side-panel-tab-basis: 140px;
   position: relative;
   overflow-x: auto;
   padding: var(--openbot-space-0-5);
@@ -207,13 +213,19 @@
 }
 
 .side-panel-header .side-panel-tab {
-  flex: 0 1 140px;
+  flex: 0 1 var(--side-panel-tab-basis, 140px);
   min-width: min(96px, 100%);
   padding: 0;
   user-select: none;
   transition:
     flex-basis var(--openbot-duration-normal) var(--openbot-ease-out),
     transform var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+@supports (min-width: calc-size(max-content, size)) {
+  .side-panel-header .side-panel-tab {
+    min-width: calc-size(max-content, min(96px, 100%, size));
+  }
 }
 
 .side-panel-header > .side-panel-tabs[data-frozen] > .side-panel-tab {
@@ -458,4 +470,105 @@
 
 .side-panel-header .side-panel-tab:has(.agent-threads-state-working) {
   --side-panel-tab-mark: var(--openbot-space-6);
+}
+
+.conversation-panel > .conversation-header {
+  transition: padding-inline-end var(--panel-resize-duration, var(--openbot-duration-overlay))
+    cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@property --side-panel-reveal {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --side-panel-slide {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.conversation-panel.browser-panel-active {
+  --side-panel-reveal: var(--browser-panel-width, 380px);
+}
+
+.conversation-panel.browser-panel-active > .side-panel-header {
+  --side-panel-reveal: inherit;
+  --side-panel-slide: calc(var(--browser-panel-width, 380px) - var(--side-panel-reveal));
+  translate: var(--side-panel-slide) 0;
+  clip-path: inset(-100vh calc(var(--side-panel-slide) + var(--side-panel-toggle-space, 0px)) -100vh -100vw);
+}
+
+.conversation-panel.browser-panel-active > .side-panel-header:dir(rtl) {
+  translate: calc(-1 * var(--side-panel-slide)) 0;
+  clip-path: inset(-100vh -100vw -100vh calc(var(--side-panel-slide) + var(--side-panel-toggle-space, 0px)));
+}
+
+.conversation-panel.browser-panel-active > :is(.browser-panel, .settings-panel) {
+  --side-panel-reveal: inherit;
+  --side-panel-slide: calc(var(--browser-panel-width, 380px) - var(--side-panel-reveal));
+  translate: var(--side-panel-slide) 0;
+  clip-path: inset(-100vh var(--side-panel-slide) -100vh -100vw);
+}
+
+.conversation-panel.browser-panel-active > :is(.browser-panel, .settings-panel):dir(rtl) {
+  translate: calc(-1 * var(--side-panel-slide)) 0;
+  clip-path: inset(-100vh -100vw -100vh var(--side-panel-slide));
+}
+
+html:active-view-transition-type(side-panel-close)
+  .side-panel-docked
+  > :is(.side-panel-header, .browser-panel, .settings-panel) {
+  view-transition-name: match-element;
+  view-transition-class: side-panel;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-group(.side-panel-toggle),
+html:active-view-transition-type(side-panel-close)::view-transition-new(.side-panel-toggle) {
+  animation: none;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-old(.side-panel-toggle) {
+  animation: none;
+  opacity: 0;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-old(root),
+html:active-view-transition-type(side-panel-close)::view-transition-new(root) {
+  animation: none;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-old(root) {
+  opacity: 0;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-group(.side-panel) {
+  animation: none;
+}
+
+html:active-view-transition-type(side-panel-close)::view-transition-old(.side-panel) {
+  animation: side-panel-close var(--openbot-duration-overlay) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html:active-view-transition-type(side-panel-close):dir(rtl)::view-transition-old(.side-panel) {
+  animation-name: side-panel-close-rtl;
+}
+
+@keyframes side-panel-close {
+  to {
+    translate: 100% 0;
+  }
+}
+
+@keyframes side-panel-close-rtl {
+  to {
+    translate: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-panel.browser-panel-active > :is(.side-panel-header, .browser-panel, .settings-panel) {
+    --side-panel-slide: 0px;
+  }
 }
