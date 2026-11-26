@@ -940,16 +940,6 @@ textarea {
   }
 
   /* The routine canvas is in the same card under the same top row. Its board paints its own background. */
-  .app-frame-edge .diagram-view-header {
-    border-bottom: 0;
-    background: transparent;
-  }
-
-  .app-frame-edge .diagram-view-body {
-    overflow: hidden;
-    background: var(--openbot-bg-canvas);
-  }
-
   /* An open panel's toggle. The faint fill it has elsewhere disappears on the edge, so it takes the
    * ghost button's open fill. An agent at the controls keeps its accent. The side panel toggle has no
    * fill: the panel shows next to it. */
@@ -1301,15 +1291,6 @@ textarea {
 .header-panel-toggle:focus-visible {
   outline: 1px solid var(--openbot-text-muted);
   outline-offset: 1px;
-}
-
-.sidebar-toggle-icon {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .sidebar-marketplace-button > svg {

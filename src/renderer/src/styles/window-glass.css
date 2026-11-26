@@ -36,8 +36,7 @@
     .app-window
     > .app-frame-edge
     .side-panel-maximized
-    > :is(.settings-panel, .browser-panel),
-  :root[data-openbot-window-glass] .app-frame-edge .diagram-view-body {
+    > :is(.settings-panel, .browser-panel) {
     background: var(--window-glass-card);
   }
 }
@@ -73,10 +72,6 @@
   .app-window
   :is(.schedule-pane, .agent-usage, .tasks-page, .diagram-view, .settings-page-content .agent-files-view) {
   background: transparent;
-}
-
-:root[data-openbot-window-glass] .app-window .diagram-board-viewport {
-  background-color: transparent;
 }
 
 /* The composer at the top of the tasks list and the Settings fades cover the rows that scroll under

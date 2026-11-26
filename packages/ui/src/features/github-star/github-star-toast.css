@@ -1,7 +1,3 @@
-.github-star-toast-host {
-  width: var(--width);
-}
-
 .github-star-toast {
   position: relative;
   display: grid;

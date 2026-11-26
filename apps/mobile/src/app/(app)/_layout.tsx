@@ -502,7 +502,7 @@ function AuthenticatedStack() {
               ? {
                   contentStyle: { backgroundColor: sheetBackground },
                   headerShown: false,
-                  presentation: "card",
+                  presentation: "transparentModal",
                   animation: pageAnimation,
                 }
               : {
