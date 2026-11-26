@@ -493,6 +493,15 @@ import type {
 } from "./ipc-messaging";
 import type { ProviderModelVisibility, ProviderModelVisibilityChange } from "./ipc-model-visibility";
 import type {
+  NearAgentsInput,
+  NearAllowPaymentInput,
+  NearDepositAddress,
+  NearDepositInput,
+  NearRuleInput,
+  NearWalletCreateInput,
+  NearWalletStatus,
+} from "./ipc-near-wallet";
+import type {
   NotificationOpenedEvent,
   NotificationPreference,
   WorkflowNotificationOpenedEvent,
@@ -708,6 +717,7 @@ import type { AcceptedOwnerTransfer, OwnerTransfer } from "./owner-transfer";
 import type { ReferralPageRequest, ReferralState } from "./referral";
 import type { AgentActiveQueues } from "./team-protocol/agent-active-queues-v1";
 import type { ChannelCompactAvailability } from "./team-protocol/channel-compact-availability-v1";
+import type { WorkflowSpotInput } from "./team-protocol/workflow-presence-v1";
 
 declare const payloadType: unique symbol;
 declare const resultType: unique symbol;
@@ -1367,6 +1377,24 @@ export const IPC_ENDPOINTS = {
     disconnect: request<undefined, LinkAccountStatus>()("link-account:disconnect"),
     changed: event<LinkAccountStatus>()("link-account:changed"),
   },
+  nearWallet: {
+    status: request<undefined, NearWalletStatus>()("near-wallet:status"),
+    create: request<NearWalletCreateInput, NearWalletStatus>()("near-wallet:create"),
+    setBudget: request<{ dailyBudgetUsd: string }, NearWalletStatus>()("near-wallet:set-budget"),
+    setAgents: request<NearAgentsInput, NearWalletStatus>()("near-wallet:set-agents"),
+    renewGrant: request<undefined, NearWalletStatus>()("near-wallet:renew-grant"),
+    freeze: request<undefined, NearWalletStatus>()("near-wallet:freeze"),
+    unfreeze: request<undefined, NearWalletStatus>()("near-wallet:unfreeze"),
+    deposit: request<NearDepositInput, NearDepositAddress>()("near-wallet:deposit"),
+    saveRule: request<NearRuleInput, NearWalletStatus>()("near-wallet:save-rule"),
+    removeRule: request<{ domain: string }, NearWalletStatus>()("near-wallet:remove-rule"),
+    allowPayment: request<NearAllowPaymentInput, NearWalletStatus>()("near-wallet:allow-payment"),
+    openSigning: request<undefined, void>()("near-wallet:open-signing"),
+    cancelSigning: request<undefined, NearWalletStatus>()("near-wallet:cancel-signing"),
+    checkBackup: request<undefined, NearWalletStatus>()("near-wallet:check-backup"),
+    disconnect: request<undefined, NearWalletStatus>()("near-wallet:disconnect"),
+    changed: event<NearWalletStatus>()("near-wallet:changed"),
+  },
   vault: {
     list: request<undefined, VaultState>()("vault:list"),
     save: request<VaultSaveInput, VaultState>()("vault:save"),
@@ -1742,6 +1770,7 @@ export const IPC_ENDPOINTS = {
     mediaPrice: scopedRequest<WorkflowMediaPriceRequest, WorkflowMediaPrice>()("workflows:media-price"),
     folders: scopedQuery<WorkflowFoldersSnapshot>()("workflows:folders"),
     folderAction: scopedRequest<WorkflowFolderAction, WorkflowFoldersSnapshot>()("workflows:folder-action"),
+    setSpot: scopedRequest<WorkflowSpotInput, void>()("workflows:set-spot"),
   },
   crm: {
     overview: scopedQuery<CrmOverview>()("crm:overview"),
@@ -2114,6 +2143,7 @@ export const IPC_GROUP_PATHS = {
   bitwardenConnector: "bitwardenConnector",
   passwordManagers: "passwordManagers",
   linkAccount: "linkAccount",
+  nearWallet: "nearWallet",
   vault: "vault",
   hostedSites: "hostedSites",
   routineFeed: "routineFeed",

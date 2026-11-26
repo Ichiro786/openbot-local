@@ -224,6 +224,7 @@ export interface AgentThreadViewProps {
   approval?: AgentApproval | undefined;
   onRespondApproval: (decision: "accept" | "decline") => Promise<boolean>;
   media?: MediaApprovalControls | undefined;
+  approvalCard?: ((approval: AgentApproval) => JSX.Element | undefined) | undefined;
   context?: ContextUsageView | undefined;
   onCompactContext?: (() => Promise<void>) | undefined;
   waitsForAnswer?: boolean | undefined;
@@ -632,6 +633,7 @@ export function AgentThreadView(props: AgentThreadViewProps) {
     message.kind !== "plan" &&
     message.kind !== "subagents" &&
     message.kind !== "memory-changes" &&
+    message.kind !== "near-payment" &&
     message.questionPrompt === undefined &&
     !agentMessageMarker(message) &&
     !changeMarker(message);
@@ -1000,13 +1002,15 @@ export function AgentThreadView(props: AgentThreadViewProps) {
           <Show keyed when={props.approval}>
             {(approval) => (
               <div class="virtual-chat-row">
-                <ApprovalCard
-                  approval={approval}
-                  agentName={props.agent.name}
-                  onApprove={() => props.onRespondApproval("accept")}
-                  onReject={() => props.onRespondApproval("decline")}
-                  media={props.media}
-                />
+                {props.approvalCard?.(approval) ?? (
+                  <ApprovalCard
+                    approval={approval}
+                    agentName={props.agent.name}
+                    onApprove={() => props.onRespondApproval("accept")}
+                    onReject={() => props.onRespondApproval("decline")}
+                    media={props.media}
+                  />
+                )}
               </div>
             )}
           </Show>
