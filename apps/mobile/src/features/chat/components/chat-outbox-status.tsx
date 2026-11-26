@@ -13,6 +13,7 @@ import { type OutboxMessage, outboxRetrySafe } from "../model/outbox";
 export interface OutboxRowStatus {
   message: OutboxMessage;
   online: boolean;
+  heldByFailed: boolean;
   showStatus: boolean;
   retry: () => void;
   edit: () => void;
@@ -70,12 +71,14 @@ export function ChatOutboxStatus({
   const muted = useThemeColor("muted");
   const [danger] = useCSSVariable(["--openbot-danger-text"]);
   if (!status.showStatus) return null;
-  const { message, online } = status;
+  const { message, online, heldByFailed } = status;
   const failed = message.state === "failed";
   const text = !failed
-    ? online
-      ? t("mobile.chat.outbox.waiting")
-      : t("mobile.chat.outbox.sendsWhenOnline")
+    ? !online
+      ? t("mobile.chat.outbox.sendsWhenOnline")
+      : heldByFailed
+        ? t("mobile.chat.outbox.waitingForFailed")
+        : t("mobile.chat.outbox.waiting")
     : outboxRetrySafe(message, Date.now())
       ? t("mobile.chat.outbox.failedHold")
       : t("mobile.chat.outbox.unconfirmed");

@@ -1,0 +1,163 @@
+diff --git a/src/backend/agent/provider-runtime.ts b/src/backend/agent/provider-runtime.ts
+index 725bea5..5527a2c 100644
+--- a/src/backend/agent/provider-runtime.ts
++++ b/src/backend/agent/provider-runtime.ts
+@@ -173,6 +173,7 @@ function assignedProviderIdleReleaseMs(provider: AgentProvider): number {
+ }
+ const LAUNCH_START_CONCURRENCY = 2;
+ const SIGN_IN_FILE_POLL_MS = 2_000;
++const SERVER_SIGN_IN_FILE_POLL_MS = 30_000;
+ const SIGN_IN_RECHECK_DELAYS_MS: readonly number[] = [5_000, 10_000, 20_000];
+ 
+ function releasedUsageKey(provider: AgentProvider, model: string): string {
+@@ -1492,7 +1493,8 @@ export class ProviderRuntime implements ProviderPort {
+         this.#signInFiles.set(driver.id, { paths, seen: signInFileVersion(paths) });
+     }
+     if (this.#signInFiles.size === 0) return;
+-    this.#signInCheck ??= setInterval(() => this.#checkSignInFiles(), SIGN_IN_FILE_POLL_MS);
++    const pollMs = process.env.OPENBOT_LOCAL_LOOP_REST === "1" ? SERVER_SIGN_IN_FILE_POLL_MS : SIGN_IN_FILE_POLL_MS;
++    this.#signInCheck ??= setInterval(() => this.#checkSignInFiles(), pollMs);
+     this.#signInCheck.unref?.();
+   }
+ 
+diff --git a/src/main/application-services.ts b/src/main/application-services.ts
+index 8ff4b2f..df347e4 100644
+--- a/src/main/application-services.ts
++++ b/src/main/application-services.ts
+@@ -1,7 +1,7 @@
+ import { execFile } from "node:child_process";
+ import { randomBytes } from "node:crypto";
+ import { EventEmitter } from "node:events";
+-import { existsSync } from "node:fs";
++import { existsSync, renameSync, writeFileSync } from "node:fs";
+ import { readdir, readFile, rm } from "node:fs/promises";
+ import { homedir, hostname, tmpdir } from "node:os";
+ import { join, resolve } from "node:path";
+@@ -3754,7 +3754,9 @@ export async function createApplicationServices({
+     trace,
+     statementTimings,
+     tabProcessIds: () => browser.tabProcessIds(),
+-    appWindowContents: () => BrowserWindow.getAllWindows().map((window) => window.webContents),
++    ...(serverModeEnvironment && process.env.OPENBOT_LOCAL_NO_RENDERER === "1"
++      ? {}
++      : { appWindowContents: () => BrowserWindow.getAllWindows().map((window) => window.webContents) }),
+     turnRunning: () => service.earliestRunningTurnStartedAt() !== null,
+     appPath: app.getAppPath(),
+   });
+@@ -4076,6 +4078,29 @@ export async function createApplicationServices({
+       write: (line) => process.stdout.write(line),
+     });
+   }
++  // OpenBot Local: the Android app keeps the phone awake only while agents work. It watches this
++  // file (inotify on the host side, no polling), so the server writes it only when the count changes.
++  const busyFile = serverModeEnvironment ? process.env.OPENBOT_LOCAL_BUSY_FILE : undefined;
++  if (busyFile) {
++    let lastWorking = -1;
++    const writeBusy = () => {
++      const working = service.workingAgents().length;
++      if (working === lastWorking) return;
++      lastWorking = working;
++      try {
++        writeFileSync(`${busyFile}.tmp`, `working=${working}\n`);
++        renameSync(`${busyFile}.tmp`, busyFile);
++      } catch (error) {
++        logger.warn("Unable to write the OpenBot Local busy file:", toLogValue(error));
++      }
++    };
++    writeBusy();
++    reportLocalServerWorkingAgents({
++      read: () => service.workingAgents(),
++      subscribe: (listener) => service.on("event", listener),
++      write: writeBusy,
++    });
++  }
+   configureAttachmentProtocol({ mailbox, agents: service, remoteServers, attachmentPreviews });
+   configureServerLogoProtocols({ teamStore, remoteServers });
+   const browserView = new BrowserViewClient({
+diff --git a/src/main/index.ts b/src/main/index.ts
+index 898a611..2d9be7b 100644
+--- a/src/main/index.ts
++++ b/src/main/index.ts
+@@ -1840,7 +1840,12 @@ if (!hasSingleInstanceLock) {
+           logger.error("Unable to reconcile Dynamic Island displays:", toLogValue(error)),
+         );
+       reconcileDynamicIsland();
+-      await windows.loadRenderer(mainWindow);
++      // OpenBot Local: on the phone nobody sees this server's window; its renderer is the whole desktop
++      // UI running for nobody. The window stays, like a local server's that never loads: the agent
++      // browser and the services attach to it.
++      if (serverMode && process.env.OPENBOT_LOCAL_NO_RENDERER === "1")
++        logger.info("OpenBot Local: the server window does not load its renderer.");
++      else await windows.loadRenderer(mainWindow);
+       performance.mark("openbot:renderer-loaded");
+       startAttempts?.finished();
+       built.startup?.rendererLoaded();
+diff --git a/src/main/resource-monitor.ts b/src/main/resource-monitor.ts
+index e020e8c..10dba84 100644
+--- a/src/main/resource-monitor.ts
++++ b/src/main/resource-monitor.ts
+@@ -211,6 +211,7 @@ export class ResourceMonitor implements AnalyticsResourceSource {
+       this.#turnInLoopWindow = true;
+       if (this.#activeTurns.size < MAX_ACTIVE_TURNS) this.#activeTurns.add(event.turnId);
+       this.#measureLoop();
++      this.#schedule();
+     } else if (event.type === "turn-completed") {
+       this.#activeTurns.delete(event.turnId);
+     }
+@@ -304,6 +305,16 @@ export class ResourceMonitor implements AnalyticsResourceSource {
+ 
+   #restLoop(): void {
+     if (this.#profiler.running) return;
++    if (process.env.OPENBOT_LOCAL_LOOP_REST === "1") {
++      if (!this.#options.turnRunning()) {
++        this.#loop.disable();
++        this.#unschedule();
++        this.#lastSampleAt = null;
++        this.#previousCpuSeconds = null;
++        this.#previousAppCpuSeconds = new Map();
++      }
++      return;
++    }
+     if (this.#options.server || this.#options.turnRunning() || BrowserWindow.getFocusedWindow() !== null) return;
+     this.#loop.disable();
+   }
+diff --git a/src/main/server-memory.ts b/src/main/server-memory.ts
+index 4639c8d..edbb7af 100644
+--- a/src/main/server-memory.ts
++++ b/src/main/server-memory.ts
+@@ -6,6 +6,7 @@ import { causeHelpers } from "../backend/effect-boundary";
+ import type { HostMemory, HostMemoryLevel } from "../backend/host-memory";
+ 
+ const SAMPLE_INTERVAL_MS = 5_000;
++const PROCESS_SCAN_IDLE_MS = 60_000;
+ const MIB = 1024 * 1024;
+ const GIB = 1024 * MIB;
+ const TURN_RESERVE_BYTES = 300 * MIB;
+@@ -57,6 +58,7 @@ export class ServerMemory implements HostMemory {
+   readonly #reservations = new Set<{ at: number }>();
+   readonly #agentProcesses = new AgentProcesses();
+   #timer: ReturnType<typeof setInterval> | null = null;
++  #lastProcessScanAt: number | null = null;
+   #pending: Deferred.Deferred<void> | null = null;
+   #sample: MemorySample | null = null;
+   #level: HostMemoryLevel = "ok";
+@@ -140,7 +142,18 @@ export class ServerMemory implements HostMemory {
+   #tick = Effect.fn("ServerMemory.tick")(function* (this: ServerMemory) {
+     this.#sample = yield* this.#read();
+     this.#level = this.#nextLevel();
+-    const stopped = yield* this.#agentProcesses.update(this.#bytesToFree(), this.#now());
++    const now = this.#now();
++    const neededBytes = this.#bytesToFree();
++    let stopped: StoppedAgentProcess[] = [];
++    if (
++      process.env.OPENBOT_LOCAL_LOOP_REST !== "1" ||
++      neededBytes > 0 ||
++      this.#lastProcessScanAt === null ||
++      now - this.#lastProcessScanAt >= PROCESS_SCAN_IDLE_MS
++    ) {
++      this.#lastProcessScanAt = now;
++      stopped = yield* this.#agentProcesses.update(neededBytes, now);
++    }
+     for (const agentProcess of stopped) this.#options.onAgentProcessStopped?.(agentProcess);
+     for (const listener of this.#listeners) {
+       try {

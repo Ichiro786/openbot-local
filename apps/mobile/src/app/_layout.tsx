@@ -59,6 +59,7 @@ import { loadVoiceServer } from "@/features/voice/model/voice-server";
 import { loadVoiceSettings } from "@/features/voice/model/voice-settings";
 import { AppDialogBackground } from "@/shared/components/app-dialog-background";
 import { AppDialogHost } from "@/shared/components/app-dialog-host";
+import { installWatch, resetWatch } from "@/features/watch/watch-native";
 import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
@@ -93,6 +94,7 @@ installSupportLog();
 installCrashCapture();
 installQuickActions();
 installShortcuts();
+installWatch();
 installAppLock();
 installNotificationHandler();
 backgroundRefreshNative?.install();
@@ -166,6 +168,7 @@ function RootNavigator() {
     resetShortcutDirectory();
     resetShortcuts();
     resetNotificationAvatars();
+    resetWatch();
   }, [loading, session]);
 
   useLayoutEffect(() => {
