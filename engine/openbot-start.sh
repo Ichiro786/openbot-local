@@ -363,29 +363,46 @@ set_state starting "preflight"
 # ---------------------------------------------------------------- D-Bus (path socket, no abstract)
 dbus-daemon --session --address="unix:path=$BUS" --nofork --nopidfile >>"$LOG" 2>&1 &
 DBUS_PID=$!
-for _ in $(seq 1 100); do [ -S "$BUS" ] && break; kill -0 "$DBUS_PID" 2>/dev/null || break; sleep 0.1; done
-[ -S "$BUS" ] || die 12 "dbus-daemon did not start (see log)."
-export DBUS_SESSION_BUS_ADDRESS="unix:path=$BUS"
-log "D-Bus session bus up at $BUS."
-
-# ---------------------------------------------------------------- Xvfb :0 (OpenBot) and :1 (agents)
 xvfb_args=(-nolisten tcp)
 [ "${OPENBOT_XVFB_SHM:-0}" = 1 ] || xvfb_args+=(-extension MIT-SHM)
-# No GLX: Electron runs --disable-gpu (SwiftShader), and the payload ships no Mesa for Xvfb to load.
 xvfb_args+=(-extension GLX)
-# shellcheck disable=SC2206
-[ -n "${OPENBOT_XVFB_ARGS:-}" ] && xvfb_args+=($OPENBOT_XVFB_ARGS)
+if [ -n "${OPENBOT_XVFB_ARGS:-}" ]; then
+  read -r -a extra_xvfb <<<"$OPENBOT_XVFB_ARGS"
+  xvfb_args+=("${extra_xvfb[@]}")
+fi
 mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 Xvfb :0 -screen 0 1280x800x24 "${xvfb_args[@]}" >>"$LOG" 2>&1 &
 XVFB0_PID=$!
 Xvfb :1 -screen 0 "$(display_size "${OPENBOT_DISPLAY_SIZE:-}")x24" "${xvfb_args[@]}" >>"$LOG" 2>&1 &
 XVFB1_PID=$!
-for display in :0 :1; do
-  for _ in $(seq 1 200); do
-    xdpyinfo -display "$display" >/dev/null 2>&1 && break
+
+i=0
+while [ "$i" -lt 100 ]; do
+  [ -S "$BUS" ] && break
+  kill -0 "$DBUS_PID" 2>/dev/null || break
+  i=$((i + 1))
+  sleep 0.1
+done
+[ -S "$BUS" ] || die 12 "dbus-daemon did not start (see log)."
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$BUS"
+log "D-Bus session bus up at $BUS."
+
+for pair in "0:$XVFB0_PID" "1:$XVFB1_PID"; do
+  num=${pair%%:*}
+  xpid=${pair#*:}
+  xsock="/tmp/.X11-unix/X$num"
+  ready_x=0
+  i=0
+  while [ "$i" -lt 200 ]; do
+    if [ -S "$xsock" ] && xdpyinfo -display ":$num" >/dev/null 2>&1; then
+      ready_x=1
+      break
+    fi
+    kill -0 "$xpid" 2>/dev/null || break
+    i=$((i + 1))
     sleep 0.1
   done
-  xdpyinfo -display "$display" >/dev/null 2>&1 || die 13 "The virtual display $display did not start (see Xvfb lines in the log)."
+  [ "$ready_x" = 1 ] || die 13 "The virtual display :$num did not start (see Xvfb lines in the log)."
 done
 export DISPLAY=:0 OPENBOT_AGENT_DISPLAY=:1
 log "Virtual displays :0 and :1 are up."
@@ -454,6 +471,7 @@ launch() {
   local flags=()
   mapfile -t flags < <(flags_for_profile "$PROFILE")
   LAUNCH_OFFSET=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
+  crash_next=0
   log "Launching OpenBot, profile=$PROFILE: $APP ${flags[*]}"
   # As uid 0 (proot -0, or a chroot) Electron aborts every renderer, because OpenBot enables the
   # renderer sandbox; the shim makes getuid() non-zero in those processes only (nonroot-shim.c).
@@ -530,9 +548,8 @@ while :; do
         "$version" "$account" "$server" "$PROFILE" "$SOCKET" >>"$LOG"
       log "Ready: OpenBot $version, account=$account, server=$server."
       [ "$account" = signed_in ] || log "Not signed in yet. Run: openbot login (or POST /v1/login/start on the control socket)."
-    elif [ "$SECONDS" != "${crash_checked:-}" ]; then
-      # The crash count reads the log: once a second is enough, also while the socket is polled fast.
-      crash_checked=$SECONDS
+    elif [ "$SECONDS" -ge "${crash_next:-0}" ]; then
+      crash_next=$((SECONDS + 3))
       count=$(crash_count)
       if [ "$count" -ge "$CRASH_THRESHOLD" ]; then
         hint_from_log
