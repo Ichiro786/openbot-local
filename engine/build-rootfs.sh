@@ -303,10 +303,8 @@ step "Pack rootfs-arm64.tar.zst and rootfs-arm64.tar.xz"
 # one more release for apps that update from the network and only know .tar.xz.
 tar -C "$ROOTFS" --numeric-owner --owner=0 --group=0 --hard-dereference --sort=name \
   --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' -cf "$WORK_DIR/rootfs.tar" .
-xz -T0 "-$XZ_LEVEL" --check=crc64 -c "$WORK_DIR/rootfs.tar" >"$OUT_DIR/rootfs-arm64.tar.xz" &
-xz_pid=$!
+xz -T0 "-$XZ_LEVEL" --check=crc64 -c "$WORK_DIR/rootfs.tar" >"$OUT_DIR/rootfs-arm64.tar.xz" || fail "xz failed"
 zstd -q -T0 "-${ZSTD_LEVEL:-19}" --long=27 -c "$WORK_DIR/rootfs.tar" >"$OUT_DIR/rootfs-arm64.tar.zst"
-wait "$xz_pid" || fail "xz failed"
 rm -f "$WORK_DIR/rootfs.tar"
 (cd "$OUT_DIR" && sha256sum rootfs-arm64.tar.xz >rootfs-arm64.tar.xz.sha256 &&
   sha256sum rootfs-arm64.tar.zst >rootfs-arm64.tar.zst.sha256)

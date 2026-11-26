@@ -1,0 +1,57 @@
+diff --git a/src/backend/agent-service.ts b/src/backend/agent-service.ts
+index 4a9d0bb0e0..db9d0dd843 100644
+--- a/src/backend/agent-service.ts
++++ b/src/backend/agent-service.ts
+@@ -7508,7 +7508,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+   readonly setMessageReaction = Effect.fn("AgentService.setMessageReaction")(function* (
+     this: AgentService,
+     input: SetMessageReactionInput,
+-    sender?: ConversationMessageSender,
++    _sender?: ConversationMessageSender,
+   ) {
+     const agent = yield* this.#store
+       .existing(input.agentId)
+@@ -7522,35 +7522,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
+       const [message] = this.#store.database.readConversationMessages(agent.id, agent.threadId, [input.messageId]);
+       if (message) snapshot.messages.push(message);
+     }
+-    const message = snapshot.messages.find((candidate) => candidate.id === input.messageId);
+-    if (!message) {
++    if (!snapshot.messages.some((candidate) => candidate.id === input.messageId)) {
+       return yield* new AgentLifecycleFailed({
+         operation: "set message reaction",
+         cause: new Error(sourceText("error.agent.messageUnavailable")),
+       });
+     }
+-    const previous = this.#mailbox.reactionFor(agent.id, input.messageId);
+-    const answer =
+-      message.author === "assistant" && message.status === "completed" && input.emoji !== previous ? input.emoji : null;
+-    const saveReaction = (emoji: SetMessageReactionInput["emoji"]) =>
+-      this.#mailbox.setReaction(agent.id, input.messageId, { kind: "user" }, emoji).pipe(
+-        Effect.mapError(
+-          (failure) => new AgentLifecycleFailed({ operation: "set message reaction", cause: failure.cause }),
+-        ),
+-        Effect.tap(() =>
+-          Effect.sync(() => {
+-            this.#mailboxSync.syncMailboxMessages(snapshot);
+-            this.#conversation.emitConversation(snapshot);
+-          }),
+-        ),
+-      );
+-    yield* saveReaction(input.emoji);
+-    if (!answer) return;
+-    yield* this.#sendUserMessage(
+-      { agentId: agent.id, text: answer, replyToMessageId: input.messageId },
+-      sender,
+-      undefined,
+-    ).pipe(Effect.tapError(() => saveReaction(previous).pipe(Effect.ignore)));
++    yield* this.#mailbox.setReaction(agent.id, input.messageId, { kind: "user" }, input.emoji).pipe(
++      Effect.mapError(
++        (failure) => new AgentLifecycleFailed({ operation: "set message reaction", cause: failure.cause }),
++      ),
++    );
++    this.#mailboxSync.syncMailboxMessages(snapshot);
++    this.#conversation.emitConversation(snapshot);
+   }, Effect.uninterruptible).bind(this);
+ 
+   #deliveryThreadId(deliveryId: string): string | null {
