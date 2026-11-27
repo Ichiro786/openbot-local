@@ -20,7 +20,9 @@ import {
   CLOSED_EYE_STROKE,
   HALF_VIEW_BOX,
   type Matrix,
+  type PlushBall,
   type PlushEye,
+  type PlushZ,
   VIEW_BOX,
 } from "./plush-felt";
 import type { PlushFrame } from "./plush-frames";
@@ -49,10 +51,16 @@ interface PlushDrawKit {
   target: SkHostRect;
   bandRect: { rect: SkHostRect; rx: number; ry: number };
   matrix: number[];
+  eyeMatrix: MutableMatrix;
+  innerMatrix: MutableMatrix;
+  ball: PlushBall;
+  z: PlushZ;
   path: SkPathBuilder;
   recorder: SkPictureRecorder;
   bounds: SkHostRect;
 }
+
+type MutableMatrix = [number, number, number, number, number, number];
 
 declare global {
   var openbotPlushDrawKit: PlushDrawKit | undefined;
@@ -92,6 +100,10 @@ function makeDrawKit(): PlushDrawKit {
     target: Skia.XYWHRect(0, 0, 0, 0),
     bandRect: { rect: Skia.XYWHRect(0, 0, 0, 0), rx: 0, ry: 0 },
     matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    eyeMatrix: [1, 0, 0, 1, 0, 0],
+    innerMatrix: [1, 0, 0, 1, 0, 0],
+    ball: { x: 0, y: 0, size: 0, opacity: 0 },
+    z: { x: 0, y: 0, half: 0, width: 0, opacity: 0 },
     path: Skia.PathBuilder.Make(),
     recorder: Skia.PictureRecorder(),
     bounds: Skia.XYWHRect(0, 0, 0, 0),
@@ -148,17 +160,91 @@ function drawPicture(
   canvas.drawImageRectOptions(image, kit.source, kit.target, FilterMode.Linear, MipmapMode.Linear, paint);
 }
 
-function drawEye(canvas: SkCanvas, kit: PlushDrawKit, eye: PlushEye, art: PlushArt) {
+function blendNumber(a: number, b: number, t: number): number {
   "worklet";
-  const opacity = eye.alpha * eye.pad;
+  return a + (b - a) * t;
+}
+
+function blendAlpha(a: number, b: number, t: number): number {
+  "worklet";
+  return Math.max(0, Math.min(1, blendNumber(a, b, t)));
+}
+
+function blendMatrix(a: Matrix, b: Matrix, t: number, target: MutableMatrix): Matrix {
+  "worklet";
+  const detA = a[0] * a[3] - a[1] * a[2];
+  const detB = b[0] * b[3] - b[1] * b[2];
+  let angle = Math.atan2(b[1], b[0]) - Math.atan2(a[1], a[0]);
+  if (angle > Math.PI) angle -= 2 * Math.PI;
+  else if (angle < -Math.PI) angle += 2 * Math.PI;
+  if (detA * detB <= 0 || Math.abs(angle) > 0.2618) return t < 0.5 ? a : b;
+  target[0] = blendNumber(a[0], b[0], t);
+  target[1] = blendNumber(a[1], b[1], t);
+  target[2] = blendNumber(a[2], b[2], t);
+  target[3] = blendNumber(a[3], b[3], t);
+  target[4] = blendNumber(a[4], b[4], t);
+  target[5] = blendNumber(a[5], b[5], t);
+  return target;
+}
+
+function blendBall(a: PlushBall, b: PlushBall, t: number, target: PlushBall, guard: boolean): PlushBall {
+  "worklet";
+  if (guard && Math.hypot(b.x - a.x, b.y - a.y) > VIEW_BOX * 0.25) return t < 0.5 ? a : b;
+  target.x = blendNumber(a.x, b.x, t);
+  target.y = blendNumber(a.y, b.y, t);
+  target.size = blendNumber(a.size, b.size, t);
+  target.opacity = blendNumber(a.opacity, b.opacity, t);
+  return target;
+}
+
+function blendNotif(a: PlushBall | null, b: PlushBall | null, t: number, target: PlushBall): PlushBall | null {
+  "worklet";
+  if (a && b) return blendBall(a, b, t, target, false);
+  const ball = a ?? b;
+  if (!ball) return null;
+  target.x = ball.x;
+  target.y = ball.y;
+  target.size = ball.size;
+  target.opacity = ball.opacity * (a ? 1 - t : t);
+  return target;
+}
+
+function blendZ(a: PlushZ, b: PlushZ, t: number, target: PlushZ): PlushZ {
+  "worklet";
+  if (Math.hypot(b.x - a.x, b.y - a.y) > VIEW_BOX * 0.25) return t < 0.5 ? a : b;
+  target.x = blendNumber(a.x, b.x, t);
+  target.y = blendNumber(a.y, b.y, t);
+  target.half = blendNumber(a.half, b.half, t);
+  target.width = blendNumber(a.width, b.width, t);
+  target.opacity = blendNumber(a.opacity, b.opacity, t);
+  return target;
+}
+
+function drawEye(canvas: SkCanvas, kit: PlushDrawKit, eye: PlushEye, art: PlushArt, to = eye, t = 0) {
+  "worklet";
+  const blending = t > 0 && eye !== to;
+  const nearest = t < 0.5 ? eye : to;
+  const matrix = blending ? blendMatrix(eye.matrix, to.matrix, t, kit.eyeMatrix) : eye.matrix;
+  const inner =
+    blending && eye.inner && to.inner
+      ? blendMatrix(eye.inner, to.inner, t, kit.innerMatrix)
+      : blending
+        ? nearest.inner
+        : eye.inner;
+  const alpha = blending ? blendAlpha(eye.alpha, to.alpha, t) : eye.alpha;
+  const opacity = alpha * (blending ? nearest.pad : eye.pad);
+  const pieces = blending ? nearest.pieces : eye.pieces;
+  const blendLid = blending && eye.lid && to.lid && eye.lid.bands.length === to.lid.bands.length;
+  const lid = blendLid ? eye.lid : blending ? nearest.lid : eye.lid;
+  const nextLid = blendLid ? to.lid : null;
   if (opacity > 0.001) {
-    if (eye.lid) canvas.saveLayer();
+    if (lid) canvas.saveLayer();
     canvas.save();
-    concat(canvas, kit, eye.matrix);
-    if (eye.inner) concat(canvas, kit, eye.inner);
+    concat(canvas, kit, matrix);
+    if (inner) concat(canvas, kit, inner);
     canvas.saveLayer(alphaPaint(kit, opacity));
-    const piecePaint = eye.pieces.length > 1 ? kit.plus : kit.plain;
-    for (const piece of eye.pieces) {
+    const piecePaint = pieces.length > 1 ? kit.plus : kit.plain;
+    for (const piece of pieces) {
       const image = piece.src === 0 ? art.padX : art.padY;
       drawPicture(
         canvas,
@@ -177,17 +263,25 @@ function drawEye(canvas: SkCanvas, kit: PlushDrawKit, eye: PlushEye, art: PlushA
     }
     canvas.restore();
     canvas.restore();
-    if (eye.lid) {
-      const lid = eye.lid;
+    if (lid) {
+      const cx = nextLid ? blendNumber(lid.cx, nextLid.cx, t) : lid.cx;
+      const cy = nextLid ? blendNumber(lid.cy, nextLid.cy, t) : lid.cy;
+      const s = nextLid ? blendNumber(lid.s, nextLid.s, t) : lid.s;
       canvas.saveLayer(kit.mask);
-      canvas.translate(lid.cx, lid.cy);
-      canvas.scale(1, lid.s);
-      canvas.translate(-lid.cx, -lid.cy);
-      concat(canvas, kit, eye.matrix);
-      if (eye.inner) concat(canvas, kit, eye.inner);
+      canvas.translate(cx, cy);
+      canvas.scale(1, s);
+      canvas.translate(-cx, -cy);
+      concat(canvas, kit, matrix);
+      if (inner) concat(canvas, kit, inner);
       const band = kit.bandRect;
-      for (const { w, h, r, alpha } of lid.bands) {
-        kit.band.setAlphaf(alpha);
+      for (let index = 0; index < lid.bands.length; index += 1) {
+        const fromBand = lid.bands[index];
+        if (!fromBand) continue;
+        const toBand = nextLid?.bands[index];
+        const w = toBand ? blendNumber(fromBand.w, toBand.w, t) : fromBand.w;
+        const h = toBand ? blendNumber(fromBand.h, toBand.h, t) : fromBand.h;
+        const r = toBand ? blendNumber(fromBand.r, toBand.r, t) : fromBand.r;
+        kit.band.setAlphaf(toBand ? blendNumber(fromBand.alpha, toBand.alpha, t) : fromBand.alpha);
         band.rect.setXYWH(-w, -h, 2 * w, 2 * h);
         band.rx = r;
         band.ry = r;
@@ -197,13 +291,16 @@ function drawEye(canvas: SkCanvas, kit: PlushDrawKit, eye: PlushEye, art: PlushA
       canvas.restore();
     }
   }
-  if (eye.closed && eye.closed.opacity > 0.001) {
-    const { w } = eye.closed;
+  const closed = eye.closed ?? (blending ? to.closed : null);
+  if (closed) {
+    const w = blending && eye.closed && to.closed ? blendNumber(eye.closed.w, to.closed.w, t) : closed.w;
+    const closedOpacity = blending ? blendNumber(eye.closed?.opacity ?? 0, to.closed?.opacity ?? 0, t) : closed.opacity;
+    if (closedOpacity <= 0.001) return;
     const line = kit.line;
     line.setStrokeWidth(w * CLOSED_EYE_STROKE);
-    line.setAlphaf(eye.alpha * eye.closed.opacity);
+    line.setAlphaf(alpha * closedOpacity);
     canvas.save();
-    concat(canvas, kit, eye.matrix);
+    concat(canvas, kit, matrix);
     canvas.drawPath(
       kit.path
         .reset()
@@ -242,9 +339,19 @@ export function saturationMatrix(s: number): number[] {
   ];
 }
 
-export function drawPlush(canvas: SkCanvas, frame: PlushFrame, art: PlushArt, size: number, saturation = 1) {
+export function drawPlush(
+  canvas: SkCanvas,
+  frame: PlushFrame,
+  art: PlushArt,
+  size: number,
+  saturation = 1,
+  to = frame,
+  t = 0,
+) {
   "worklet";
   const kit = drawKit();
+  const blending = t > 0 && frame !== to;
+  const nearest = t < 0.5 ? frame : to;
   const scale = size / VIEW_BOX;
   canvas.save();
   canvas.translate(size / 2, size / 2);
@@ -257,24 +364,44 @@ export function drawPlush(canvas: SkCanvas, frame: PlushFrame, art: PlushArt, si
     }
     canvas.saveLayer(kit.grey);
   }
-  const faded = frame.bodyAlpha < 1;
-  if (faded) canvas.saveLayer(alphaPaint(kit, frame.bodyAlpha));
+  const bodyAlpha = blending ? blendAlpha(frame.bodyAlpha, to.bodyAlpha, t) : frame.bodyAlpha;
+  const faded = bodyAlpha < 1;
+  if (faded) canvas.saveLayer(alphaPaint(kit, bodyAlpha));
   drawPicture(canvas, kit, art.body, -HALF_VIEW_BOX, -HALF_VIEW_BOX, VIEW_BOX, VIEW_BOX, kit.plain, 0, 0, 1, 1);
-  for (const eye of frame.eyes) drawEye(canvas, kit, eye, art);
-  if (faded) canvas.restore();
-  for (const dot of frame.dots)
-    drawPicture(canvas, kit, art.dot, dot.x, dot.y, dot.size, dot.size, alphaPaint(kit, dot.opacity), 0, 0, 1, 1);
-  if (frame.notif) {
-    const { x, y, size: ball } = frame.notif;
-    drawPicture(canvas, kit, art.notif, x, y, ball, ball, kit.plain, 0, 0, 1, 1);
+  const blendEyes = blending && frame.eyes.length === to.eyes.length;
+  const eyes = blending && !blendEyes ? nearest.eyes : frame.eyes;
+  for (let index = 0; index < eyes.length; index += 1) {
+    const eye = eyes[index];
+    if (eye) drawEye(canvas, kit, eye, art, blendEyes ? to.eyes[index] : eye, blendEyes ? t : 0);
   }
-  if (frame.zs.length > 0) {
+  if (faded) canvas.restore();
+  const blendDots = blending && frame.dots.length === to.dots.length;
+  const dots = blending && !blendDots ? nearest.dots : frame.dots;
+  for (let index = 0; index < dots.length; index += 1) {
+    const fromDot = dots[index];
+    if (!fromDot) continue;
+    const toDot = blendDots ? to.dots[index] : null;
+    const dot = toDot ? blendBall(fromDot, toDot, t, kit.ball, true) : fromDot;
+    drawPicture(canvas, kit, art.dot, dot.x, dot.y, dot.size, dot.size, alphaPaint(kit, dot.opacity), 0, 0, 1, 1);
+  }
+  const notif = blending ? blendNotif(frame.notif, to.notif, t, kit.ball) : frame.notif;
+  if (notif && notif.opacity > 0.001) {
+    const { x, y, size: ball } = notif;
+    drawPicture(canvas, kit, art.notif, x, y, ball, ball, alphaPaint(kit, notif.opacity), 0, 0, 1, 1);
+  }
+  const blendZs = blending && frame.zs.length === to.zs.length;
+  const zs = blending && !blendZs ? nearest.zs : frame.zs;
+  if (zs.length > 0) {
     const stroke = kit.stroke;
     if (kit.strokeInk !== art.ink) {
       stroke.setColor(Skia.Color(art.ink));
       kit.strokeInk = art.ink;
     }
-    for (const z of frame.zs) {
+    for (let index = 0; index < zs.length; index += 1) {
+      const fromZ = zs[index];
+      if (!fromZ) continue;
+      const toZ = blendZs ? to.zs[index] : null;
+      const z = toZ ? blendZ(fromZ, toZ, t, kit.z) : fromZ;
       stroke.setStrokeWidth(z.width);
       stroke.setAlphaf(z.opacity);
       const path = kit.path
@@ -292,7 +419,9 @@ export function drawPlush(canvas: SkCanvas, frame: PlushFrame, art: PlushArt, si
 }
 
 export function recordPlush(
-  frame: PlushFrame | undefined,
+  from: PlushFrame | undefined,
+  to: PlushFrame | undefined,
+  t: number,
   art: PlushArt | null,
   size: number,
   saturation: number,
@@ -301,6 +430,9 @@ export function recordPlush(
   const kit = drawKit();
   kit.bounds.setXYWH(0, 0, size, size);
   const canvas = kit.recorder.beginRecording(kit.bounds);
-  if (art && frame) drawPlush(canvas, frame, art, size, saturation);
+  if (art && from) {
+    if (t <= 0 || from === to || !to) drawPlush(canvas, from, art, size, saturation);
+    else drawPlush(canvas, from, art, size, saturation, to, t);
+  }
   return kit.recorder.finishRecordingAsPicture();
 }

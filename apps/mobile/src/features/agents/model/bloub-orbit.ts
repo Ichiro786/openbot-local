@@ -1,11 +1,13 @@
 import { BotEngine } from "@norbert_bodziony/bloub";
+import { Skia, type SkPath } from "@shopify/react-native-skia";
+import { Platform } from "react-native";
 import { makeMutable } from "react-native-reanimated";
 
-const ORBIT_FPS = 30;
+const ORBIT_FPS = Platform.OS === "android" ? 120 : 30;
 export const ORBIT_CYCLE = 3.6;
 const ORBIT_START = 1.2;
 const FRAME_TOTAL = Math.round(ORBIT_CYCLE * ORBIT_FPS);
-const BATCH = 6;
+const BATCH = Platform.OS === "android" ? 16 : 6;
 
 export interface OrbitRing {
   id: string;
@@ -14,12 +16,12 @@ export interface OrbitRing {
 }
 
 export interface OrbitArc {
-  front: string;
-  back: string;
+  front: SkPath | null;
+  back: SkPath | null;
   opacity: number;
 }
 
-const NO_ARC: OrbitArc = { front: "", back: "", opacity: 0 };
+const NO_ARC: OrbitArc = { front: null, back: null, opacity: 0 };
 
 let rings: OrbitRing[] | null = null;
 
@@ -46,7 +48,13 @@ export function prepareOrbitFrames(): void {
       frames.push(
         ids.map((id) => {
           const arc = arcs.find((candidate) => candidate.id === id);
-          return arc ? { front: arc.front, back: arc.back, opacity: arc.opacity } : NO_ARC;
+          return arc
+            ? {
+                front: arc.front ? Skia.Path.MakeFromSVGString(arc.front) : null,
+                back: arc.back ? Skia.Path.MakeFromSVGString(arc.back) : null,
+                opacity: arc.opacity,
+              }
+            : NO_ARC;
         }),
       );
     }

@@ -26,6 +26,7 @@ export function usePlushFrame(geometry: PlushGeometry, animate: boolean) {
   const playback = useSharedValue<Playback>({ frames: still.frames, index: 0, loopStart: null });
   const cursor = useSharedValue(0);
   const elapsed = useSharedValue(0);
+  const blend = useSharedValue(0);
   const shown = useRef<{ geometry: PlushGeometry; sequence: PlushSequence; loop: boolean }>({
     geometry,
     sequence: still,
@@ -41,11 +42,12 @@ export function usePlushFrame(geometry: PlushGeometry, animate: boolean) {
       shown.current = { geometry: shownGeometry, sequence, loop };
       shownCount.set(shownCount.get() + 1);
       elapsed.set(0);
+      blend.set(0);
       cursor.set(start);
       playback.set({ frames: sequence.frames, index: start, loopStart: loop ? 0 : null });
       setPlaying(sequence.frames.length > 1);
     },
-    [cursor, elapsed, playback, shownCount],
+    [blend, cursor, elapsed, playback, shownCount],
   );
   const ended = useCallback(
     (count: number) => {
@@ -63,19 +65,24 @@ export function usePlushFrame(geometry: PlushGeometry, animate: boolean) {
     const last = current.frames.length - 1;
     if (current.loopStart === null && current.index >= last) return;
     const accumulated = elapsed.get() + Math.min(timeSincePreviousFrame ?? 0, 64);
-    const advance = Math.floor((accumulated * PLUSH_FPS) / 1000);
-    elapsed.set(accumulated - (advance * 1000) / PLUSH_FPS);
-    if (advance === 0) return;
+    const stepMs = 1000 / PLUSH_FPS;
+    const advance = Math.floor(accumulated / stepMs);
+    const remainder = accumulated - advance * stepMs;
     let index = current.index + advance;
     if (current.loopStart !== null && index > last) {
       index = current.loopStart + ((index - current.loopStart) % (current.frames.length - current.loopStart));
     } else if (current.loopStart === null) index = Math.min(index, last);
-    playback.modify((value) => {
-      value.index = index;
-      return value;
-    });
-    cursor.set(index);
-    if (current.loopStart === null && index >= last) scheduleOnRN(ended, shownCount.get());
+    const finished = current.loopStart === null && index >= last;
+    elapsed.set(finished ? 0 : remainder);
+    if (index !== current.index) {
+      playback.modify((value) => {
+        value.index = index;
+        return value;
+      });
+      cursor.set(index);
+      if (finished) scheduleOnRN(ended, shownCount.get());
+    }
+    blend.set(isAndroid && !finished ? Math.max(0, Math.min(1 - Number.EPSILON, remainder / stepMs)) : 0);
   }, false);
 
   const appActive = useAppActive();
@@ -115,8 +122,16 @@ export function usePlushFrame(geometry: PlushGeometry, animate: boolean) {
     };
   }, [animate, cursor, geometry, show, still]);
 
-  return useDerivedValue(() => {
+  const frame = useDerivedValue(() => {
     const current = playback.get();
     return current.frames[Math.floor(current.index)] ?? current.frames[0];
   });
+  const nextFrame = useDerivedValue(() => {
+    if (!isAndroid || !animate) return frame.get();
+    const current = playback.get();
+    const last = current.frames.length - 1;
+    const nextIndex = current.index === last ? (current.loopStart ?? last) : current.index + 1;
+    return current.frames[nextIndex] ?? frame.get();
+  });
+  return { frame, nextFrame, blend };
 }
