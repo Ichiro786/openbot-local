@@ -19,6 +19,7 @@ import Animated, {
   FadeInDown,
   FadeOut,
   LayoutAnimationConfig,
+  LinearTransition,
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
@@ -67,6 +68,12 @@ const PICKER_IN = FadeInDown.springify()
   .reduceMotion(ReduceMotion.System);
 const PICKER_OUT = FadeOut.duration(120).easing(Easing.in(Easing.cubic)).reduceMotion(ReduceMotion.System);
 const ICON_SIZE = 18;
+const CHIP_LAYOUT = LinearTransition.springify()
+  .mass(springs.fastSpatial.mass)
+  .stiffness(springs.fastSpatial.stiffness)
+  .damping(springs.fastSpatial.damping)
+  .reduceMotion(ReduceMotion.System);
+const PILL_SLOT = { position: "absolute", left: 0, right: 0, bottom: -14, height: 28 } as const;
 
 function pressInTick() {
   void haptics.impact("light");
@@ -229,6 +236,7 @@ export function ChatMessageActions({
   const [mutedColor, foregroundColor] = useThemeColor(["muted", "foreground"]);
   const muted = String(mutedColor);
   const { copy, copied } = useCopyMessage(copyText);
+  const { transforms } = useMotion();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [moreEmoji, setMoreEmoji] = useState(false);
 
@@ -266,147 +274,191 @@ export function ChatMessageActions({
     [createdAt, format],
   );
 
-  if (longPressMenu && align === "end" && shown.length === 0) return <View className="pb-2" />;
-  return (
-    <View className={`gap-1 pb-2 ${align === "end" ? "items-end self-end" : "items-start self-start"}`}>
-      <View
-        accessibilityRole="toolbar"
-        accessibilityLabel={t("mobile.chat.message.actions")}
-        className="flex-row items-center"
+  const chipLayout = transforms ? CHIP_LAYOUT : undefined;
+  const chipExit = transforms ? CHECK_OUT : undefined;
+  const chip = (reaction: ConversationReaction, pill: boolean) => {
+    const glyph = <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />;
+    const removable = reaction.actor.kind === "user" && Boolean(onReact);
+    return (
+      <Animated.View
+        key={reaction.actor.kind === "agent" ? `agent:${reaction.actor.agentId}` : "user"}
+        layout={chipLayout}
+        exiting={pill && shown.length === 1 ? undefined : chipExit}
       >
-        {shown.map((reaction) =>
-          reaction.actor.kind === "user" && onReact ? (
-            <ActionButton
-              key="user"
-              label
-              accessibilityLabel={t("mobile.chat.message.removeReaction", { emoji: reaction.emoji })}
-              onPress={() => react(null)}
-            >
-              <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
-            </ActionButton>
-          ) : (
-            <View
-              key={reaction.actor.kind === "agent" ? `agent:${reaction.actor.agentId}` : "user"}
-              accessible
-              accessibilityRole="image"
-              accessibilityLabel={
-                reaction.actor.kind === "agent"
-                  ? t("mobile.chat.message.agentReaction", {
-                      name: agentsById.get(reaction.actor.agentId)?.name ?? "",
-                      emoji: reaction.emoji,
-                    })
-                  : reaction.emoji
-              }
-              className="px-2"
-            >
-              <ReactionGlyph key={reaction.emoji} emoji={reaction.emoji} pop={pops(reaction)} />
-            </View>
-          ),
+        {removable && pill ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("mobile.chat.message.removeReaction", { emoji: reaction.emoji })}
+            hitSlop={8}
+            onPress={() => react(null)}
+            className="h-6 items-center justify-center px-1"
+            style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
+          >
+            {glyph}
+          </Pressable>
+        ) : removable ? (
+          <ActionButton
+            label
+            accessibilityLabel={t("mobile.chat.message.removeReaction", { emoji: reaction.emoji })}
+            onPress={() => react(null)}
+          >
+            {glyph}
+          </ActionButton>
+        ) : (
+          <View
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={
+              reaction.actor.kind === "agent"
+                ? t("mobile.chat.message.agentReaction", {
+                    name: agentsById.get(reaction.actor.agentId)?.name ?? "",
+                    emoji: reaction.emoji,
+                  })
+                : reaction.emoji
+            }
+            className={pill ? "h-6 justify-center px-1" : "px-2"}
+          >
+            {glyph}
+          </View>
         )}
-        {copyText && !(longPressMenu && align === "end") ? (
-          <ActionButton
-            accessibilityLabel={copied ? t("mobile.chat.message.copied") : t("mobile.chat.message.copy")}
-            onPress={() => void copy()}
-          >
-            <LayoutAnimationConfig skipEntering skipExiting>
-              <Animated.View
-                key={copied ? "copied" : "copy"}
-                entering={copied ? CHECK_IN : COPY_IN}
-                exiting={copied ? CHECK_OUT : COPY_OUT}
-                style={GLYPH_FILL}
+      </Animated.View>
+    );
+  };
+
+  if (longPressMenu && align === "end")
+    return (
+      <LayoutAnimationConfig skipEntering skipExiting>
+        <View pointerEvents="box-none" style={PILL_SLOT}>
+          {shown.length > 0 ? (
+            <Animated.View
+              accessibilityRole="toolbar"
+              accessibilityLabel={t("mobile.chat.message.actions")}
+              entering={transforms ? COPY_IN : undefined}
+              exiting={chipExit}
+              className="absolute top-0 left-3 h-7 flex-row items-center rounded-full border-2 border-background bg-surface px-1"
+            >
+              {shown.map((reaction) => chip(reaction, true))}
+            </Animated.View>
+          ) : null}
+        </View>
+      </LayoutAnimationConfig>
+    );
+  return (
+    <LayoutAnimationConfig skipEntering skipExiting>
+      <View className={`gap-1 pb-2 ${align === "end" ? "items-end self-end" : "items-start self-start"}`}>
+        <View
+          accessibilityRole="toolbar"
+          accessibilityLabel={t("mobile.chat.message.actions")}
+          className="flex-row items-center"
+        >
+          {shown.map((reaction) => chip(reaction, false))}
+          <Animated.View layout={chipLayout} className="flex-row items-center">
+            {copyText ? (
+              <ActionButton
+                accessibilityLabel={copied ? t("mobile.chat.message.copied") : t("mobile.chat.message.copy")}
+                onPress={() => void copy()}
               >
-                {copied ? <Check size={ICON_SIZE} color={muted} /> : <Copy size={ICON_SIZE} color={muted} />}
-              </Animated.View>
-            </LayoutAnimationConfig>
-          </ActionButton>
-        ) : null}
-        {readAloudId && copyText ? (
-          <ReadAloudButton
-            messageId={readAloudId}
-            text={copyText}
-            color={muted}
-            selectedColor={String(foregroundColor)}
-          />
-        ) : null}
-        {onReact && !longPressMenu ? (
-          <ActionButton
+                <LayoutAnimationConfig skipEntering skipExiting>
+                  <Animated.View
+                    key={copied ? "copied" : "copy"}
+                    entering={copied ? CHECK_IN : COPY_IN}
+                    exiting={copied ? CHECK_OUT : COPY_OUT}
+                    style={GLYPH_FILL}
+                  >
+                    {copied ? <Check size={ICON_SIZE} color={muted} /> : <Copy size={ICON_SIZE} color={muted} />}
+                  </Animated.View>
+                </LayoutAnimationConfig>
+              </ActionButton>
+            ) : null}
+            {readAloudId && copyText ? (
+              <ReadAloudButton
+                messageId={readAloudId}
+                text={copyText}
+                color={muted}
+                selectedColor={String(foregroundColor)}
+              />
+            ) : null}
+            {onReact && !longPressMenu ? (
+              <ActionButton
+                accessibilityLabel={t("mobile.chat.message.addReaction")}
+                accessibilityState={{ expanded: pickerOpen }}
+                onPress={() => {
+                  void haptics.selection();
+                  setPickerOpen((open) => !open);
+                  setMoreEmoji(false);
+                }}
+              >
+                <SmilePlus size={ICON_SIZE} color={muted} />
+              </ActionButton>
+            ) : null}
+            {onReply && !longPressMenu ? (
+              <ActionButton
+                accessibilityLabel={t("mobile.chat.message.reply")}
+                onPress={() => {
+                  void haptics.selection();
+                  onReply();
+                }}
+              >
+                <Reply size={ICON_SIZE} color={muted} />
+              </ActionButton>
+            ) : null}
+            {onSelectText && !longPressMenu ? (
+              <ActionButton
+                selected={selecting}
+                accessibilityLabel={t("mobile.chat.message.selectText")}
+                accessibilityState={{ selected: selecting }}
+                onPress={() => {
+                  void haptics.selection();
+                  onSelectText();
+                }}
+              >
+                <TextSelect size={ICON_SIZE} color={selecting ? String(foregroundColor) : muted} />
+              </ActionButton>
+            ) : null}
+            {time ? (
+              <Typography.Paragraph type="body-xs" className="px-1 text-muted">
+                {time}
+              </Typography.Paragraph>
+            ) : null}
+          </Animated.View>
+        </View>
+        {pickerOpen && !longPressMenu ? (
+          <Animated.View
+            entering={PICKER_IN}
+            exiting={PICKER_OUT}
             accessibilityLabel={t("mobile.chat.message.addReaction")}
-            accessibilityState={{ expanded: pickerOpen }}
-            onPress={() => {
-              void haptics.selection();
-              setPickerOpen((open) => !open);
-              setMoreEmoji(false);
-            }}
+            className="flex-row flex-wrap items-center rounded-3xl bg-control/60 px-1"
+            style={{ borderCurve: "continuous" }}
           >
-            <SmilePlus size={ICON_SIZE} color={muted} />
-          </ActionButton>
-        ) : null}
-        {onReply && !longPressMenu ? (
-          <ActionButton
-            accessibilityLabel={t("mobile.chat.message.reply")}
-            onPress={() => {
-              void haptics.selection();
-              onReply();
-            }}
-          >
-            <Reply size={ICON_SIZE} color={muted} />
-          </ActionButton>
-        ) : null}
-        {onSelectText && !longPressMenu ? (
-          <ActionButton
-            selected={selecting}
-            accessibilityLabel={t("mobile.chat.message.selectText")}
-            accessibilityState={{ selected: selecting }}
-            onPress={() => {
-              void haptics.selection();
-              onSelectText();
-            }}
-          >
-            <TextSelect size={ICON_SIZE} color={selecting ? String(foregroundColor) : muted} />
-          </ActionButton>
-        ) : null}
-        {time && !(longPressMenu && align === "end") ? (
-          <Typography.Paragraph type="body-xs" className="px-1 text-muted">
-            {time}
-          </Typography.Paragraph>
+            {[...MESSAGE_REACTIONS, ...(moreEmoji ? MORE_MESSAGE_REACTIONS : [])].map((emoji) => (
+              <Button
+                key={emoji}
+                isIconOnly
+                variant={emoji === own ? "secondary" : "ghost"}
+                accessibilityLabel={t("mobile.chat.message.react", { emoji })}
+                accessibilityState={{ selected: emoji === own }}
+                onPress={() => react(emoji === own ? null : emoji)}
+              >
+                <Typography className="text-xl">{emoji}</Typography>
+              </Button>
+            ))}
+            {moreEmoji ? null : (
+              <Button
+                isIconOnly
+                variant="ghost"
+                accessibilityLabel={t("mobile.chat.message.moreEmoji")}
+                onPress={() => {
+                  void haptics.selection();
+                  setMoreEmoji(true);
+                }}
+              >
+                <Plus size={ICON_SIZE} color={muted} />
+              </Button>
+            )}
+          </Animated.View>
         ) : null}
       </View>
-      {pickerOpen && !longPressMenu ? (
-        <Animated.View
-          entering={PICKER_IN}
-          exiting={PICKER_OUT}
-          accessibilityLabel={t("mobile.chat.message.addReaction")}
-          className="flex-row flex-wrap items-center rounded-3xl bg-control/60 px-1"
-          style={{ borderCurve: "continuous" }}
-        >
-          {[...MESSAGE_REACTIONS, ...(moreEmoji ? MORE_MESSAGE_REACTIONS : [])].map((emoji) => (
-            <Button
-              key={emoji}
-              isIconOnly
-              variant={emoji === own ? "secondary" : "ghost"}
-              accessibilityLabel={t("mobile.chat.message.react", { emoji })}
-              accessibilityState={{ selected: emoji === own }}
-              onPress={() => react(emoji === own ? null : emoji)}
-            >
-              <Typography className="text-xl">{emoji}</Typography>
-            </Button>
-          ))}
-          {moreEmoji ? null : (
-            <Button
-              isIconOnly
-              variant="ghost"
-              accessibilityLabel={t("mobile.chat.message.moreEmoji")}
-              onPress={() => {
-                void haptics.selection();
-                setMoreEmoji(true);
-              }}
-            >
-              <Plus size={ICON_SIZE} color={muted} />
-            </Button>
-          )}
-        </Animated.View>
-      ) : null}
-    </View>
+    </LayoutAnimationConfig>
   );
 }
 export interface MessageActionsInput {

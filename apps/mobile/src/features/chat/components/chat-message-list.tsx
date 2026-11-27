@@ -1248,6 +1248,7 @@ const MessageRow = memo(function MessageRow({
           onHold={openMenu ?? messageActions.open}
         >
           {withReactions}
+          {actionRow}
         </ChatMessageGesture>
       )}
       {message.author === "user" && message.status === "failed" ? (
@@ -1257,7 +1258,9 @@ const MessageRow = memo(function MessageRow({
         />
       ) : null}
       {outbox ? <ChatOutboxStatus status={outbox} exiting={shared.colorOSEntrance ? NOTICE_OUT : undefined} /> : null}
-      {bubble && longPressMenu ? (
+      {bubble && longPressMenu && message.author === "user" ? (
+        <View className="pb-2" />
+      ) : bubble && longPressMenu ? (
         actionRow && actionsWereHeld.current ? (
           <Animated.View entering={shared.colorOSEntrance ? SETTLE_IN : undefined}>{actionRow}</Animated.View>
         ) : (
