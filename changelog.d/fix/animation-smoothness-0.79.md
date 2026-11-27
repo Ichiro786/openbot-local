@@ -19,3 +19,4 @@
 - On Android, orbit rings now draw on Skia at 120 poses per second. Their appearance stays the same.
 - On Android, make the shared header blur lighter and shorten its fade. In ColorOS chats, fade the top blur above the name pill and reduce the dim and fallback tint. Keep the two-blur limit.
 - Start a mobile swipe reply when it crosses the reply threshold. Show the reply preview without waiting for the keyboard, with softer preview and bubble return springs. Keep the velocity shortcut, haptic tick and instant return with reduced motion.
+- Keep loading bars out of the mobile chat open transition. Show them only after the open ends when history is missing. Show cached messages without waiting for sync, fade Home before the card expands over its title, and fade chat content in near the end of the open. Keep the close motion, blur limit, and keyboard behavior.

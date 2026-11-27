@@ -80,7 +80,7 @@ import { useAppActive } from "@/shared/lib/use-app-active";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
-import { liveZoomOf } from "@/shared/motion/liveZoom";
+import { liveZoomOf, useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatShowsLatestButton } from "../model/chat-layout";
 import { mentionDraft } from "../model/chat-mentions";
@@ -664,6 +664,7 @@ export function ChatView({
   const routeKey = useRoute().key;
   const [zoomed] = useState(() => liveZoomOf(routeKey) !== undefined);
   const rowsShown = useRowsAfterOpenTransition(zoomed);
+  const openSettled = useLiveZoomSettled();
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;
   // Build 11.2: the same check ChatHeader makes (the split pane keeps the classic header).
@@ -1323,8 +1324,12 @@ export function ChatView({
 
                 {colorOSHeaderOn &&
                 isAndroid &&
-                (ready || server?.initialConnectionPending || (serverOnline && !historyLoadFailed)) ? (
-                  <ChatOpeningSkeleton revealed={motion.revealed} top={insets.top + 84} />
+                openSettled &&
+                rowsShown &&
+                !ready &&
+                messages.length === 0 &&
+                (server?.initialConnectionPending || (serverOnline && !historyLoadFailed)) ? (
+                  <ChatOpeningSkeleton top={insets.top + 84} />
                 ) : null}
               </ChatFrostTarget>
               <Animated.View

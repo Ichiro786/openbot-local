@@ -51,7 +51,6 @@ import Animated, {
   Keyframe,
   ReduceMotion,
   type SharedValue,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -60,7 +59,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { scheduleOnRN } from "react-native-worklets";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/components/chat-activity-row";
@@ -1718,47 +1716,24 @@ const NO_BROWSER_REQUESTS: readonly BrowserTakeoverRequest[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_CHANNELS: readonly { id: string; name: string }[] = [];
 
-/** Build #101: the skeleton fades into the chat over this long once the rows show. */
-const SKELETON_FADE_MS = 180;
-/** Build #101: the skeleton never stays longer than this, whatever the history does. */
 const SKELETON_MAX_MS = 6000;
 
-/**
- * Build #101 (ColorOS motion): placeholder bubbles where the latest exchange lands (the latest user
- * message under the header, the reply under it) until the list shows its rows, then a fade into them
- * while the rows rise in (use-chat-motion). Build 13: the same bubbles as the zoom-open shell
- * (SkeletonBubbles, soft shimmer), so the shell hands over to them without a seam. It unmounts after its
- * fade, on error or offline (the caller stops rendering it), and after SKELETON_MAX_MS at the latest.
- */
-export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<boolean>; top: number }) {
+export function ChatOpeningSkeleton({ top }: { top: number }) {
   const [done, setDone] = useState(false);
-  const opacity = useSharedValue(1);
   useEffect(() => {
     const timer = setTimeout(() => setDone(true), SKELETON_MAX_MS);
     return () => clearTimeout(timer);
   }, []);
-  useAnimatedReaction(
-    () => revealed.get(),
-    (shown) => {
-      if (!shown) return;
-      opacity.set(
-        withTiming(0, { duration: SKELETON_FADE_MS, reduceMotion: ReduceMotion.System }, () => {
-          scheduleOnRN(setDone, true);
-        }),
-      );
-    },
-  );
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   if (done) return null;
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      style={[StyleSheet.absoluteFill, style]}
+      style={StyleSheet.absoluteFill}
     >
       <SkeletonBubbles top={top + 8} />
-    </Animated.View>
+    </View>
   );
 }
 

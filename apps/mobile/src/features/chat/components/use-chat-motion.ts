@@ -387,7 +387,7 @@ export function useChatMotion(
       if (frame !== null) cancelAnimationFrame(frame);
     };
   }, [holdsCatchUp, catchingUp, catchUpSettled, scrolledUp]);
-  const catchUpHold = holdsCatchUp && !catchUpWaited && (catchingUp || !catchUpSettled);
+  const catchUpHold = holdsCatchUp && !hasRows && !catchUpWaited && (catchingUp || !catchUpSettled);
   const [pinnedToLatest, setPinnedToLatest] = useState(false);
   const [sendFollow, setSendFollow] = useState(false);
   const heldOpening = useRef(holdOpening);

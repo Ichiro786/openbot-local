@@ -53,39 +53,6 @@ const BAND_GAP = 6;
 const GLASS_INSET = 4;
 const GLASS_SIZE = 48 - GLASS_INSET * 2;
 /**
- * Build 13: the header's geometry for the zoom-open skeleton (ChatShellSkeleton), from the constants
- * above, so it draws the shapes where this header puts them. Offsets are from the top of the safe area
- * and from the screen's left and right edges (add the insets).
- */
-export const COLOROS_CHAT_HEADER_GEOMETRY = {
-  rowTop: ROW_TOP,
-  avatar: AVATAR,
-  overlap: OVERLAP,
-  pillHeight: PILL_HEIGHT,
-  pillMinWidth: AVATAR + 16,
-  pillMaxWidth: 220,
-  back: { left: EDGE_PAD + GLASS_INSET, top: ROW_TOP + SIDE_TOP + GLASS_INSET, size: GLASS_SIZE },
-  more: {
-    right: EDGE_PAD + GLASS_INSET,
-    top: ROW_TOP + SIDE_TOP + GLASS_INSET,
-    width: MORE_WIDTH - GLASS_INSET * 2,
-    height: GLASS_SIZE,
-  },
-} as const;
-/** The name pill's last measured width per chat (it hugs the name), for the skeleton's pill. */
-const pillWidths = new Map<string, number>();
-const MAX_PILL_WIDTHS = 200;
-export function headerPillWidthOf(chatId: string): number | undefined {
-  return pillWidths.get(chatId);
-}
-function rememberPillWidth(chatId: string, width: number): void {
-  if (!pillWidths.has(chatId) && pillWidths.size >= MAX_PILL_WIDTHS) {
-    const oldest = pillWidths.keys().next().value;
-    if (oldest !== undefined) pillWidths.delete(oldest);
-  }
-  pillWidths.set(chatId, width);
-}
-/**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
  * the left, the agent's avatar over the top edge of a frosted name pill (name, the thread menu's
  * chevron and unread dot, and the agent's title under it) in the middle, and a ••• pill on the right
@@ -260,7 +227,6 @@ export function ColorOSChatHeader({
             style={{ marginTop: AVATAR - OVERLAP }}
             onLayout={(event) => {
               setPillWidth(event.nativeEvent.layout.width);
-              rememberPillWidth(target.id, event.nativeEvent.layout.width);
             }}
             {...pillHandlers}
           >
