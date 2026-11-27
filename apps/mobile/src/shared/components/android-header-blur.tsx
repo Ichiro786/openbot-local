@@ -22,11 +22,11 @@ import { typeScale } from "@/shared/lib/type-scale";
 import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 import { useBlurLive } from "@/shared/motion/useBlurLive";
 
-const BLUR_INTENSITY = 40;
-const SURFACE_OPACITY = 0.8;
+const BLUR_INTENSITY = 24;
+const SURFACE_OPACITY = 0.32;
 const BLUR_SHAPES = {
-  sheet: { belowBar: 28, full: 0.45 },
-  screen: { belowBar: 32, full: 0.68 },
+  sheet: { belowBar: 12, full: 0.2 },
+  screen: { belowBar: 12, full: 0.28 },
 } as const;
 
 function maskStops(full: number) {

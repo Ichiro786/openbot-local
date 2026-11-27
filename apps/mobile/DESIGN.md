@@ -72,9 +72,9 @@ large title does not work under the custom scroll edge effect on iOS 27, and And
 - Android 12 and later blur the content under the bar with `AndroidHeaderBlur`
   (`src/shared/components/android-header-blur.tsx`): the scroll content is in an `AndroidBlurTarget`
   on the surface color. The bar draws the usual Expo progressive blur: a `BlurView` of the target
-  (intensity 40) with the surface color at 80% over it, in a `MaskedView` whose eased gradient fades it out below the bar. A sheet bar reaches 28 dp
-  below the bar and is full over its top 45%; a full screen bar reaches 32 dp below and is full over
-  its top 68%, because its title sits lower. It needs no native change. `LargeTitleBar` takes the target as `blurTarget`.
+  (intensity 24) with the surface color at 32% over it, in a `MaskedView` whose eased gradient fades it
+  out below the bar. Both bar shapes reach 12 dp below the bar. The mask is full over its top 20% in a
+  sheet and 28% on a full screen. It needs no native change. `LargeTitleBar` takes the target as `blurTarget`.
 - `LargeTitleScrollView` puts grouped content under a big header on the sheet surface.
 
 The native header stays, transparent, with an empty title. It keeps the native Liquid Glass buttons on

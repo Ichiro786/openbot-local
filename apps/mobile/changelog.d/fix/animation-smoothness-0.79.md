@@ -17,3 +17,5 @@
 - On Android, the blur region patch now targets expo-blur 58.0.6, so the blur region works on home and in the chat. This change needs a new app build and cannot go to the current store build as an over-the-air update.
 - On Android, blend plush face poses on the UI thread between the existing 60 poses per second. Keep eye art, blink fades and pose cuts. Faces stay still when their motion is off or reduced motion is on.
 - On Android, orbit rings now draw on Skia at 120 poses per second. Their appearance stays the same.
+- On Android, make the shared header blur lighter and shorten its fade. In ColorOS chats, fade the top blur above the name pill and reduce the dim and fallback tint. Keep the two-blur limit.
+- Start a mobile swipe reply when it crosses the reply threshold. Show the reply preview without waiting for the keyboard, with softer preview and bubble return springs. Keep the velocity shortcut, haptic tick and instant return with reduced motion.

@@ -9,23 +9,22 @@ import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurLive } from "@/shared/motion/useBlurLive";
 import { useBlurBudget } from "./blurBudget";
 
-/** Build 11.3: a strong frost, so text under the bar is unreadable (Syed's reference). */
-const INTENSITY = 40;
+const INTENSITY = 24;
 const REDUCTION = 4;
 /**
  * The dim at the top of the band, fading out with the blur. Build 11.3 (Syed): neutral black, never a
  * theme or agent colour, so the frost adds no tint of its own.
  */
-const DIM_DARK = 0.32;
-const DIM_LIGHT = 0.12;
+const DIM_DARK = 0.16;
+const DIM_LIGHT = 0.06;
 const STEPS = 24;
 /**
  * Build 14 (Syed's phone, build 12 videos: the frost snapped on ~400 ms after the chat opened): while the
  * blur is not running yet, a static scrim of the band's shape stands in for it (no live blur under the
  * moving chat), and the blur fades in over it.
  */
-const SCRIM_DARK = 0.86;
-const SCRIM_LIGHT = 0.8;
+const SCRIM_DARK = 0.36;
+const SCRIM_LIGHT = 0.3;
 const CROSSFADE_MS = 120;
 
 /**

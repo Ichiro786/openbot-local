@@ -95,11 +95,6 @@ function rememberPillWidth(chatId: string, width: number): void {
  * (`GlassBand`, a sibling region; this header is outside it), with the Notes press physics on each. The
  * band pauses while a frosted glass menu is open, so the chat draws at most two blurs (band + composer;
  * a message menu pauses the composer too). Without a target the glass is the solid material.
- *
- * Build 11.3 (Syed's reference): the band is a full-width progressive frost under the status bar,
- * avatar, pill and both buttons (strong blur + a slight dim, fading out below the pill), so text that
- * scrolls under the header is unreadable mush. Before, the blur was masked to the three glass shapes
- * only, so the text between and around them stayed sharp.
  */
 export function ColorOSChatHeader({
   target,
@@ -157,7 +152,6 @@ export function ColorOSChatHeader({
   const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
   const pillTop = topInset + ROW_TOP + AVATAR - OVERLAP;
   const pillBottom = pillTop + PILL_HEIGHT;
-  const blurHeight = pillBottom + 24;
   // Build 11.3 batch 1 + build 13: the name pill, Back and ••• each get a full-strength frost + dim cut
   // from the band's one blur, in their own shape (text under them never reads sharp), then their solid
   // glass fill. The pill is centred in the middle column, as the row lays it out.
@@ -234,14 +228,12 @@ export function ColorOSChatHeader({
       <GlassBand
         target={frostTarget}
         shown={bandOn}
-        solid={(topInset * 0.5) / bandHeight}
+        solid={(topInset * 0.25) / bandHeight}
         fadeHeight={bandHeight}
-        blurHeight={blurHeight}
-        blurSolid={pillBottom / blurHeight}
         shapes={cutOuts}
         // Build 14: from the chat's first frame (the blur starts after the open, and stops for its close).
         scrim={Boolean(frostTarget) && !menuDouble && !plusMenu}
-        style={[styles.band, { top: 0, height: blurHeight }]}
+        style={[styles.band, { top: 0, height: pillBottom }]}
       />
       <View
         pointerEvents="box-none"
@@ -331,7 +323,7 @@ export function ColorOSChatHeader({
       </View>
       <SheetScrollEdgeEffect
         style={{
-          height: topInset + ROW_TOP + ROW_HEIGHT + 4,
+          height: bandHeight,
           left: 0,
           position: "absolute",
           right: 0,

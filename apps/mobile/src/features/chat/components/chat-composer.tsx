@@ -107,7 +107,7 @@ import type { ComposerDictation } from "./use-composer-dictation";
 import { VoiceCallBar } from "./voice-call-bar";
 
 const PLUS_CLOSE_SPRING = { duration: 220, dampingRatio: 1 };
-const REPLY_SPRING = { stiffness: 520, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const REPLY_SPRING = { stiffness: 260, damping: 32, mass: 1, reduceMotion: ReduceMotion.System };
 const REPLY_OUT_EASING = Easing.in(Easing.cubic);
 const MAX_INPUT_LINES = 5;
 const ROW_CONTROL_INSET = 48;
@@ -213,7 +213,6 @@ const TAG_GROUPS = [
 
 const FOCUS_RETRY_MS = 1500;
 const FOCUS_RETRY_INTERVAL_MS = 100;
-const REPLY_KEYBOARD_WAIT_MS = 400;
 
 export const ChatComposer = memo(function ChatComposer({
   sendLabel,
@@ -457,13 +456,11 @@ export const ChatComposer = memo(function ChatComposer({
   const [shownReply, setShownReply] = useState(replyTarget);
   if (replyTarget && replyTarget !== shownReply) setShownReply(replyTarget);
   const replyActive = replyTarget !== null;
-  const replyActiveValue = useSharedValue(replyActive);
   const replyPresence = useSharedValue(replyActive ? 1 : 0);
   const replyRowHeight = useSharedValue(0);
   const replyHold = useSharedValue(replyActive ? 1 : 0);
   const replyHoldTarget = useSharedValue(replyActive ? 1 : 0);
-  useEffect(() => {
-    replyActiveValue.set(replyActive);
+  useLayoutEffect(() => {
     const timing = { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System };
     replyPresence.set(
       replyActive
@@ -478,36 +475,9 @@ export const ChatComposer = memo(function ChatComposer({
             },
           ),
     );
-    if (!replyActive || disabled) {
-      replyHoldTarget.set(replyActive ? 1 : 0);
-      replyHold.set(withTiming(replyActive ? 1 : 0, timing));
-    }
-  }, [
-    replyActive,
-    replyActiveValue,
-    replyPresence,
-    replyHold,
-    replyHoldTarget,
-    shapeDuration,
-    disabled,
-    reducedMotion,
-  ]);
-  useAnimatedReaction(
-    () => keyboardProgress.get(),
-    (progress, previous) => {
-      if (!replyActiveValue.get() || replyHold.get() > 0) return;
-      if (progress >= 0.99) {
-        replyHoldTarget.set(1);
-        replyHold.set(1);
-      } else if (previous !== null && progress < previous) {
-        replyHoldTarget.set(1);
-        replyHold.set(progress);
-        replyHold.set(
-          withTiming(1, { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System }),
-        );
-      }
-    },
-  );
+    replyHoldTarget.set(replyActive ? 1 : 0);
+    replyHold.set(replyActive ? (reducedMotion ? 1 : withSpring(1, REPLY_SPRING)) : withTiming(0, timing));
+  }, [replyActive, replyPresence, replyHold, replyHoldTarget, shapeDuration, reducedMotion]);
   const keyboardExpansion = useSharedValue(0);
   const keyboardExpansionTarget = useSharedValue(0);
   useAnimatedReaction(
@@ -665,17 +635,6 @@ export const ChatComposer = memo(function ChatComposer({
     ],
   }));
   const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    if (!focused || !replyActive) return;
-    const timer = setTimeout(() => {
-      if (replyHold.get() > 0 || keyboardProgress.get() > 0) return;
-      replyHoldTarget.set(1);
-      replyHold.set(
-        withTiming(1, { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System }),
-      );
-    }, REPLY_KEYBOARD_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [focused, replyActive, replyHold, replyHoldTarget, keyboardProgress, shapeDuration]);
 
   useLayoutEffect(() => {
     if (files.length > 0) sendGate.edit();
