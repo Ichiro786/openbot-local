@@ -95,7 +95,12 @@ import { AttachmentPreviewSheet } from "./attachment-preview-sheet";
 import { ComposerAttachmentTile, localPreviewUri } from "./composer-attachment-tile";
 import type { ComposerContextMeter } from "./composer-context-ring";
 import { DictationMic, DictationStrip } from "./composer-dictation";
-import { addPastedFiles, ComposerPasteTarget, type PastedFiles } from "./composer-paste-target";
+import {
+  addPastedFiles,
+  type ComposerPasteHandle,
+  ComposerPasteTarget,
+  type PastedFiles,
+} from "./composer-paste-target";
 import { ComposerSendControl } from "./composer-send-control";
 import type { ComposerVoice } from "./composer-voice";
 import type { ChatAttachments } from "./use-chat-attachments";
@@ -292,6 +297,8 @@ export const ChatComposer = memo(function ChatComposer({
   const isFocused = useIsFocused();
   const latestTextRef = useRef(draft);
   const [sendGate] = useState(createComposerSendGate);
+  const pasteRef = useRef<ComposerPasteHandle>(null);
+  const composingSent = useRef(false);
   const voiceOpen = voice?.open ?? false;
   const colorOSFrost = useColorOSMotion().enabled;
   const frosted = isAndroid && ANDROID_BLUR && !liquidGlassAvailable && colorOSFrost && frostTarget !== undefined;
@@ -655,6 +662,20 @@ export const ChatComposer = memo(function ChatComposer({
     latestTextRef.current = draft;
   }, [draft]);
 
+  useLayoutEffect(() => {
+    if (!composingSent.current) return;
+    composingSent.current = false;
+    const field = pasteRef.current;
+    if (draft || !field?.resetComposing) return;
+    sendGate.holdFieldText();
+    field.resetComposing().then(
+      (cleared) => {
+        if (!cleared) sendGate.releaseFieldText();
+      },
+      () => sendGate.releaseFieldText(),
+    );
+  }, [draft, sendGate]);
+
   useEffect(() => {
     if (disabled) inputRef.current?.blur();
   }, [disabled]);
@@ -848,6 +869,7 @@ export const ChatComposer = memo(function ChatComposer({
     }
     if (keepsKeyboardOnSend) {
       if (!sendGate.submit(false)) return;
+      composingSent.current = true;
       onSend(latestTextRef.current);
       return;
     }
@@ -1146,7 +1168,7 @@ export const ChatComposer = memo(function ChatComposer({
                 <Animated.View
                   style={[{ position: "absolute", left: FIELD_INSET, right: FIELD_INSET, bottom: 0 }, fieldSlideStyle]}
                 >
-                  <ComposerPasteTarget onPasteFiles={pasteFiles} onSubmitKey={submitKey}>
+                  <ComposerPasteTarget ref={pasteRef} onPasteFiles={pasteFiles} onSubmitKey={submitKey}>
                     <TextInput
                       ref={inputRef}
                       nativeID="chat-composer-input"
@@ -1185,7 +1207,11 @@ export const ChatComposer = memo(function ChatComposer({
                       }}
                       onBlur={() => setFocused(false)}
                       onChangeText={(text) => {
-                        if (sendGate.ignoresFieldText()) return;
+                        if (sendGate.ignoresFieldText()) {
+                          if (text === "") sendGate.releaseFieldText();
+                          return;
+                        }
+                        composingSent.current = false;
                         if (dictationBusy) {
                           if (dictating) finishDictation();
                           return;

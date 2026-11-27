@@ -10,6 +10,8 @@ import android.provider.OpenableColumns
 import android.view.DragEvent
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.webkit.MimeTypeMap
 import android.widget.EditText
 import androidx.core.view.ContentInfoCompat
@@ -78,6 +80,32 @@ class ComposerPasteView(context: Context, appContext: AppContext) : ExpoView(con
     if (child is EditText) {
       ViewCompat.setOnReceiveContentListener(child, null, null)
       child.setOnKeyListener(null)
+    }
+  }
+
+  fun resetComposing(): Boolean {
+    val field = composerField() ?: return false
+    val cleared = !field.text.isNullOrEmpty()
+    field.clearComposingText()
+    field.text?.clear()
+    val keyboard = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+    if (keyboard != null && field.isAttachedToWindow && keyboard.isActive(field)) keyboard.restartInput(field)
+    return cleared
+  }
+
+  private fun composerField(): EditText? {
+    val fields = mutableListOf<EditText>()
+    collectFields(this, fields)
+    val attached = fields.filter { it.isAttachedToWindow }
+    return attached.firstOrNull { it.isFocused } ?: attached.firstOrNull()
+  }
+
+  private fun collectFields(group: ViewGroup, fields: MutableList<EditText>) {
+    for (index in 0 until group.childCount) {
+      when (val child = group.getChildAt(index)) {
+        is EditText -> fields.add(child)
+        is ViewGroup -> collectFields(child, fields)
+      }
     }
   }
 
@@ -211,6 +239,10 @@ class ComposerPasteModule : Module() {
 
       Prop("maxBytes") { view: ComposerPasteView, maxBytes: Int ->
         view.maxBytes = maxBytes.toLong()
+      }
+
+      AsyncFunction("resetComposing") { view: ComposerPasteView ->
+        view.resetComposing()
       }
     }
 
