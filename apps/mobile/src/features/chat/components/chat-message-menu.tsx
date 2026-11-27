@@ -193,7 +193,14 @@ export function openMessageMenu({
   }
   if (items.length === 0 && !onReact) return false;
   const reactions: GlassReactions | undefined = onReact
-    ? { quick: QUICK_REACTIONS, all: ALL_REACTIONS, own, reactLabel: labels.react, moreLabel: labels.moreEmoji }
+    ? {
+        quick: QUICK_REACTIONS,
+        all: ALL_REACTIONS,
+        own,
+        reactLabel: labels.react,
+        moreLabel: labels.moreEmoji,
+        onPick: onReact,
+      }
     : undefined;
   const handlers: Record<string, (() => void) | undefined> = {
     reply: onReply,

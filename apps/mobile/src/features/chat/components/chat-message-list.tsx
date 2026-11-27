@@ -1150,7 +1150,7 @@ const MessageRow = memo(function MessageRow({
             onBranch: shared.branchPoints.has(bubble.id) ? () => actions.branch(bubble) : undefined,
             onCopy: copyText ? () => actionsControl.current?.copy() : undefined,
             onSelectText: selectable ? () => actions.selectText(bubble) : undefined,
-            onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji) : undefined,
+            onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji, true) : undefined,
             sendToChannel: messageActions.sendToChannel,
             pinned: messageActions.pinned,
             onTogglePin: messageActions.togglePin,

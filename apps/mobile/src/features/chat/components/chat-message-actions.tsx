@@ -36,6 +36,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { useMotion } from "@/shared/lib/motion";
 import { springs, timings } from "@/shared/lib/motion-tokens";
 import { currentText, useText } from "@/shared/lib/text";
+import { whenGlassMenuGone } from "@/shared/motion/GlassMenu";
 import { press as colorOSPress } from "@/shared/motion/tokens";
 import { type MessageChannelTargets, type MessageFiles, openMessageActions } from "../model/message-actions-sheet";
 import { useCopyMessage } from "./use-copy-message";
@@ -157,7 +158,7 @@ function ActionButton({
 }
 
 export type MessageActionsControl = {
-  react: (emoji: string | null) => void;
+  react: (emoji: string | null, silent?: boolean) => void;
   copy: () => void;
 
   own: string | null;
@@ -245,16 +246,18 @@ export function ChatMessageActions({
   const own = shown.find((reaction) => reaction.actor.kind === "user")?.emoji ?? null;
   const pops = useReactionPops(shown, true);
 
-  const react = (emoji: string | null) => {
+  const react = (emoji: string | null, silent = false) => {
     if (!onReact) return;
     setPickerOpen(false);
     setMoreEmoji(false);
     setPending({ emoji, over: reactions });
-    void haptics.selection();
+    if (!silent) void haptics.selection();
     onReact(emoji).catch((error: unknown) => {
       setPending(null);
       void haptics.notification("error");
-      showFailureAlert(error, "turn", t("mobile.chat.message.reactionFailed"), t("mobile.chat.copyFailedMessage"));
+      whenGlassMenuGone(() =>
+        showFailureAlert(error, "turn", t("mobile.chat.message.reactionFailed"), t("mobile.chat.copyFailedMessage")),
+      );
     });
   };
   if (controlRef) controlRef.current = { react, copy: () => void copy(), own };

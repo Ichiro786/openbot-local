@@ -72,6 +72,7 @@ export type GlassReactions = {
   own: string | null;
   reactLabel: (emoji: string) => string;
   moreLabel: string;
+  onPick?: (emoji: string | null) => void;
 };
 
 export type GlassMenuAnchor = { x: number; y: number; width: number; height: number };
@@ -199,6 +200,18 @@ export function openGlassMenu(request: Omit<GlassMenuRequest, "key">): number | 
   });
   previous?.onClose(false);
   return key;
+}
+
+export function whenGlassMenuGone(run: () => void): void {
+  if (useGlassMenuStore.getState().request === null) {
+    run();
+    return;
+  }
+  const unsubscribe = useGlassMenuStore.subscribe((state) => {
+    if (state.request !== null) return;
+    unsubscribe();
+    run();
+  });
 }
 
 /** Closes the menu with this key at once, without an action (its opener unmounted). */
@@ -406,6 +419,7 @@ function GlassMenuOverlay({
   const dragScroll0 = useSharedValue(0);
   const dragScrolling = useSharedValue(false);
   const done = useRef(false);
+  const handled = useRef(false);
   const safety = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build 11.3 motion B7 (audit N18): the open starts in the commit that mounts the menu, not an
@@ -435,7 +449,7 @@ function GlassMenuOverlay({
     const { onClose, onSelect, key } = request;
     if (useGlassMenuStore.getState().request?.key === key) useGlassMenuStore.setState({ request: null });
     onClose(id !== null);
-    if (id === null) {
+    if (id === null || handled.current) {
       cancelled.delete(key);
       return;
     }
@@ -449,10 +463,14 @@ function GlassMenuOverlay({
     );
   };
 
-  const dismiss = (id: string | null) => {
+  const dismiss = (id: string | null, now?: () => void) => {
     if (closing.current) return;
     closing.current = true;
     closingNow.set(true);
+    if (id !== null && now) {
+      handled.current = true;
+      now();
+    }
     safety.current = setTimeout(() => finish(id), CLOSE_SAFETY_MS);
     fade.set(
       withTiming(0, { duration: 120, easing: Easing.in(Easing.cubic) }, () => {
@@ -809,8 +827,11 @@ function GlassMenuOverlay({
             setPickerOpen(true);
           }}
           onPick={(emoji) => {
+            if (closing.current) return;
             void haptics.selection();
-            dismiss(reactionMenuId(emoji === reactions.own ? null : emoji));
+            const picked = emoji === reactions.own ? null : emoji;
+            const { onPick } = reactions;
+            dismiss(reactionMenuId(picked), onPick ? () => onPick(picked) : undefined);
           }}
         />
       ) : null}
