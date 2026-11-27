@@ -446,6 +446,7 @@ interface MessageRowShared {
   textReveal: boolean;
   replySession: { progress: Map<string, number>; revealed: Set<string> };
   markRevealed: (id: string) => void;
+  markPlaying: (id: string, playing: boolean) => void;
   replyHaptics: ReturnType<typeof useReplyHaptics>;
   canReply: boolean;
   canReact: boolean;
@@ -769,6 +770,7 @@ const MessageRow = memo(function MessageRow({
     firstMessageStyle,
     replySession,
     markRevealed,
+    markPlaying,
     replyHaptics,
     actions,
   } = shared;
@@ -794,7 +796,10 @@ const MessageRow = memo(function MessageRow({
               markRevealed(message.id);
               replyHaptics.onFlush();
             },
-            onComplete: replyHaptics.onComplete,
+            onComplete: (drained: boolean) => {
+              if (!drained) replyHaptics.onComplete();
+            },
+            onPlaying: (playing: boolean) => markPlaying(message.id, playing),
           }
         : undefined,
     [
@@ -807,6 +812,7 @@ const MessageRow = memo(function MessageRow({
       playbackPaused,
       revealed,
       markRevealed,
+      markPlaying,
       replyHaptics,
     ],
   );
@@ -1912,6 +1918,23 @@ export const ChatMessageList = memo(function ChatMessageList({
     },
     [replySession],
   );
+  const [playingState, setPlayingState] = useState<{ session: typeof replySession; ids: ReadonlySet<string> }>({
+    session: replySession,
+    ids: NO_IDS,
+  });
+  const replyPlaying = playingState.session === replySession && playingState.ids.size > 0;
+  const markPlaying = useCallback(
+    (id: string, playing: boolean) =>
+      setPlayingState((state) => {
+        const ids = state.session === replySession ? state.ids : NO_IDS;
+        if (ids.has(id) === playing) return state.session === replySession ? state : { session: replySession, ids };
+        const next = new Set(ids);
+        if (playing) next.add(id);
+        else next.delete(id);
+        return { session: replySession, ids: next };
+      }),
+    [replySession],
+  );
   const { arriving: arrivals, entrances } = useMessageArrivals(replySession.key, messages, watchesArrivals);
   const messageColorMode = useMessageColor((state) => state.mode);
   const customMessageColor = useMessageColor((state) => state.customColor);
@@ -2160,6 +2183,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       textReveal,
       replySession,
       markRevealed,
+      markPlaying,
       replyHaptics,
       canReply,
       canReact,
@@ -2200,6 +2224,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       textReveal,
       replySession,
       markRevealed,
+      markPlaying,
       replyHaptics,
       canReply,
       canReact,
@@ -2449,11 +2474,17 @@ export const ChatMessageList = memo(function ChatMessageList({
     onScrollBeginDrag,
     onScrollEndDrag,
   } = motion;
-  const followConfig = !followsEnd
-    ? false
-    : followMode === "reply" && colorOSOn && !reducedMotion
-      ? FOLLOW_REPLY
-      : FOLLOW_END;
+  const replyStreaming = messages.some(isStreamingReply);
+  const followGlides = followsEnd && followMode === "reply" && colorOSOn && !reducedMotion;
+  const followShifts = followGlides && (replyStreaming || replyPlaying);
+  const followConfig = !followsEnd ? false : followGlides && !followShifts ? FOLLOW_REPLY : FOLLOW_END;
+  const { streamFollow, handOffOpening } = motion;
+  useEffect(() => {
+    streamFollow.set(followShifts);
+  }, [streamFollow, followShifts]);
+  useEffect(() => {
+    if (replyStreaming && colorOSOn && historyVisible) handOffOpening();
+  }, [replyStreaming, colorOSOn, historyVisible, handOffOpening]);
   const list = useMemo(
     () => (
       <KeyboardAwareLegendList
@@ -2600,7 +2631,10 @@ export const ChatMessageList = memo(function ChatMessageList({
     </>
   );
 
-  const pullStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -(pullShift?.get() ?? 0) }] }));
+  const followShift = motion.followShift;
+  const pullStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: followShift.get() - (pullShift?.get() ?? 0) }],
+  }));
   const body = (
     <Animated.View
       onTouchStart={selectingMessageId ? onTouchStart : undefined}

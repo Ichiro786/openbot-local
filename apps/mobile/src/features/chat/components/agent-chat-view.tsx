@@ -219,7 +219,9 @@ export function MobileChatView({
     [withLiveQuestions, queue.deliveries],
   );
   const [historyLoadFailed, setHistoryLoadFailed] = useState(false);
-  const [catchingUp, setCatchingUp] = useState(false);
+  const [catchingUp, setCatchingUp] = useState(
+    () => online && Boolean(conversationStore.get(agent.id)) && !conversationStore.isUpToDate(agent.id),
+  );
   const [focus, setFocus] = useState<{ messageId: string; loaded: boolean; unread: boolean } | null>(() =>
     focusMessageId
       ? { messageId: focusMessageId, loaded: false, unread: false }
@@ -287,11 +289,15 @@ export function MobileChatView({
         setFocus((current) => (current?.messageId === messageId ? { ...current, loaded: true } : current));
       await readLatest();
     };
-    void load().catch(() => {
-      if (request.current !== id) return;
-      setHistoryLoadFailed(true);
-      setFocus(null);
-    });
+    void load()
+      .catch(() => {
+        if (request.current !== id) return;
+        setHistoryLoadFailed(true);
+        setFocus(null);
+      })
+      .finally(() => {
+        if (request.current === id) setCatchingUp(false);
+      });
   }, [
     agent.id,
     agent.serverId,

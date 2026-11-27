@@ -33,7 +33,11 @@ const ANDROID_PLACE_TIMEOUT_MS = 250;
 const KEYBOARD_SETTLE_MS = 450;
 const SEND_STILL_FRAMES = 3;
 
-const CATCH_UP_HOLD_MS = 450;
+const CATCH_UP_HOLD_MS = 1200;
+
+const FOLLOW_SHIFT_MS = 300;
+
+const OWN_GLIDE_CAP_MS = 1000;
 
 const REVEAL_MS = 240;
 const REVEAL_RISE = 14;
@@ -60,11 +64,6 @@ function reportSettledKeyboard(height: number): void {
     `Keyboard reported only when settled (no IME animation frames, or a resize): ${Math.round(height)} dp`,
   );
 }
-const OPENING_FOLLOW_MS = 600;
-const LANDED_DISTANCE = 2;
-const LANDING_FALLBACK_MS = 1000;
-const SEND_SETTLE_FALLBACK_MS = 1000;
-
 type AnchorReadyInfo = Parameters<NonNullable<AnchoredEndSpaceConfig["onReady"]>>[0];
 
 export function useChatMotion(
@@ -304,6 +303,23 @@ export function useChatMotion(
   const firstOpacity = useSharedValue(1);
   const responseOpacity = useSharedValue(1);
   const revealed = useSharedValue(false);
+  const streamFollow = useSharedValue(false);
+  const ownGlide = useSharedValue(false);
+  const followShift = useSharedValue(0);
+  const ownGlides = useRef(0);
+  const glideToEnd = useCallback(() => {
+    ownGlides.current += 1;
+    const glide = ownGlides.current;
+    ownGlide.set(true);
+    const done = () => {
+      if (glide === ownGlides.current) ownGlide.set(false);
+    };
+    setTimeout(done, OWN_GLIDE_CAP_MS);
+    const scroll = listRef.current?.scrollToEnd({ animated: true });
+    if (scroll) void scroll.then(done, done);
+    else done();
+    return scroll;
+  }, [ownGlide]);
   const [atLatest, setAtLatest] = useState(false);
   const atLatestNow = useRef(false);
   const [latestPlace, setLatestPlace] = useState<ChatLatestPlace>("latest");
@@ -326,24 +342,41 @@ export function useChatMotion(
   const [placedWithRows, setPlacedWithRows] = useState<boolean | null>(null);
   const listPlaced = !hasRows || placedWithRows === true;
   const shown = useRef(false);
-  const [catchUpWaited, setCatchUpWaited] = useState(!zoomed);
+  const holdsCatchUp = isAndroid && colorOS;
+  const [catchUpWaited, setCatchUpWaited] = useState(!holdsCatchUp);
   useEffect(() => {
     if (catchUpWaited) return;
     const timer = setTimeout(() => setCatchUpWaited(true), CATCH_UP_HOLD_MS);
     return () => clearTimeout(timer);
   }, [catchUpWaited]);
-  const catchUpHold = zoomed && catchingUp && !catchUpWaited;
+  const [catchUpSettled, setCatchUpSettled] = useState(!catchingUp);
 
   const [openingFollow, setOpeningFollow] = useState(!holdOpening);
 
   const openingFollowNow = useRef(openingFollow);
   openingFollowNow.current = openingFollow && !holdOpening;
-  const contentChangedAt = useRef(0);
   useEffect(() => {
-    if (!openingFollow || !ready || catchingUp) return;
-    const timer = setTimeout(() => setOpeningFollow(false), OPENING_FOLLOW_MS);
-    return () => clearTimeout(timer);
-  }, [openingFollow, ready, catchingUp]);
+    if (!holdsCatchUp || shown.current) return;
+    if (catchingUp) {
+      if (catchUpSettled) setCatchUpSettled(false);
+      return;
+    }
+    if (catchUpSettled) return;
+    let live = true;
+    let frame: number | null = null;
+    const settle = () => {
+      if (live) frame = requestAnimationFrame(() => setCatchUpSettled(true));
+    };
+    const scroll =
+      openingFollowNow.current && !scrolledUp.get() ? listRef.current?.scrollToEnd({ animated: false }) : undefined;
+    if (scroll) void scroll.then(settle, settle);
+    else settle();
+    return () => {
+      live = false;
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [holdsCatchUp, catchingUp, catchUpSettled, scrolledUp]);
+  const catchUpHold = holdsCatchUp && !catchUpWaited && (catchingUp || !catchUpSettled);
   const [pinnedToLatest, setPinnedToLatest] = useState(false);
   const heldOpening = useRef(holdOpening);
   const current = useRef({ lastUserId });
@@ -408,27 +441,15 @@ export function useChatMotion(
       reveal();
       return;
     }
-    const started = Date.now();
-    const landed = () => {
-      const state = listRef.current?.getState();
-      return !state || state.distanceFromEnd <= LANDED_DISTANCE || Date.now() - started >= LANDING_FALLBACK_MS;
+    let live = true;
+    const finish = () => {
+      if (live) reveal();
     };
-    if (landed()) {
-      reveal();
-      return;
-    }
-    let frame = requestAnimationFrame(function land() {
-      if (shown.current) return;
-      if (landed()) reveal();
-      else frame = requestAnimationFrame(land);
-    });
-    return () => cancelAnimationFrame(frame);
+    void (listRef.current?.scrollToEnd({ animated: false }) ?? Promise.resolve()).then(finish, finish);
+    return () => {
+      live = false;
+    };
   }, [listPlaced, ready, holdOpening, catchUpHold, hasRows, reveal]);
-  useEffect(() => {
-    if (!sendSettling) return;
-    const timer = setTimeout(() => setSendSettling(false), SEND_SETTLE_FALLBACK_MS);
-    return () => clearTimeout(timer);
-  }, [sendSettling]);
   useEffect(() => {
     if (!isAndroid || shown.current || !hasRows || placedWithRows === true || !ready || holdOpening) return;
     const started = Date.now();
@@ -456,11 +477,13 @@ export function useChatMotion(
       if (requiredInputFrame.current !== null) cancelAnimationFrame(requiredInputFrame.current);
       requiredInputFrame.current = requestAnimationFrame(() => {
         requiredInputFrame.current = null;
-        if (followLatest.current) void listRef.current?.scrollToEnd({ animated: !reducedMotion });
+        if (!followLatest.current) return;
+        if (reducedMotion) void listRef.current?.scrollToEnd({ animated: false });
+        else void glideToEnd();
       });
     }
     lastRequiredInputId.current = requiredInputId;
-  }, [requiredInputId, reducedMotion]);
+  }, [requiredInputId, reducedMotion, glideToEnd]);
   useEffect(
     () => () => {
       if (requiredInputFrame.current !== null) cancelAnimationFrame(requiredInputFrame.current);
@@ -481,7 +504,6 @@ export function useChatMotion(
     (_width: number, height: number) => {
       measurements.current.content = height;
       content.set(height);
-      contentChangedAt.current = Date.now();
       // Build #101/#102: while the chat is pinned, any growth (rows measured, latest page, end space) keeps the end.
       keepEnd();
     },
@@ -557,7 +579,7 @@ export function useChatMotion(
         finish();
         return;
       }
-      const scroll = listRef.current?.scrollToEnd({ animated: !reducedMotion });
+      const scroll = reducedMotion ? listRef.current?.scrollToEnd({ animated: false }) : glideToEnd();
       if (scroll) void scroll.then(finish, finish);
       else finish();
     };
@@ -568,7 +590,18 @@ export function useChatMotion(
       if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
       sendScrollFrame.current = null;
     };
-  }, [lastUserId, colorOS, content, composerHeight, scrollOffset, atEnd, keyboardMoving, reducedMotion, reveal]);
+  }, [
+    lastUserId,
+    colorOS,
+    content,
+    composerHeight,
+    scrollOffset,
+    atEnd,
+    keyboardMoving,
+    reducedMotion,
+    reveal,
+    glideToEnd,
+  ]);
   const onAnchorReady = useCallback(
     (info: AnchorReadyInfo, anchorMaxSize?: number) => {
       const send = pending.current;
@@ -600,7 +633,7 @@ export function useChatMotion(
             return;
           }
           sendScrollFrame.current = null;
-          void listRef.current?.scrollToEnd({ animated: true });
+          void glideToEnd();
         };
         sendScrollFrame.current = requestAnimationFrame(() => {
           sendScrollFrame.current = requestAnimationFrame(step);
@@ -631,6 +664,7 @@ export function useChatMotion(
       firstOffset,
       firstOpacity,
       fallback,
+      glideToEnd,
       header,
       keyboardHeight,
       keyboardMoving,
@@ -660,6 +694,15 @@ export function useChatMotion(
       if (place === null || place === sentLatestPlace.get()) return;
       sentLatestPlace.set(place);
       scheduleOnRN(updateLatestPlace, place);
+    },
+  );
+  useAnimatedReaction(
+    () => scrollOffset.get(),
+    (y, previous) => {
+      if (previous === null || y <= previous) return;
+      if (!streamFollow.get() || dragging.get() || keyboardMoving.get() || !revealed.get() || ownGlide.get()) return;
+      followShift.set(Math.min(header, followShift.get() + y - previous));
+      followShift.set(withSpring(0, { duration: FOLLOW_SHIFT_MS, dampingRatio: 1, reduceMotion: ReduceMotion.System }));
     },
   );
   useAnimatedReaction(
@@ -819,8 +862,15 @@ export function useChatMotion(
   const scrollToLatest = useCallback(() => {
     followLatest.current = true;
     setKeyboardLiftBehavior("whenAtEnd");
-    void listRef.current?.scrollToEnd({ animated: !reducedMotion });
-  }, [reducedMotion]);
+    if (reducedMotion) void listRef.current?.scrollToEnd({ animated: false });
+    else void glideToEnd();
+  }, [reducedMotion, glideToEnd]);
+  const handOffOpening = useCallback(() => {
+    if (!shown.current || !openingFollowNow.current || scrolledUp.get()) return;
+    openingFollowNow.current = false;
+    setOpeningFollow(false);
+    setPinnedToLatest(true);
+  }, [scrolledUp]);
   const pinToLatest = useCallback(() => {
     setPinnedToLatest(true);
     scrollToLatest();
@@ -852,6 +902,9 @@ export function useChatMotion(
       scrollOffset,
       dragging,
       atEnd,
+      streamFollow,
+      followShift,
+      handOffOpening,
       historyStyle,
       revealed,
       firstMessageStyle,
@@ -891,6 +944,9 @@ export function useChatMotion(
       scrollOffset,
       dragging,
       atEnd,
+      streamFollow,
+      followShift,
+      handOffOpening,
       historyStyle,
       revealed,
       firstMessageStyle,
