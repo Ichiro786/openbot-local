@@ -66,7 +66,7 @@ import { openChatFromPane, useChatListPane } from "@/features/agents/components/
 import { reportMobileNotification } from "@/features/analytics/failure-reports";
 import { MobileSearchResults, SearchCaption } from "@/features/search/components/mobile-search-results";
 import { setHomeSearchOpener } from "@/features/search/model/home-search-request";
-import { useAppDrawerMoving } from "@/features/servers/components/app-drawer-activity";
+import { useAppDrawerMoving, useAppDrawerShown } from "@/features/servers/components/app-drawer-activity";
 import { useAppDrawer } from "@/features/servers/components/app-drawer-shell";
 import { TaskListRow } from "@/features/servers/components/task-list-row";
 import { taskStartId } from "@/features/servers/model/task-start-id";
@@ -79,6 +79,7 @@ import {
 import { BlurSwap } from "@/shared/components/blur-swap";
 import { useBottomFieldMetrics } from "@/shared/components/bottom-field-metrics";
 import { ANDROID_BLUR, GLASS_CAPSULE_HEIGHT, GlassCapsule } from "@/shared/components/glass-capsule";
+import { LargeTitleBar } from "@/shared/components/large-title";
 import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-effect";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { haptics } from "@/shared/lib/haptics";
@@ -424,9 +425,10 @@ export function HomeSearchResults({
   const colorOS = useColorOSMotion().enabled;
   const drawerMoving = useAppDrawerMoving();
   const covered = useHomeCovered();
+  const menuFrost = useGlassMenuFrostOpen();
   const frosted = isAndroid && ANDROID_BLUR && colorOS && Boolean(blurTarget);
   const blurRunning =
-    frosted && search.open && search.settled && !drawerMoving && !covered && Boolean(blurTarget?.current);
+    frosted && search.open && search.settled && !drawerMoving && !covered && !menuFrost && Boolean(blurTarget?.current);
   const blurLive = useBlurLive(blurRunning);
   useBlurBudget(blurLive, "home-search-results");
   const { progress, closing } = search;
@@ -1002,10 +1004,11 @@ function useHomeAtRest(): boolean {
  * the motion. Only the capsule reads the drawer state, so the field itself does not render again.
  */
 function HomeFieldCapsule({ blurPaused = false, ...props }: ComponentProps<typeof GlassCapsule>) {
-  const drawerMoving = useAppDrawerMoving();
+  const drawerShown = useAppDrawerShown();
   // Build 11.3 simple zoom: home stays drawn under a zoomed chat; its blurs pause while a chat covers it.
   const covered = useHomeCovered();
-  return <GlassCapsule {...props} blurPaused={blurPaused || drawerMoving || covered} colorOSFrost />;
+  const menuFrost = useGlassMenuFrostOpen();
+  return <GlassCapsule {...props} blurPaused={blurPaused || drawerShown || covered || menuFrost} colorOSFrost />;
 }
 
 /** The ColorOS edge blur behind the home field; it pauses with the field's blur (drawer included) and under a frosted menu. */
@@ -1013,14 +1016,25 @@ function HomeSearchEdge({
   paused,
   ...props
 }: { paused: boolean } & Omit<ComponentProps<typeof HomeEdgeBlur>, "paused">) {
-  const drawerMoving = useAppDrawerMoving();
+  const drawerShown = useAppDrawerShown();
   // Build 10: a frosted glass menu (••• or an agent row's long-press) is one more blur over the pill,
   // so the edge pauses while it is open and home runs at most two.
   const menuFrost = useGlassMenuFrostOpen();
   const covered = useHomeCovered();
   return (
-    <HomeEdgeBlur {...props} paused={paused || drawerMoving || menuFrost || covered} menuOpen={menuFrost || covered} />
+    <HomeEdgeBlur {...props} paused={paused || drawerShown || menuFrost || covered} menuOpen={menuFrost || covered} />
   );
+}
+
+export function HomeTitleBar({
+  searchOpen,
+  searchBarShown,
+  ...props
+}: { searchOpen: boolean; searchBarShown: boolean } & ComponentProps<typeof LargeTitleBar>) {
+  const edgeBlur = useColorOSMotion().enabled && searchBarShown;
+  const menuFrost = useGlassMenuFrostOpen();
+  const covered = useHomeCovered();
+  return <LargeTitleBar {...props} blurPaused={searchOpen || edgeBlur || menuFrost || covered} />;
 }
 
 interface Shortcut {

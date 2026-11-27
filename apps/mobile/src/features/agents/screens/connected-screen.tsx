@@ -79,6 +79,7 @@ import {
   HomeSearchBar,
   HomeSearchList,
   HomeSearchResults,
+  HomeTitleBar,
   useHomeSearch,
 } from "@/features/search/components/home-search";
 import { setHomeSearchUnavailable } from "@/features/search/model/home-search-request";
@@ -113,7 +114,7 @@ import { AndroidBlurTarget } from "@/shared/components/android-header-blur";
 import { useAppLoadingOverlay, useScreenLoadingLabel } from "@/shared/components/app-loading-overlay";
 import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
-import { LargeTitle, LargeTitleBar, useLargeTitleScroll } from "@/shared/components/large-title";
+import { LargeTitle, useLargeTitleScroll } from "@/shared/components/large-title";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
 import {
   GlassButton,
@@ -1098,16 +1099,18 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
       </AndroidBlurTarget>
 
       {onboarding.active ? null : (
-        <LargeTitleBar
+        <HomeTitleBar
           scroll={scroll}
           title={activeServer.name}
           blurTarget={barBlurTarget}
           androidSurfaceWithTitle={homeCard}
           hidden={!searchShows || statusShows || search.open}
+          searchOpen={search.open}
+          searchBarShown={searchShows && !updateHeader.expanded}
         >
           <AppUpdateBlock header={updateHeader} scroll={scroll} hidden={search.open} />
           <OtaUpdateBlock banner={otaBanner} scroll={scroll} hidden={search.open} />
-        </LargeTitleBar>
+        </HomeTitleBar>
       )}
 
       {searchShows ? (
