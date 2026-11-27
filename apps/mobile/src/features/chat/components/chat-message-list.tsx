@@ -2364,7 +2364,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   const openTaggedTab = useTaggedTabOpener(target.serverId);
   const activityRows = useActivityPresence(
     (activities?.length ? activities : [activity]).flatMap((entry) => activitySpec(entry) ?? []),
-    motion.sendSettling,
   );
 
   const heldActionsId =
@@ -2476,12 +2475,16 @@ export const ChatMessageList = memo(function ChatMessageList({
   } = motion;
   const replyStreaming = messages.some(isStreamingReply);
   const followGlides = followsEnd && followMode === "reply" && colorOSOn && !reducedMotion;
-  const followShifts = followGlides && (replyStreaming || replyPlaying);
+  const { streamFollow, handOffOpening, sendFollow, endSendFollow } = motion;
+  const replyFollows = replyStreaming || replyPlaying;
+  const followShifts = followGlides && (replyFollows || sendFollow);
   const followConfig = !followsEnd ? false : followGlides && !followShifts ? FOLLOW_REPLY : FOLLOW_END;
-  const { streamFollow, handOffOpening } = motion;
   useEffect(() => {
     streamFollow.set(followShifts);
   }, [streamFollow, followShifts]);
+  useEffect(() => {
+    if (replyFollows) endSendFollow();
+  }, [replyFollows, endSendFollow]);
   useEffect(() => {
     if (replyStreaming && colorOSOn && historyVisible) handOffOpening();
   }, [replyStreaming, colorOSOn, historyVisible, handOffOpening]);
@@ -2631,9 +2634,9 @@ export const ChatMessageList = memo(function ChatMessageList({
     </>
   );
 
-  const followShift = motion.followShift;
+  const { followShift, composerShift } = motion;
   const pullStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: followShift.get() - (pullShift?.get() ?? 0) }],
+    transform: [{ translateY: followShift.get() + composerShift.get() - (pullShift?.get() ?? 0) }],
   }));
   const body = (
     <Animated.View
