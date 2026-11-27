@@ -23,6 +23,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 import { useGlassMenuDoubleFrost, useGlassMenuPauses } from "@/shared/motion/GlassMenu";
 import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -138,7 +139,8 @@ export function ColorOSChatHeader({
   const plusMenu = useGlassMenuPauses("header");
   // Build 11.3 simple zoom: the band's blur starts once a zoom open has settled (none under the moving chat).
   const settled = useLiveZoomSettled();
-  const bandOn = Boolean(frostTarget) && !menuDouble && !plusMenu && settled;
+  const focused = useScreenFocusedWhile(true);
+  const bandOn = Boolean(frostTarget) && !menuDouble && !plusMenu && settled && focused;
   // Build 11.3: the band ends above the pill, so the pill and the side buttons (which reach below it)
   // carry their own solid glass fill; text under them never shows through sharp.
   const material = "solid";
@@ -154,6 +156,8 @@ export function ColorOSChatHeader({
   // back to this, plus the cut-outs below.
   const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
   const pillTop = topInset + ROW_TOP + AVATAR - OVERLAP;
+  const pillBottom = pillTop + PILL_HEIGHT;
+  const blurHeight = pillBottom + 24;
   // Build 11.3 batch 1 + build 13: the name pill, Back and ••• each get a full-strength frost + dim cut
   // from the band's one blur, in their own shape (text under them never reads sharp), then their solid
   // glass fill. The pill is centred in the middle column, as the row lays it out.
@@ -232,10 +236,12 @@ export function ColorOSChatHeader({
         shown={bandOn}
         solid={(topInset * 0.5) / bandHeight}
         fadeHeight={bandHeight}
+        blurHeight={blurHeight}
+        blurSolid={pillBottom / blurHeight}
         shapes={cutOuts}
         // Build 14: from the chat's first frame (the blur starts after the open, and stops for its close).
         scrim={Boolean(frostTarget) && !menuDouble && !plusMenu}
-        style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT }]}
+        style={[styles.band, { top: 0, height: blurHeight }]}
       />
       <View
         pointerEvents="box-none"

@@ -6,6 +6,7 @@ import { useUniwind } from "uniwind";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { GlintRim } from "@/shared/glass/GlintRim";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 import { useLiveZoomSettled } from "./liveZoom";
 import { composerFrost } from "./tokens";
 import { useBlurLive } from "./useBlurLive";
@@ -41,7 +42,8 @@ export function ComposerFrost({
   const visible = useSharedValue(0);
   // Build 11.3 simple zoom: no blur starts during a zoom open (it would re-render under the moving chat).
   const settled = useLiveZoomSettled();
-  const on = ready && shown && ANDROID_BLUR && settled;
+  const focused = useScreenFocusedWhile(true);
+  const on = ready && shown && ANDROID_BLUR && settled && focused;
   // Paused = not blurring at once (build 9 rule 8): the blur is hidden and set to `none` in the same
   // commit and the glass goes with it (the solid fill takes its place), so a menu that takes this
   // frost's place never runs alongside it and no unblurred glass fill is ever seen.

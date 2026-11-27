@@ -11,7 +11,9 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useUniwind } from "uniwind";
 import { AndroidStackBackButton } from "@/shared/components/android-header-button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
+import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { typeScale } from "@/shared/lib/type-scale";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 
 const BLUR_INTENSITY = 40;
 const SURFACE_OPACITY = 0.8;
@@ -66,6 +68,9 @@ export function AndroidHeaderBlur({
   progress?: SharedValue<number>;
 }) {
   const { theme } = useUniwind();
+  const focused = useScreenFocusedWhile(true);
+  const running = ANDROID_BLUR && focused;
+  useBlurBudget(running, "android-header");
   const fullBar = useSharedValue(1);
   const shown = progress ?? fullBar;
   const maskProps = useAnimatedProps(() => ({ opacity: shown.get() }));
@@ -94,10 +99,10 @@ export function AndroidHeaderBlur({
     >
       <BlurView
         blurTarget={target}
-        blurMethod="dimezisBlurViewSdk31Plus"
+        blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
         intensity={BLUR_INTENSITY}
         tint={theme === "dark" ? "dark" : "light"}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { opacity: running ? 1 : 0 }]}
       />
       <View
         className={surface === "sheet" ? "bg-sheet" : "bg-background"}

@@ -53,8 +53,7 @@ import { useColorOSMotion } from "./useColorOSMotion";
  * thread, no layout per frame. The curve is critically damped (no overshoot, a gentle first frame).
  */
 const OPEN_MS = 300;
-const CLOSE_MS = 310;
-const CLOSE_EASING = Easing.bezier(0.32, 0, 0.2, 1);
+const CLOSE_MS = 300;
 const MORPH_AVATAR_BASE = 128;
 /** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
 const CRIT_K = 5.4;
@@ -296,7 +295,7 @@ function useLiveZoomMotion(
         gesture.set(withTiming(0, { duration: Math.min(140, duration), easing: Easing.out(Easing.cubic) }));
       const done = api.closed;
       visible.set(
-        withTiming(0, { duration, easing: CLOSE_EASING }, (finished) => {
+        withTiming(0, { duration, easing: crit }, (finished) => {
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -512,10 +511,10 @@ function LiveZoomFrame({
     const centreX = originX.get() + originW.get() / 2;
     if (isClosing) {
       const t = 1 - clock;
-      const circleProgress = Math.min(1, t / 0.58);
+      const circleProgress = t;
       const targetDiameter = Math.min(closeW.get(), closeH.get()) * (hasAgent ? avatarScale : 1);
       const targetScale = Math.max(0.05, targetDiameter / width);
-      const travel = t * t * (3 - 2 * t);
+      const travel = t;
       const scale = 1 - (1 - targetScale) * travel;
       const half = height / 2 - (height / 2 - width / 2) * circleProgress;
       const targetCentreX = closeX.get() + closeW.get() / 2;
@@ -575,13 +574,11 @@ function LiveZoomFrame({
   const cardSurfaceStyle = useAnimatedStyle(() => {
     const c = card.get();
     if (!c.closing || !hasAgent) return { opacity: 1 };
-    return { opacity: Math.min(1, Math.max(0, 1 - (c.t - 0.42) / 0.3)) };
+    return { opacity: 1 - c.t };
   });
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing
-      ? Math.min(1, Math.max(0, 1 - c.t / 0.42))
-      : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
+    const opacity = c.closing ? 1 - c.t : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
     return {
       opacity,
       transform: [{ translateY: height / 2 - c.half }],
@@ -653,6 +650,7 @@ function LiveZoomFrame({
               size={MORPH_AVATAR_BASE}
               maxScale={1}
               animateIdle={false}
+              activityMood="idle"
             />
           </Animated.View>
         ) : null}

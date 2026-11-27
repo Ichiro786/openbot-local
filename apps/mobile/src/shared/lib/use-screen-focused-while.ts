@@ -14,9 +14,16 @@ export function useScreenFocusedWhile(enabled: boolean): boolean {
       update(navigation.isFocused());
       const removeFocus = navigation.addListener("focus", () => update(true));
       const removeBlur = navigation.addListener("blur", () => update(false));
+      const removeBeforeRemove = navigation.addListener("beforeRemove", (event) => {
+        update(false);
+        queueMicrotask(() => {
+          if (event.defaultPrevented && navigation.isFocused()) update(true);
+        });
+      });
       return () => {
         removeFocus();
         removeBlur();
+        removeBeforeRemove();
       };
     },
     [enabled, navigation],
