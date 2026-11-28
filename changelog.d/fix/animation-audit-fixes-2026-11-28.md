@@ -11,3 +11,4 @@
 - Keep Home Search results visible until the close animation ends.
 - Play the reaction animation when you add a reaction again.
 - Keep the card in place when a new Back gesture interrupts its return.
+- Play one haptic tick when a swipe starts a reply.
