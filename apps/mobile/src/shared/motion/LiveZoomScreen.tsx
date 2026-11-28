@@ -73,12 +73,9 @@ function critInverse(value: number): number {
   }
   return (low + high) / 2;
 }
-/** The card itself fades in over this share of the open (out over the close's last share): no hard edge on the row. */
-const CARD_FADE_SHARE = 0.1;
 /** The chat fades in over the card's opaque surface from this share of the clock, over this share. */
 const CONTENT_FADE_FROM = 0.75;
 const CONTENT_FADE_SHARE = 0.25;
-const HOME_FADE_SHARE = 0.12;
 /**
  * The open clock advances at most this much per drawn frame: a slow frame (the chat's mount, a busy
  * render thread) never skips the open, so its first drawn frame is the start and every frame moves.
@@ -86,9 +83,6 @@ const HOME_FADE_SHARE = 0.12;
 const MAX_STEP_MS = 25;
 /** The open settles by this at the latest (its deferred work then starts anyway). */
 const SETTLE_BOUND_MS = 1200;
-/** The card's narrowest start (a pinned tile grows from about its own width), and its widest (a row). */
-const MIN_START_SCALE = 0.3;
-const MAX_START_SCALE = 0.92;
 /** The card's corner on screen at the start, in dp (none once open: the chat fills the screen). */
 const START_RADIUS = 24;
 /**
@@ -513,7 +507,7 @@ function LiveZoomFrame({
       };
     }
     const open = crit(clock);
-    const startScale = Math.min(MAX_START_SCALE, Math.max(MIN_START_SCALE, originW.get() / width));
+    const startScale = Math.min(1, Math.max(0.05, originW.get() / width));
     const scale = startScale + (1 - startScale) * open;
     const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
     const centreY = originY.get() + originH.get() / 2;
@@ -532,11 +526,7 @@ function LiveZoomFrame({
   });
   const cardStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing
-      ? hasAgent
-        ? 1
-        : Math.min(1, Math.max(0, (1 - c.t) / 0.08))
-      : Math.min(1, Math.max(0, (c.clock - HOME_FADE_SHARE) / CARD_FADE_SHARE));
+    const opacity = c.closing && !hasAgent ? Math.min(1, Math.max(0, (1 - c.t) / 0.08)) : 1;
     return {
       opacity,
       transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
@@ -553,11 +543,13 @@ function LiveZoomFrame({
   const cardSurfaceStyle = useAnimatedStyle(() => {
     const c = card.get();
     if (!c.closing || !hasAgent) return { opacity: 1 };
-    return { opacity: 1 - c.t };
+    return { opacity: Math.min(1, (1 - c.t) / 0.2) };
   });
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing ? 1 - c.t : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
+    const opacity = c.closing
+      ? Math.max(0, 1 - c.t / 0.14)
+      : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
     return {
       opacity,
       transform: [{ translateY: height / 2 - c.half }],
@@ -565,7 +557,8 @@ function LiveZoomFrame({
   });
   const blobFillStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!c.closing || !hasAgent) return { opacity: 0 };
+    if (!hasAgent) return { opacity: 0 };
+    if (!c.closing) return { opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)) };
     const fadeIn = Math.min(1, Math.max(0, (c.t - 0.14) / 0.24));
     const fadeOut = Math.min(1, Math.max(0, 1 - (c.t - 0.52) / 0.28));
     return {
@@ -574,18 +567,31 @@ function LiveZoomFrame({
   });
   const blobAvatarStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!c.closing || !hasAgent) return { opacity: 0 };
+    if (!hasAgent) return { opacity: 0 };
+    const avatarBase = MORPH_AVATAR_BASE * Math.min(1, avatarScale);
+    if (!c.closing) {
+      const diameter = Math.min(closeW.get(), closeH.get()) * avatarScale;
+      const centreX = closeX.get() + closeW.get() / 2;
+      const centreY = closeY.get() + closeH.get() / 2;
+      return {
+        opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)),
+        transform: [
+          { translateX: ((centreX - originX.get() - originW.get() / 2) * (1 - c.open)) / c.scale },
+          { translateY: ((centreY - originY.get() - originH.get() / 2) * (1 - c.open)) / c.scale },
+          { scale: (diameter + (width - diameter) * c.open) / (avatarBase * c.scale) },
+        ],
+      };
+    }
     return {
       opacity: Math.min(1, Math.max(0, (c.t - 0.18) / 0.34)),
-      transform: [{ scale: width / MORPH_AVATAR_BASE }],
+      transform: [{ scale: width / avatarBase }],
     };
   });
   const dimStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opening = !c.closing && c.clock < 1;
     return {
-      backgroundColor: opening ? background : "#000",
-      opacity: opening ? Math.min(1, c.clock / HOME_FADE_SHARE) : DIM * c.open,
+      backgroundColor: "#000",
+      opacity: DIM * c.open,
     };
   });
   return (
