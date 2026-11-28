@@ -114,6 +114,7 @@ import { AndroidBlurTarget } from "@/shared/components/android-header-blur";
 import { useAppLoadingOverlay, useScreenLoadingLabel } from "@/shared/components/app-loading-overlay";
 import { Button } from "@/shared/components/button";
 import { ChromeGlassSheen } from "@/shared/components/chrome-glass-sheen";
+import { CornerSafeArea } from "@/shared/components/corner-safe-area";
 import { LargeTitle, useLargeTitleScroll } from "@/shared/components/large-title";
 import { type MenuAction, MenuView } from "@/shared/components/menu-view";
 import {
@@ -1127,19 +1128,24 @@ export function ConnectedScreen({ variant = "screen" }: { variant?: "screen" | "
 
       {pane ? (
         headerActions && !search.open ? (
-          <View
-            className="absolute flex-row items-center justify-between gap-2"
-            pointerEvents="box-none"
-            style={{
-              top: barTop,
-              left: insets.left + (isIOS ? 16 : 4),
-              right: insets.right + (isIOS ? 16 : 4),
-              height: PANE_BAR_HEIGHT,
-            }}
+          <CornerSafeArea
+            cornerAdaptation="horizontal"
+            style={{ position: "absolute", top: barTop, left: 0, right: 0, height: PANE_BAR_HEIGHT }}
           >
-            {headerLeading}
-            {headerTrailing}
-          </View>
+            {(barInsets) => (
+              <View
+                className="flex-1 flex-row items-center justify-between gap-2"
+                pointerEvents="box-none"
+                style={{
+                  paddingLeft: barInsets.left + (isIOS ? 16 : 4),
+                  paddingRight: barInsets.right + (isIOS ? 16 : 4),
+                }}
+              >
+                {headerLeading}
+                {headerTrailing}
+              </View>
+            )}
+          </CornerSafeArea>
         ) : null
       ) : null}
 
