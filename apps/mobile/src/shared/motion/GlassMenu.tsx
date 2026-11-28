@@ -706,7 +706,7 @@ function GlassMenuOverlay({
   const danger = dark ? "#ff6b6b" : "#d92d20";
   const tintTop = frost ? FROST_TINT_TOP : menu.tintTop;
   const tintBottom = frost ? FROST_TINT_BOTTOM : menu.tintBottom;
-  const glass = { frost, dark, tint, tintTop, tintBottom, gradientId };
+  const glass = { frost, dark, tint, tintTop, tintBottom, gradientId, region: Boolean(reactions) };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -879,6 +879,7 @@ type Glass = {
   tintTop: number;
   tintBottom: number;
   gradientId: string;
+  region: boolean;
 };
 
 /** The card's glass: the frost blur (or the solid card), the tint gradient and, frosted, the rim. */
@@ -889,6 +890,7 @@ function GlassFill({
   tintTop,
   tintBottom,
   gradientId,
+  region,
   radius,
   suffix = "",
 }: Glass & { width: number; height: number; radius: number; suffix?: string }) {
@@ -900,6 +902,7 @@ function GlassFill({
         // Frost: the BlurView lives outside the target (this host is a sibling after the navigator).
         <BlurView
           blurTarget={frost}
+          blurRegion={region}
           blurMethod="dimezisBlurViewSdk31Plus"
           intensity={FROST_INTENSITY}
           blurReductionFactor={4}
