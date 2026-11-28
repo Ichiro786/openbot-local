@@ -84,6 +84,13 @@ import { glassMenuHostBox, openGlassMenu, useGlassMenuPauses } from "@/shared/mo
 import { menu as menuTokens } from "@/shared/motion/tokens";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { editMentionDraft, insertMention, mentionDraft, mentionQuery } from "../model/chat-mentions";
+import {
+  composerField,
+  composerFieldParts,
+  shownComposerField,
+  syncComposerField,
+  typedComposerField,
+} from "../model/composer-field";
 import { applyMarkdownListEdit, markdownListReturn } from "../model/composer-lists";
 import { largePastedText } from "../model/composer-paste";
 import { createComposerSendGate } from "../model/composer-send";
@@ -387,6 +394,23 @@ export const ChatComposer = memo(function ChatComposer({
     inputRef.current?.focus();
   }, [skillPickerVersion, onChangeDraft]);
   const fontScale = useFontScale();
+  const fieldDirection = fieldDirectionStyle(displayText);
+  const fieldLook = `${fieldDirection?.writingDirection ?? ""}|${String(foreground)}|${fontScale}`;
+  const tagged = display.mentions.length > 0;
+  const [field, setField] = useState(() => composerField(displayText, fieldLook, tagged));
+  const syncedField = syncComposerField(field, displayText, fieldLook, tagged);
+  if (syncedField !== field) setField(syncedField);
+  const [fieldHead, fieldTail] = tagged
+    ? [displayText.slice(display.mentions.at(-1)?.end ?? 0), ""]
+    : composerFieldParts(syncedField);
+  const fieldClears = syncedField.clears;
+  useLayoutEffect(() => {
+    if (fieldClears) inputRef.current?.clear();
+  }, [fieldClears]);
+  const fieldBlank = syncedField.blank;
+  useLayoutEffect(() => {
+    if (fieldBlank) setField(shownComposerField);
+  }, [fieldBlank]);
   const insets = useSafeAreaInsets();
   const barWidth = useColumnWidth() - insets.left - insets.right;
   const lineHeight = 22 * fontScale;
@@ -1245,7 +1269,7 @@ export const ChatComposer = memo(function ChatComposer({
                         lineHeight: 22,
                         paddingVertical: FIELD_VERTICAL_PADDING / 2,
                         textAlignVertical: "top",
-                        ...fieldDirectionStyle(displayText),
+                        ...fieldDirection,
                       }}
                       onSelectionChange={({ nativeEvent }) =>
                         setCursor(
@@ -1273,6 +1297,7 @@ export const ChatComposer = memo(function ChatComposer({
                         if (pasted && attachments) {
                           latestTextRef.current = text;
                           onChangeDraft(text);
+                          setField((current) => typedComposerField(current, text));
                           void Promise.resolve()
                             .then(() => attachments?.pasteText(pasted.text, () => {}))
                             .then(() => {
@@ -1294,6 +1319,7 @@ export const ChatComposer = memo(function ChatComposer({
                           : editMentionDraft(source, text);
                         latestTextRef.current = next;
                         onChangeDraft(next);
+                        setField((current) => typedComposerField(current, text));
                       }}
                       onSubmitEditing={({ nativeEvent }) => {
                         if (!disabled) sendAndCloseField(editMentionDraft(latestTextRef.current, nativeEvent.text));
@@ -1312,7 +1338,8 @@ export const ChatComposer = memo(function ChatComposer({
                             </NativeText>
                           </NativeText>
                         ))}
-                        {displayText.slice(display.mentions.at(-1)?.end ?? 0)}
+                        {fieldHead}
+                        {fieldTail}
                       </NativeText>
                     </TextInput>
                   </ComposerPasteTarget>
