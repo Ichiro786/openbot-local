@@ -31,7 +31,10 @@ import {
 } from "@/features/settings/components/settings-content";
 import { IDENTITY_PICTURE_SIZE, SettingsIdentityHeader } from "@/features/settings/components/settings-identity-header";
 import { RowIcon } from "@/features/settings/components/settings-row-icon";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  useMobileWorkspaceActions,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
 import { useLiveServerRecovery } from "@/features/workspace/context/server-recovery-countdown";
 import type { MobileServer } from "@/features/workspace/model/workspace-types";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
@@ -43,8 +46,9 @@ import { useDiscardGuard } from "@/shared/lib/use-discard-guard";
 export function ServerSettingsScreen() {
   const { t } = useText();
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
-  const { servers } = useMobileWorkspace();
-  const server = useLiveServerRecovery(servers.find((item) => item.id === serverId));
+  const server = useLiveServerRecovery(
+    useMobileWorkspaceSelector((workspace) => workspace.servers.find((item) => item.id === serverId)),
+  );
   if (!server)
     return (
       <SettingsContent>
@@ -97,10 +101,13 @@ function ServerStatusLine({ server }: { server: MobileServer }) {
 
 function ServerVisibilitySection({ server }: { server: MobileServer }) {
   const { t, errorMessage } = useText();
-  const { servers, setServerHidden } = useMobileWorkspace();
+  const otherVisible = useMobileWorkspaceSelector((workspace) =>
+    workspace.servers.some((item) => item.id !== server.id && !item.hidden),
+  );
+  const { setServerHidden } = useMobileWorkspaceActions();
   const { busy, error, perform } = useLockedAction();
   const hidden = server.hidden === true;
-  if (!hidden && !servers.some((item) => item.id !== server.id && !item.hidden)) return null;
+  if (!hidden && !otherVisible) return null;
   return (
     <SettingsSection footer={error}>
       <SettingsRow
@@ -136,8 +143,9 @@ function ServerExitSection({
   hostedServerIds: ReadonlySet<string> | null;
 }) {
   const { t, errorMessage } = useText();
-  const { leaveServer, removeServer, deleteLocalServer, localServerKind } = useMobileWorkspace();
+  const { leaveServer, removeServer, deleteLocalServer } = useMobileWorkspaceActions();
   const serverId = server.id;
+  const localKind = useMobileWorkspaceSelector((workspace) => workspace.localServerKind(serverId));
   const { busy, error, perform } = useLockedAction();
   if (server.role !== "owner")
     return (
@@ -169,7 +177,7 @@ function ServerExitSection({
         </SettingsRow>
       </SettingsSection>
     );
-  if (localServerKind(serverId) === "onComputer")
+  if (localKind === "onComputer")
     return (
       <SettingsSection footer={error}>
         <SettingsRow
@@ -251,9 +259,10 @@ function ServerHeader({ server }: { server: MobileServer }) {
 
 function ServerIdentityForm({ server }: { server: MobileServer }) {
   const { t, errorMessage } = useText();
-  const { canEditServerIdentity, canEditServerAppearance, updateServerIdentity } = useMobileWorkspace();
-  const available = canEditServerIdentity(server.id);
-  const canEditPicture = available || canEditServerAppearance(server.id);
+  const { updateServerIdentity } = useMobileWorkspaceActions();
+  const available = useMobileWorkspaceSelector((workspace) => workspace.canEditServerIdentity(server.id));
+  const canEditAppearance = useMobileWorkspaceSelector((workspace) => workspace.canEditServerAppearance(server.id));
+  const canEditPicture = available || canEditAppearance;
   const [draftName, setDraftName] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);

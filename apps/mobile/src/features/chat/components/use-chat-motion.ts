@@ -61,6 +61,9 @@ function reportSettledKeyboard(height: number): void {
   );
 }
 const OPENING_FOLLOW_MS = 600;
+const LANDED_DISTANCE = 2;
+const LANDING_FALLBACK_MS = 1000;
+const SEND_SETTLE_FALLBACK_MS = 1000;
 
 type AnchorReadyInfo = Parameters<NonNullable<AnchoredEndSpaceConfig["onReady"]>>[0];
 
@@ -310,6 +313,7 @@ export function useChatMotion(
   const [userScrolled, setUserScrolled] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [responseVisible, setResponseVisible] = useState(true);
+  const [sendSettling, setSendSettling] = useState(false);
   const pending = useRef<{ baseline: string | null; first: boolean; fromLatest: boolean } | null>(null);
   const followLatest = useRef(true);
   const [keyboardLiftBehavior, setKeyboardLiftBehavior] = useState<"whenAtEnd" | "never">("whenAtEnd");
@@ -396,9 +400,35 @@ export function useChatMotion(
     if (shown.current || !listPlaced || !ready || holdOpening || catchUpHold) return;
     const held = heldOpening.current;
     heldOpening.current = false;
-    if (held) void (listRef.current?.scrollToEnd({ animated: false }) ?? Promise.resolve()).then(reveal, reveal);
-    else reveal();
-  }, [listPlaced, ready, holdOpening, catchUpHold, reveal]);
+    if (held) {
+      void (listRef.current?.scrollToEnd({ animated: false }) ?? Promise.resolve()).then(reveal, reveal);
+      return;
+    }
+    if (!hasRows) {
+      reveal();
+      return;
+    }
+    const started = Date.now();
+    const landed = () => {
+      const state = listRef.current?.getState();
+      return !state || state.distanceFromEnd <= LANDED_DISTANCE || Date.now() - started >= LANDING_FALLBACK_MS;
+    };
+    if (landed()) {
+      reveal();
+      return;
+    }
+    let frame = requestAnimationFrame(function land() {
+      if (shown.current) return;
+      if (landed()) reveal();
+      else frame = requestAnimationFrame(land);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [listPlaced, ready, holdOpening, catchUpHold, hasRows, reveal]);
+  useEffect(() => {
+    if (!sendSettling) return;
+    const timer = setTimeout(() => setSendSettling(false), SEND_SETTLE_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [sendSettling]);
   useEffect(() => {
     if (!isAndroid || shown.current || !hasRows || placedWithRows === true || !ready || holdOpening) return;
     const started = Date.now();
@@ -508,7 +538,10 @@ export function useChatMotion(
     let lastSizes = "";
     let stillFrames = 0;
     const finish = () => {
-      if (generation === sendGeneration.current) setPinnedToLatest(true);
+      if (generation === sendGeneration.current) {
+        setSendSettling(false);
+        setPinnedToLatest(true);
+      }
     };
     const step = () => {
       if (generation !== sendGeneration.current) return;
@@ -542,6 +575,7 @@ export function useChatMotion(
       const list = listRef.current;
       if (!send || !list || info.anchorKey === undefined || info.anchorKey === send.baseline) return;
       pending.current = null;
+      setSendSettling(false);
       reveal();
       const animated = !send.first && send.fromLatest && !reducedMotion;
       if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
@@ -683,6 +717,7 @@ export function useChatMotion(
     const baseline = current.current.lastUserId;
     const first = baseline === null;
     pending.current = { baseline, first, fromLatest: atLatestNow.current };
+    setSendSettling(true);
     if (isAndroid && colorOS) {
       scrolledUp.set(false);
       lowestOffset.set(scrollOffset.get());
@@ -700,6 +735,7 @@ export function useChatMotion(
   const cancelSend = useCallback(() => {
     sendGeneration.current += 1;
     pending.current = null;
+    setSendSettling(false);
     if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
     sendScrollFrame.current = null;
     cancelAnimation(firstOffset);
@@ -804,6 +840,7 @@ export function useChatMotion(
       userScrolled,
       historyVisible,
       responseVisible,
+      sendSettling,
       composerHeight,
       composerStyle,
       keyboardHeight,
@@ -842,6 +879,7 @@ export function useChatMotion(
       userScrolled,
       historyVisible,
       responseVisible,
+      sendSettling,
       composerHeight,
       composerStyle,
       keyboardHeight,

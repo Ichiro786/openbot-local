@@ -4,7 +4,7 @@ import { router, useGlobalSearchParams, useSegments } from "expo-router";
 import type { NativeStackNavigationOptions } from "expo-router/native-stack";
 import { Stack } from "expo-router/stack";
 import { useThemeColor } from "heroui-native/hooks";
-import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PropsWithChildren, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, TextInput } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { ChatNavigationGateContext } from "@/features/agents/components/chat-link-pressable";
@@ -26,6 +26,7 @@ import { useNotificationTaps } from "@/features/push-notifications/use-notificat
 import type { QuickActionTarget } from "@/features/quick-actions/model/quick-action-items";
 import { shareOpenBot } from "@/features/quick-actions/model/share-app";
 import { setQuickActionNavigator } from "@/features/quick-actions/quick-actions-native";
+import { screenOpenProbe } from "@/features/screen-metrics/screen-open-probe";
 import { requestHomeSearch } from "@/features/search/model/home-search-request";
 import { AppDrawerShell, useAppDrawer } from "@/features/servers/components/app-drawer-shell";
 import { watchAndroidShares } from "@/features/share/model/android-share-watch";
@@ -84,8 +85,31 @@ export const unstable_settings = {
   anchor: "connected",
 };
 
+type ShownScreen = { agentId: string; serverId: string | null; taskId: string | null } | null;
+
+function shownScreen(screen: string | undefined, agentId: unknown, serverId: unknown, taskId: unknown): ShownScreen {
+  if (typeof agentId !== "string") return null;
+  const shownServerId = typeof serverId === "string" && serverId ? serverId : null;
+  if (screen === "chat") return { agentId, serverId: shownServerId, taskId: null };
+  if (screen === "task" && typeof taskId === "string") return { agentId, serverId: shownServerId, taskId };
+  return null;
+}
+
+function ShownScreenTracker({ onChange }: { onChange: (shown: ShownScreen) => void }) {
+  const screen = useSegments().at(-2);
+  const { agentId, serverId, taskId } = useGlobalSearchParams<{
+    agentId?: string;
+    serverId?: string;
+    taskId?: string;
+  }>();
+  useLayoutEffect(
+    () => onChange(shownScreen(screen, agentId, serverId, taskId)),
+    [onChange, screen, agentId, serverId, taskId],
+  );
+  return null;
+}
+
 function AuthenticatedStack() {
-  const segments = useSegments();
   const pushAnimation = useReducedMotion() ? "fade" : "slide_from_right";
   const pageAnimation = useColorOSPageAnimation().animation ?? pushAnimation;
   const chatAnimation = useSplitLayout() ? "fade" : pushAnimation;
@@ -122,23 +146,12 @@ function AuthenticatedStack() {
   } as const;
   const { closeDrawer } = useAppDrawer();
   const [navigationGate] = useState(createChatNavigationGate);
-  const {
-    agentId: openAgentId,
-    serverId: openServerId,
-    taskId: openTaskId,
-  } = useGlobalSearchParams<{ agentId?: string; serverId?: string; taskId?: string }>();
-  const shown = useRef<{ agentId: string; serverId: string | null; taskId: string | null } | null>(null);
-  const screen = segments.at(-2);
-  const shownServerId = typeof openServerId === "string" && openServerId ? openServerId : null;
-  shown.current =
-    typeof openAgentId !== "string"
-      ? null
-      : screen === "chat"
-        ? { agentId: openAgentId, serverId: shownServerId, taskId: null }
-        : screen === "task" && typeof openTaskId === "string"
-          ? { agentId: openAgentId, serverId: shownServerId, taskId: openTaskId }
-          : null;
+  const shown = useRef<ShownScreen>(null);
+  const setShown = useCallback((next: ShownScreen) => {
+    shown.current = next;
+  }, []);
   const workspace = useMobileWorkspaceReader();
+  useEffect(() => screenOpenProbe?.readWorkspace(workspace), [workspace]);
   const showsAgent = useCallback(
     (agentId: string, serverId: string | null) => {
       const current = shown.current;
@@ -229,7 +242,9 @@ function AuthenticatedStack() {
   const queryClient = useQueryClient();
   const scope = useQueryScope();
   const queryScope = useRef(scope);
-  queryScope.current = scope;
+  useLayoutEffect(() => {
+    queryScope.current = scope;
+  }, [scope]);
   const targetSources = useMemo(
     (): OutsideTargetSources => ({
       channels: (serverId) =>
@@ -318,6 +333,7 @@ function AuthenticatedStack() {
 
   return (
     <ChatNavigationGateContext value={navigationGate}>
+      <ShownScreenTracker onChange={setShown} />
       <Stack
         screenListeners={({ route }) =>
           route.name === "connected"

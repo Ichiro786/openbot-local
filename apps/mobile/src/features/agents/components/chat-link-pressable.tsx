@@ -18,6 +18,7 @@ const ZOOM_TAP_GUARD_MS = 500;
 export function ChatLinkPressable({
   chatId,
   prefetchServerId,
+  onOpen,
   onPress,
   onPressIn,
   ...props
@@ -29,6 +30,7 @@ export function ChatLinkPressable({
    * its first commit.
    */
   prefetchServerId?: string;
+  onOpen?: () => void;
 }) {
   const conversationStore = useMobileWorkspaceSelector((current) => current.conversationStore);
   const loadConversation = useMobileWorkspaceSelector((current) => current.loadConversation);
@@ -70,6 +72,7 @@ export function ChatLinkPressable({
         if (event.defaultPrevented) return;
         openTraceStart("row tap");
         void haptics.impact("soft");
+        onOpen?.();
         event.persist();
         // Build 11.3 council A6: a zoom-open navigates even if this row remounted meanwhile (a list
         // refresh or a settings re-render between the tap and the push dropped the open silently).

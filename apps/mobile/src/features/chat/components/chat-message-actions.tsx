@@ -408,7 +408,7 @@ export function ChatMessageActions({
 }
 export interface MessageActionsInput {
   messageId: string;
-  copyText: string;
+  copyText: () => string;
   createdAt?: string;
   reactions?: readonly ConversationReaction[];
   onReact?: (emoji: string | null) => Promise<void>;
@@ -482,7 +482,7 @@ export function useMessageActions(input: MessageActionsInput | null) {
     ? () =>
         openMessageActions({
           messageId: input.messageId,
-          copyText: input.copyText,
+          copyText: input.copyText(),
           createdAt: input.createdAt,
           ownReaction: own,
           readAloudId: input.readAloudId,

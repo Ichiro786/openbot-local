@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { channelTaskCancelCards } from "@/features/channels/model/channel-task-actions";
 import { ChatMarkdown } from "@/features/chat/components/chat-markdown";
+import { useRemoteChatContent } from "@/features/servers/model/use-remote-chat-content";
 import { SettingsSection } from "@/features/settings/components/settings-content";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
 import { Button } from "@/shared/components/button";
@@ -61,6 +62,7 @@ function TaskActionCard({
 }) {
   const { t, sourceText } = useText();
   const agent = members.find((member) => member.id === task.ownerAgentId);
+  const remoteContent = useRemoteChatContent(agent?.serverId ?? members[0]?.serverId);
   const name = agent?.name ?? t("mobile.channel.task.task");
   return (
     <SettingsSection>
@@ -84,7 +86,14 @@ function TaskActionCard({
           </Typography.Paragraph>
         </View>
         {task.instruction ? (
-          <ChatMarkdown body={task.instruction} color={undefined} compact agents={members} animationEnabled={false} />
+          <ChatMarkdown
+            body={task.instruction}
+            color={undefined}
+            compact
+            agents={members}
+            animationEnabled={false}
+            remoteContent={remoteContent}
+          />
         ) : null}
         {task.error ? (
           <Typography.Paragraph type="body-sm" className="text-grouped-secondary">

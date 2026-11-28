@@ -48,6 +48,7 @@ import { AGENT_USAGE_LIMIT_CAPABILITY } from "./agent-usage-limit-v1";
 import { AGENT_WAITS_CAPABILITY } from "./agent-waits-v1";
 import { AGENT_WELCOME_CAPABILITY } from "./agent-welcome-v1";
 import { ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY } from "./antigravity-code-sign-in-v1";
+import { TEAM_ATTACHMENT_DIMENSIONS_CAPABILITY } from "./attachment-dimensions-v1";
 import { ATTACHMENT_PREVIEW_CAPABILITY } from "./attachment-preview-v1";
 import { BACKGROUND_PROCESSES_CAPABILITY } from "./background-processes-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "./bitwarden-connector-v1";
@@ -161,6 +162,7 @@ import { PASSWORD_MANAGERS_CAPABILITY } from "./password-managers-v1";
 import { PENDING_APPROVAL_CAPABILITY } from "./pending-approval-v1";
 import { PENDING_PROMPTS_CAPABILITY } from "./pending-prompts-v1";
 import { PHONE_FEEDBACK_CAPABILITY } from "./phone-feedback-v1";
+import { PLUGIN_CATALOG_CAPABILITY } from "./plugin-catalog-v1";
 import { PROMPT_CACHE_TTL_CAPABILITY, PROMPT_CACHE_TTL_PI_CAPABILITY } from "./prompt-cache-ttl-v1";
 import { TEAM_PROMPT_DETAIL_CAPABILITY } from "./prompt-detail-v1";
 import { TEAM_PROMPT_MULTI_SELECT_CAPABILITY } from "./prompt-multi-select-v1";
@@ -196,6 +198,7 @@ import { TEAM_QUEUE_EDIT_CAPABILITY } from "./queue-edit-v1";
 import { QUEUE_HOLD_CAPABILITY, QUEUE_HOLD_SIGN_IN_CAPABILITY } from "./queue-hold-v1";
 import { QUIET_TURN_CAPABILITY } from "./quiet-turn-v1";
 import { TEAM_REASONING_EFFORTS_CAPABILITY } from "./reasoning-efforts-v1";
+import { REMOTE_CHAT_CONTENT_CAPABILITY } from "./remote-chat-content-v1";
 import { ROUTINE_FLOW_STOP_CAPABILITY } from "./routine-flow-stop-v1";
 import { ROUTINE_FLOWS_CAPABILITY } from "./routine-flows-v1";
 import { ROUTINE_PAUSE_REASONS_CAPABILITY } from "./routine-pause-reasons-v1";
@@ -224,6 +227,7 @@ import { STORAGE_DISK_CAPABILITY } from "./storage-disk-v1";
 import { STORAGE_USER_FILES_CAPABILITY } from "./storage-user-files-v1";
 import { STORAGE_WORKFLOW_FILES_CAPABILITY } from "./storage-workflow-files-v1";
 import { TEAM_SUBAGENTS_CAPABILITY } from "./subagents-v1";
+import { SYNC_CAPABILITY } from "./sync-v1";
 import { THREAD_MESSAGE_SEARCH_CAPABILITY } from "./thread-message-search-v1";
 import { TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY } from "./ui-block-auto-answer-v1";
 import { TEAM_UI_BLOCK_LOCATION_CAPABILITY } from "./ui-block-location-v1";
@@ -269,9 +273,9 @@ import { WEBHOOK_AGENT_SECRET_CAPABILITY } from "./webhook-agent-secret-v1";
 import { WEBHOOK_SENDER_SECRET_CAPABILITY } from "./webhook-sender-secret-v1";
 import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
 import { WHATSAPP_CONNECTOR_CAPABILITY } from "./whatsapp-connector-v1";
-import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
 import { WHATSAPP_READ_ONLY_CAPABILITY } from "./whatsapp-read-only-v1";
 import { WHATSAPP_STATUS_REACTIONS_CAPABILITY } from "./whatsapp-status-reactions-v1";
+import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
 import { WHATSAPP_WORKING_MESSAGE_CAPABILITY } from "./whatsapp-working-message-v1";
 import { WORKFLOW_FOLDERS_CAPABILITY } from "./workflow-folders-v1";
 import { WORKFLOW_PRESENCE_CAPABILITY } from "./workflow-presence-v1";
@@ -286,6 +290,7 @@ import { WORKFLOWS_HIGGSFIELD_CAPABILITY } from "./workflows-higgsfield-v1";
 import { WORKFLOWS_MEDIA_ACCOUNT_CAPABILITY } from "./workflows-media-account-v1";
 import { WORKFLOWS_MEDIA_CATALOG_CAPABILITY } from "./workflows-media-catalog-v1";
 import { WORKFLOWS_MEDIA_CATALOG_V2_CAPABILITY } from "./workflows-media-catalog-v2";
+import { WORKFLOWS_MEDIA_CLIPS_CAPABILITY } from "./workflows-media-clips-v1";
 import { WORKFLOWS_MEDIA_SERVICE_ACCOUNT_CAPABILITY } from "./workflows-media-service-account-v1";
 import { WORKFLOWS_MEDIA_SIZE_CAPABILITY } from "./workflows-media-size-v1";
 import { WORKFLOWS_MEDIA_TRANSPARENT_CAPABILITY } from "./workflows-media-transparent-v1";
@@ -440,6 +445,7 @@ export {
   PASSWORD_MANAGERS_CAPABILITY,
   PENDING_APPROVAL_CAPABILITY,
   PHONE_FEEDBACK_CAPABILITY,
+  PLUGIN_CATALOG_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
   PROMPT_CACHE_TTL_PI_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
@@ -487,6 +493,7 @@ export {
   STORAGE_CHANNEL_CAPABILITY,
   STORAGE_DISK_CAPABILITY,
   STORAGE_USER_FILES_CAPABILITY,
+  SYNC_CAPABILITY,
   TEAM_BROWSER_NAVIGATION_CAPABILITY,
   TEAM_BROWSER_VIEW_CAPABILITY,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
@@ -529,9 +536,9 @@ export {
   WEBHOOK_SENDER_SECRET_CAPABILITY,
   WEBHOOK_TESTS_CAPABILITY,
   WHATSAPP_CONNECTOR_CAPABILITY,
-  WHATSAPP_MOBILE_CAPABILITY,
   WHATSAPP_STATUS_REACTIONS_CAPABILITY,
   WHATSAPP_WORKING_MESSAGE_CAPABILITY,
+  WHATSAPP_MOBILE_CAPABILITY,
   WORKFLOW_FOLDERS_CAPABILITY,
   WORKFLOW_PRESENCE_CAPABILITY,
   WORKFLOWS_AGENT_FILES_CAPABILITY,
@@ -547,6 +554,7 @@ export {
   WORKFLOWS_MEDIA_CAPABILITY,
   WORKFLOWS_MEDIA_CATALOG_CAPABILITY,
   WORKFLOWS_MEDIA_CATALOG_V2_CAPABILITY,
+  WORKFLOWS_MEDIA_CLIPS_CAPABILITY,
   WORKFLOWS_MEDIA_SERVICE_ACCOUNT_CAPABILITY,
   WORKFLOWS_MEDIA_SIZE_CAPABILITY,
   WORKFLOWS_MEDIA_TRANSPARENT_CAPABILITY,
@@ -889,6 +897,11 @@ const TEAM_CAPABILITY_REGISTRY = [
   [TEAM_NEAR_PAYMENT_CAPABILITY, V10],
   [PROVIDER_ACCOUNT_POOL_STRATEGY_CAPABILITY, V10],
   [WATCH_RELAY_TEAM_CAPABILITY, V10],
+  [WORKFLOWS_MEDIA_CLIPS_CAPABILITY, V10],
+  [SYNC_CAPABILITY, V10],
+  [REMOTE_CHAT_CONTENT_CAPABILITY, V10],
+  [PLUGIN_CATALOG_CAPABILITY, V10],
+  [TEAM_ATTACHMENT_DIMENSIONS_CAPABILITY, V10],
 ] as const satisfies readonly (readonly [string, TeamCapabilityPlacement])[];
 
 export const TEAM_CURRENT_CAPABILITIES = TEAM_CAPABILITY_REGISTRY.map(([capability]) => capability);

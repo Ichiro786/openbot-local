@@ -20,6 +20,7 @@ import {
   ChatRowTime,
   PINNED_AVATAR_SIZE,
 } from "@/features/agents/components/chat-row";
+import { useChatRowDormant } from "@/features/agents/components/chat-row-activation";
 import { PinnedChatItem } from "@/features/agents/components/pinned-agents-grid";
 import { useChatPinToggle } from "@/features/agents/components/use-chat-pin-toggle";
 import { useChatSectionMenu } from "@/features/agents/components/use-chat-section-menu";
@@ -43,11 +44,11 @@ import { RowPressHighlight, rowPressStyle } from "@/shared/motion/RowPress";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { ChannelAvatar } from "./channel-avatar";
 
-function useChannelMenuActions(channel: ChannelSummary, serverId: string) {
+function useChannelMenuActions(channel: ChannelSummary, serverId: string, sectionMenuMounted = true) {
   const { t } = useText();
   const workspace = useMobileWorkspaceReader();
   const { toggleChannelPin } = useChatPinToggle();
-  const sectionMenu = useChatSectionMenu(serverId, channel.id);
+  const sectionMenu = useChatSectionMenu(serverId, channel.id, sectionMenuMounted);
   const isPinned = useMobileWorkspaceSelector(({ pinnedChannelIds }) => pinnedChannelIds.includes(channel.id));
   const canPin = useMobileWorkspaceSelector(({ pinnedAgentIds, pinnedChannelIds }) =>
     canToggleChatPin(pinnedAgentIds, pinnedChannelIds, channel.id),
@@ -117,10 +118,12 @@ function useChannelMenuActions(channel: ChannelSummary, serverId: string) {
 function ChannelContextMenuLink({
   channel,
   serverId,
+  dormant,
   children,
 }: {
   channel: ChannelSummary;
   serverId: string;
+  dormant: boolean;
   children: ReactNode;
 }) {
   const { t } = useText();
@@ -135,7 +138,7 @@ function ChannelContextMenuLink({
     handleInfo,
     handleCopyId,
     handleDelete,
-  } = useChannelMenuActions(channel, serverId);
+  } = useChannelMenuActions(channel, serverId, !dormant);
   return (
     <Link href={{ pathname: "/channel/[channelId]", params: { channelId: channel.id, serverId } }} asChild>
       <Link.Trigger>{children}</Link.Trigger>
@@ -280,6 +283,7 @@ export const ChannelListRow = memo(function ChannelListRow({
   const disconnected = useMobileWorkspaceSelector(
     ({ servers }) => !servers.some((server) => server.id === serverId && showsOnline(server)),
   );
+  const dormant = useChatRowDormant(pinned ? null : `channel:${channel.id}`);
   const [menuKey, setMenuKey] = useState(0);
   const drag = useChatDrag(pinned ? "pin" : "row", () => ({
     chat: { kind: "channel", id: channel.id },
@@ -402,7 +406,7 @@ export const ChannelListRow = memo(function ChannelListRow({
       ) : null}
     </View>
   ) : (
-    <ChannelContextMenuLink channel={channel} serverId={serverId}>
+    <ChannelContextMenuLink channel={channel} serverId={serverId} dormant={dormant}>
       {trigger}
     </ChannelContextMenuLink>
   );
@@ -413,7 +417,14 @@ export const ChannelListRow = memo(function ChannelListRow({
       </ChatDragArea>
     </PinnedChatItem>
   ) : (
-    <AgentPinSwipeRow pinned={isPinned} agentName={channel.name} pinBlocked={pinBlocked} onPin={togglePin} drag={drag}>
+    <AgentPinSwipeRow
+      pinned={isPinned}
+      agentName={channel.name}
+      pinBlocked={pinBlocked}
+      onPin={togglePin}
+      drag={drag}
+      dormant={dormant}
+    >
       {content}
     </AgentPinSwipeRow>
   );
