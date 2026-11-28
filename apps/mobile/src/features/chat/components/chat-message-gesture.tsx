@@ -86,9 +86,6 @@ export function ChatMessageGesture({
       void haptics.impact();
       handlers.current.onReply?.();
     };
-    const tickThreshold = () => {
-      void haptics.impact("light");
-    };
     const hold = (x: number, y: number) => {
       void haptics.longPress();
       const { onHold: open, onSelectText: select } = handlers.current;
@@ -110,7 +107,6 @@ export function ChatMessageGesture({
         offset.set(resisted(raw, REPLY_THRESHOLD, REPLY_OVERSCROLL));
         if (!thresholdCrossed.get() && raw >= REPLY_THRESHOLD) {
           thresholdCrossed.set(true);
-          scheduleOnRN(tickThreshold);
         } else if (thresholdCrossed.get() && raw < REPLY_RESET_THRESHOLD) {
           thresholdCrossed.set(false);
         }

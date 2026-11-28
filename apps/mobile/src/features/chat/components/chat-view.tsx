@@ -984,7 +984,6 @@ export function ChatView({
     }
     if (answersQuestion && questionForm && files.length === 0) {
       if (!body || questionForm.disabled) return;
-      Keyboard.dismiss();
       void haptics.impact();
       setDraft("");
       questionForm.answerText(mentionDraft(body).text);
@@ -1029,7 +1028,6 @@ export function ChatView({
     setSelection(null);
     if (detached) showLatest(false);
     if (!sendsToQueue && ready) motion.beginSend();
-    if (target.kind !== "agent") Keyboard.dismiss();
     void haptics.send();
     setShowStarter(false);
     return outbox.add(
@@ -1546,7 +1544,7 @@ export function ChatView({
                     }
                     bottomInset={insets.bottom}
                     disabled={!canSend}
-                    keepsKeyboardOnSend={target.kind === "agent"}
+                    keepsKeyboardOnSend
                     heightLive={motion.composerSlotLive}
                     heightTarget={motion.composerSlotTarget}
                     attachments={attachments}

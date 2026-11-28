@@ -1,0 +1,14 @@
+### Fixed
+
+- Keep the keyboard open after channel sends and in-chat text answers.
+- Keep the chat card and avatar in place when Back interrupts the open animation.
+- Animate the first sent message in an empty ColorOS chat.
+- Use the correct server avatar in the chat transition.
+- Stop the transcript follow animation when you drag the list.
+- Limit the Android reaction menu blur to the card, bar, and emoji grid.
+- Keep composer focus when a hardware Enter key sends a message.
+- Limit the shared Android header blur to the top bar.
+- Keep Home Search results visible until the close animation ends.
+- Play the reaction animation when you add a reaction again.
+- Keep the card in place when a new Back gesture interrupts its return.
+- Play one haptic tick when a swipe starts a reply.

@@ -2,18 +2,21 @@ import type { AnchoredEndSpaceConfig, LegendListRef } from "@legendapp/list/reac
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, type LayoutChangeEvent, type NativeScrollEvent } from "react-native";
 import { useKeyboardHandler } from "react-native-keyboard-controller";
+import type Animated from "react-native-reanimated";
 import {
   cancelAnimation,
   Easing,
   makeMutable,
   ReduceMotion,
+  scrollTo,
   useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { supportLog } from "@/features/support/model/support-log";
 import { useReducedMotion } from "@/shared/lib/motion";
 import { openTraceMark } from "@/shared/lib/open-trace";
@@ -79,6 +82,7 @@ export function useChatMotion(
   zoomed = false,
 ) {
   const listRef = useRef<LegendListRef>(null);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const reducedMotion = useReducedMotion();
   const keyboardHeight = useSharedValue(0);
   const keyboardProgress = useSharedValue(0);
@@ -883,15 +887,35 @@ export function useChatMotion(
   const onScrollBeginDrag = useCallback(() => {
     openingFollowNow.current = false;
     drags.current += 1;
-    dragging.set(true);
-    composerDue.set(0);
-    composerMoved.set(0);
-    composerShift.set(0);
+    scheduleOnUI(() => {
+      "worklet";
+      dragging.set(true);
+      cancelAnimation(followShift);
+      const shift = followShift.get();
+      if (shift > 0) {
+        scrollTo(scrollRef, 0, Math.max(0, scrollOffset.get() - shift), false);
+        followShift.set(0);
+      }
+      composerDue.set(0);
+      composerMoved.set(0);
+      composerShift.set(0);
+    });
     setOpeningFollow(false);
     leaveLatest();
     reveal();
     cancelSend();
-  }, [leaveLatest, reveal, cancelSend, dragging, composerDue, composerMoved, composerShift]);
+  }, [
+    leaveLatest,
+    reveal,
+    cancelSend,
+    dragging,
+    followShift,
+    scrollOffset,
+    scrollRef,
+    composerDue,
+    composerMoved,
+    composerShift,
+  ]);
   const openAt = useCallback(
     async (index: number, unread = false): Promise<void> => {
       if (unread) followLatest.current = false;
@@ -954,6 +978,7 @@ export function useChatMotion(
   return useMemo(
     () => ({
       listRef,
+      scrollRef,
       listPlaced,
       startsAtEnd: !holdOpening,
       atLatest,
@@ -1002,6 +1027,7 @@ export function useChatMotion(
       latestGeneration,
     }),
     [
+      scrollRef,
       listPlaced,
       holdOpening,
       atLatest,

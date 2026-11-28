@@ -1,4 +1,5 @@
 import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
+import { useLocalSearchParams } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useThemeColor } from "heroui-native/hooks";
@@ -16,6 +17,7 @@ import { BackHandler, StyleSheet, useWindowDimensions, View } from "react-native
 import Animated, {
   type AnimationCallback,
   type AnimationObject,
+  cancelAnimation,
   defineAnimation,
   Easing,
   type SharedValue,
@@ -25,11 +27,13 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
+import { firstParam } from "@/features/chat/components/use-conversation-message";
 import { useAvatarScale } from "@/features/settings/model/avatar-size";
 import { supportLog } from "@/features/support/model/support-log";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { findChatAgent } from "@/features/workspace/model/directory-agents";
 import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import {
@@ -45,7 +49,6 @@ import { chatBackHeld, holdPredictiveBack, predictiveBack, watchChatBackHolds } 
 import { useColorOSMotion } from "./useColorOSMotion";
 
 /**
- * The open and close run one LINEAR clock (`visible`, 0 closed .. 1 open); the frame's style eases it.
  * Build 14 (Syed's phone, build 12 videos 97/98): a container transform. The chat is an OPAQUE rounded
  * card that grows out of the tapped element's rect to the full screen (and back into it), with the chat
  * inside fading in over the card's own surface, so home never shows through the chat. The card's clip is
@@ -62,17 +65,27 @@ function crit(t: number): number {
   "worklet";
   return (1 - (1 + CRIT_K * t) * Math.exp(-CRIT_K * t)) / CRIT_NORM;
 }
-/** The clock value whose eased value is `value` (crit is monotonic): to turn an open into a close mid-way. */
-function critInverse(value: number): number {
-  let low = 0;
-  let high = 1;
-  for (let step = 0; step < 24; step += 1) {
-    const mid = (low + high) / 2;
-    if (crit(mid) < value) low = mid;
-    else high = mid;
-  }
-  return (low + high) / 2;
+function mix(from: number, to: number, progress: number): number {
+  "worklet";
+  return from + (to - from) * progress;
 }
+type ZoomFrame = {
+  open: number;
+  scale: number;
+  half: number;
+  x: number;
+  y: number;
+  radius: number;
+  opacity: number;
+  surface: number;
+  content: number;
+  fill: number;
+  avatar: number;
+  avatarX: number;
+  avatarY: number;
+  avatarSize: number;
+};
+
 /** The chat fades in over the card's opaque surface from this share of the clock, over this share. */
 const CONTENT_FADE_FROM = 0.75;
 const CONTENT_FADE_SHARE = 0.25;
@@ -173,8 +186,9 @@ function useLiveZoomMotion(
   visible: SharedValue<number>,
   gesture: SharedValue<number>,
   edge: SharedValue<number>,
-  /** Build 14: 1 while the clock runs the close's curve (the open's mirrored), 0 for the open's. */
-  closing: SharedValue<number>,
+  card: SharedValue<ZoomFrame>,
+  closeFrom: SharedValue<ZoomFrame | null>,
+  closeProgress: SharedValue<number>,
   /** Build 14: re-finds the element the chat closes into (it may have moved since the open). */
   resolveOrigin: () => void,
   /** Build 14: a close starts: the chat's frosts stop (home's blurs run again). */
@@ -185,6 +199,7 @@ function useLiveZoomMotion(
   const { enabled, reduceMotion } = useColorOSMotion();
   const active = isAndroid && enabled && !reduceMotion;
   const held = useSyncExternalStore(watchChatBackHolds, chatBackHeld);
+  const gestureStart = useSharedValue({ input: 0, displayed: 0 });
   const activeNow = useRef(active);
   activeNow.current = active;
   const settledCallback = useRef(onSettled);
@@ -224,19 +239,27 @@ function useLiveZoomMotion(
       if (st.recover) clearTimeout(st.recover);
       st.recover = null;
       st.gestureOn = false;
-      gesture.set(withSpring(0, SPRING_BACK));
       const done = api.opened;
-      // From where the close got to, on the open's curve again (the same eased point, no jump).
-      if (closing.get() > 0) {
-        visible.set(critInverse(1 - crit(1 - visible.get())));
-        closing.set(0);
-      }
-      visible.set(
-        openClock((finished) => {
-          "worklet";
-          if (finished) scheduleOnRN(done);
-        }),
-      );
+      scheduleOnUI(() => {
+        "worklet";
+        if (!closeFrom.get()) {
+          gesture.set(withSpring(0, SPRING_BACK));
+          return;
+        }
+        closeProgress.set(
+          withTiming(0, { duration: 120, easing: Easing.out(Easing.cubic) }, (finished) => {
+            if (!finished) return;
+            closeFrom.set(null);
+            gesture.set(withSpring(0, SPRING_BACK));
+            visible.set(
+              openClock((opened) => {
+                "worklet";
+                if (opened) scheduleOnRN(done);
+              }),
+            );
+          }),
+        );
+      });
     },
     dropGesture() {
       if (!st.gestureOn) return;
@@ -276,22 +299,22 @@ function useLiveZoomMotion(
       st.settled = false;
       releaseLiveZoomHome(routeKey);
       closingCallback.current();
-      resolveOrigin();
-      // From where it is (mid-open, or shrunk by the gesture) to closed, on the close's curve: it leaves
-      // at once and lands softly in the element. The same eased point, so a close mid-open does not jump.
-      // The gesture's extra shrink and shift go with it, so the card lands exactly on the element.
-      const from = closing.get() > 0 ? visible.get() : Math.min(1, Math.max(0.05, crit(visible.get())));
-      closing.set(1);
-      visible.set(from);
-      const duration = Math.max(120, CLOSE_MS * from);
-      if (gesture.get() > 0)
-        gesture.set(withTiming(0, { duration: Math.min(140, duration), easing: Easing.out(Easing.cubic) }));
       const done = api.closed;
-      visible.set(
-        withTiming(0, { duration, easing: crit }, (finished) => {
-          if (finished) scheduleOnRN(done);
-        }),
-      );
+      scheduleOnUI(() => {
+        "worklet";
+        const from = card.get();
+        cancelAnimation(visible);
+        cancelAnimation(gesture);
+        cancelAnimation(closeProgress);
+        closeFrom.set(from);
+        closeProgress.set(0);
+        closeProgress.set(
+          withTiming(1, { duration: Math.max(120, CLOSE_MS * from.open), easing: crit }, (finished) => {
+            if (finished) scheduleOnRN(done);
+          }),
+        );
+      });
+      resolveOrigin();
       return true;
     },
   }).current;
@@ -362,12 +385,24 @@ function useLiveZoomMotion(
       module.addListener("onBackStart", ({ edge: swipeEdge, progress }) => {
         if (st.leaving || zoom.nativeClose || !navigation.isFocused()) return;
         st.gestureOn = true;
-        // BackEventCompat.EDGE_LEFT = 0: the chat moves right, with the finger.
-        edge.set(swipeEdge === 0 ? 1 : -1);
-        gesture.set(progress);
+        scheduleOnUI(() => {
+          "worklet";
+          const displayed = gesture.get() || progress;
+          cancelAnimation(gesture);
+          edge.set(swipeEdge === 0 ? 1 : -1);
+          gestureStart.set({ input: progress, displayed });
+          gesture.set(displayed);
+        });
       }),
       module.addListener("onBackProgress", ({ progress }) => {
-        if (st.gestureOn) gesture.set(withTiming(progress, { duration: FOLLOW_MS, easing: Easing.linear }));
+        if (!st.gestureOn) return;
+        scheduleOnUI(() => {
+          "worklet";
+          const { input, displayed } = gestureStart.get();
+          const remaining = input < 1 ? Math.min(1, (1 - progress) / (1 - input)) : 0;
+          const target = Math.max(0, Math.min(1, progress + (displayed - input) * remaining));
+          gesture.set(withTiming(target, { duration: FOLLOW_MS, easing: Easing.linear }));
+        });
       }),
       module.addListener("onBackCancel", () => {
         gestureCancelledAt = Date.now();
@@ -388,23 +423,25 @@ function useLiveZoomMotion(
       release();
       api.dropGesture();
     };
-  }, [api, edge, gesture, navigation, predictive, st, zoom]);
+  }, [api, edge, gesture, gestureStart, navigation, predictive, st, zoom]);
 }
 
 function LiveZoomFrame({
   zoom,
   routeKey,
   agentId,
+  serverId,
   children,
 }: {
   zoom: LiveZoom;
   routeKey: string;
   agentId?: string;
+  serverId?: string;
   children: ReactNode;
 }) {
   const background = String(useThemeColor("background") ?? "#000");
   const agent = useMobileWorkspaceSelector((current) =>
-    agentId ? current.agents.find((item) => item.id === agentId) : undefined,
+    findChatAgent(current.agents, agentId, serverId, current.activeServer.id),
   );
   const hasAgent = Boolean(agent);
   const avatarScale = useAvatarScale((state) => state.scale);
@@ -413,7 +450,8 @@ function LiveZoomFrame({
   const visible = useSharedValue(0);
   const gesture = useSharedValue(0);
   const edge = useSharedValue(1);
-  const closing = useSharedValue(0);
+  const closeFrom = useSharedValue<ZoomFrame | null>(null);
+  const closeProgress = useSharedValue(0);
   const originX = useSharedValue(zoom.origin.x);
   const originY = useSharedValue(zoom.origin.y);
   const originW = useSharedValue(zoom.origin.width);
@@ -462,7 +500,6 @@ function LiveZoomFrame({
   const [settled, setSettled] = useState(false);
   const onSettled = useCallback(() => setSettled(true), []);
   const onClosing = useCallback(() => setSettled(false), []);
-  useLiveZoomMotion(routeKey, zoom, onSettled, visible, gesture, edge, closing, resolveOrigin, onClosing);
   const [chatShown, setChatShown] = useState(false);
   useEffect(() => {
     openTraceMark("zoom frame mounted");
@@ -475,60 +512,78 @@ function LiveZoomFrame({
     });
     return () => cancelAnimationFrame(frame);
   }, [chatShown]);
-  // The card's geometry on this frame (all on the UI thread): its scale, the half height of its window
-  // in the chat's own coordinates, and its centre on screen.
   const card = useDerivedValue(() => {
-    const clock = visible.get();
-    const isClosing = closing.get() > 0;
-    const drag = 1 - (1 - gesture.get()) ** 3;
-    const centreX = originX.get() + originW.get() / 2;
-    if (isClosing) {
-      const t = 1 - clock;
-      const circleProgress = t;
-      const targetDiameter = Math.min(closeW.get(), closeH.get()) * (hasAgent ? avatarScale : 1);
-      const targetScale = Math.max(0.05, targetDiameter / width);
-      const travel = t;
-      const scale = 1 - (1 - targetScale) * travel;
-      const half = height / 2 - (height / 2 - width / 2) * circleProgress;
-      const targetCentreX = closeX.get() + closeW.get() / 2;
-      const targetCentreY = closeY.get() + closeH.get() / 2;
-      const total = scale * (1 - GESTURE_SCALE * drag);
-      const circleRadius = (width / 2) * circleProgress;
+    const from = closeFrom.get();
+    const targetDiameter = Math.min(closeW.get(), closeH.get()) * (hasAgent ? avatarScale : 1);
+    const targetCentreX = closeX.get() + closeW.get() / 2;
+    const targetCentreY = closeY.get() + closeH.get() / 2;
+    const avatarBase = MORPH_AVATAR_BASE * Math.min(1, avatarScale);
+    if (from) {
+      const t = closeProgress.get();
+      const avatarFade = Math.min(1, Math.max(0, (t - 0.18) / 0.34));
+      const fillIn = Math.min(1, Math.max(0, (t - 0.14) / 0.24));
+      const fillOut = Math.min(1, Math.max(0, 1 - (t - 0.52) / 0.28));
       return {
-        clock,
-        open: clock,
-        closing: true,
-        t,
-        scale: total,
-        half: Math.min(height / 2, Math.max(width / 2, half)),
-        x: (targetCentreX - width / 2) * travel,
-        y: (targetCentreY - height / 2) * travel,
-        radius: Math.max(circleRadius, (GESTURE_RADIUS * drag) / total),
+        open: from.open * (1 - t),
+        scale: mix(from.scale, Math.max(0.05, targetDiameter / width), t),
+        half: mix(from.half, Math.min(height / 2, width / 2), t),
+        x: mix(from.x, targetCentreX - width / 2, t),
+        y: mix(from.y, targetCentreY - height / 2, t),
+        radius: mix(from.radius, width / 2, t),
+        opacity: from.opacity * (hasAgent ? 1 : Math.min(1, (1 - t) / 0.08)),
+        surface: from.surface * (hasAgent ? Math.min(1, (1 - t) / 0.2) : 1),
+        content: from.content * Math.max(0, 1 - t / 0.14),
+        fill: hasAgent ? Math.min(mix(from.fill, 1, fillIn), fillOut) : 0,
+        avatar: hasAgent ? mix(from.avatar, 1, avatarFade) : 0,
+        avatarX: mix(from.avatarX, 0, t),
+        avatarY: mix(from.avatarY, 0, t),
+        avatarSize: mix(from.avatarSize, width / avatarBase, t),
       };
     }
+    const clock = visible.get();
     const open = crit(clock);
-    const startScale = Math.min(1, Math.max(0.05, originW.get() / width));
-    const scale = startScale + (1 - startScale) * open;
-    const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
+    const drag = 1 - (1 - gesture.get()) ** 3;
+    const centreX = originX.get() + originW.get() / 2;
     const centreY = originY.get() + originH.get() / 2;
-    const total = scale * (1 - GESTURE_SCALE * drag);
+    const startScale = Math.min(1, Math.max(0.05, originW.get() / width));
+    const scale = mix(startScale, 1, open) * (1 - GESTURE_SCALE * drag);
+    const half = mix(originH.get() / (2 * startScale), height / 2, open);
+    const blob = hasAgent ? 1 - Math.min(1, Math.max(0, (clock - 0.5) / 0.25)) : 0;
     return {
-      clock,
       open,
-      closing: false,
-      t: 0,
-      scale: total,
+      scale,
       half: Math.min(height / 2, half),
       x: (centreX - width / 2) * (1 - open) + edge.get() * drag * width * GESTURE_SHIFT,
       y: (centreY - height / 2) * (1 - open),
-      radius: (START_RADIUS * (1 - open) + GESTURE_RADIUS * drag) / total,
+      radius: (START_RADIUS * (1 - open) + GESTURE_RADIUS * drag) / scale,
+      opacity: 1,
+      surface: 1,
+      content: Math.min(1, Math.max(0, (clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE)),
+      fill: blob,
+      avatar: blob,
+      avatarX: ((targetCentreX - centreX) * (1 - open)) / scale,
+      avatarY: ((targetCentreY - centreY) * (1 - open)) / scale,
+      avatarSize: mix(targetDiameter, width, open) / (avatarBase * scale),
     };
   });
+  useLiveZoomMotion(
+    routeKey,
+    zoom,
+    onSettled,
+    visible,
+    gesture,
+    edge,
+    card,
+    closeFrom,
+    closeProgress,
+    resolveOrigin,
+    onClosing,
+  );
+
   const cardStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing && !hasAgent ? Math.min(1, Math.max(0, (1 - c.t) / 0.08)) : 1;
     return {
-      opacity,
+      opacity: c.opacity,
       transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
     };
   });
@@ -540,60 +595,26 @@ function LiveZoomFrame({
     const c = card.get();
     return { borderRadius: c.radius, transform: [{ translateY: 2 * c.half - height }] };
   });
-  const cardSurfaceStyle = useAnimatedStyle(() => {
-    const c = card.get();
-    if (!c.closing || !hasAgent) return { opacity: 1 };
-    return { opacity: Math.min(1, (1 - c.t) / 0.2) };
-  });
+  const cardSurfaceStyle = useAnimatedStyle(() => ({ opacity: card.get().surface }));
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing
-      ? Math.max(0, 1 - c.t / 0.14)
-      : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
     return {
-      opacity,
+      opacity: c.content,
       transform: [{ translateY: height / 2 - c.half }],
     };
   });
-  const blobFillStyle = useAnimatedStyle(() => {
-    const c = card.get();
-    if (!hasAgent) return { opacity: 0 };
-    if (!c.closing) return { opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)) };
-    const fadeIn = Math.min(1, Math.max(0, (c.t - 0.14) / 0.24));
-    const fadeOut = Math.min(1, Math.max(0, 1 - (c.t - 0.52) / 0.28));
-    return {
-      opacity: Math.min(fadeIn, fadeOut),
-    };
-  });
+  const blobFillStyle = useAnimatedStyle(() => ({ opacity: card.get().fill }));
   const blobAvatarStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!hasAgent) return { opacity: 0 };
-    const avatarBase = MORPH_AVATAR_BASE * Math.min(1, avatarScale);
-    if (!c.closing) {
-      const diameter = Math.min(closeW.get(), closeH.get()) * avatarScale;
-      const centreX = closeX.get() + closeW.get() / 2;
-      const centreY = closeY.get() + closeH.get() / 2;
-      return {
-        opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)),
-        transform: [
-          { translateX: ((centreX - originX.get() - originW.get() / 2) * (1 - c.open)) / c.scale },
-          { translateY: ((centreY - originY.get() - originH.get() / 2) * (1 - c.open)) / c.scale },
-          { scale: (diameter + (width - diameter) * c.open) / (avatarBase * c.scale) },
-        ],
-      };
-    }
     return {
-      opacity: Math.min(1, Math.max(0, (c.t - 0.18) / 0.34)),
-      transform: [{ scale: width / avatarBase }],
+      opacity: c.avatar,
+      transform: [{ translateX: c.avatarX }, { translateY: c.avatarY }, { scale: c.avatarSize }],
     };
   });
-  const dimStyle = useAnimatedStyle(() => {
-    const c = card.get();
-    return {
-      backgroundColor: "#000",
-      opacity: DIM * c.open,
-    };
-  });
+  const dimStyle = useAnimatedStyle(() => ({
+    backgroundColor: "#000",
+    opacity: DIM * card.get().open,
+  }));
   return (
     <View style={styles.fill}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]} />
@@ -647,11 +668,10 @@ export function withLiveZoom<P extends object>(Screen: ComponentType<P>) {
     const route = useRoute();
     const routeKey = route.key;
     const [zoom] = useState(() => liveZoomOf(routeKey));
+    const { agentId, serverId } = useLocalSearchParams<{ agentId?: string; serverId?: string }>();
     if (!zoom) return <Screen {...props} />;
-    const { params } = route;
-    const agentId = params && "agentId" in params && typeof params.agentId === "string" ? params.agentId : undefined;
     return (
-      <LiveZoomFrame zoom={zoom} routeKey={routeKey} agentId={agentId}>
+      <LiveZoomFrame zoom={zoom} routeKey={routeKey} agentId={firstParam(agentId)} serverId={firstParam(serverId)}>
         <Screen {...props} />
       </LiveZoomFrame>
     );

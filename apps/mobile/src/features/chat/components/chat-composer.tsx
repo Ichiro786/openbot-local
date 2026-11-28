@@ -926,13 +926,17 @@ export const ChatComposer = memo(function ChatComposer({
       void sendAfterDictation(dictation);
       return;
     }
-    if (keepsKeyboardOnSend) {
-      if (!sendGate.submit(false)) return;
-      composingSent.current = true;
-      onSend(latestTextRef.current);
+    sendFieldText(latestTextRef.current);
+  }
+
+  function sendFieldText(text: string): void {
+    if (!keepsKeyboardOnSend) {
+      sendAndCloseField(text);
       return;
     }
-    sendAndCloseField(latestTextRef.current);
+    if (!sendGate.submit(false)) return;
+    composingSent.current = true;
+    onSend(text);
   }
 
   function submitKey(text: string): void {
@@ -941,7 +945,7 @@ export const ChatComposer = memo(function ChatComposer({
       requestSend();
       return;
     }
-    sendAndCloseField(editMentionDraft(latestTextRef.current, text));
+    sendFieldText(editMentionDraft(latestTextRef.current, text));
   }
 
   function pressControl(): void {
@@ -1296,7 +1300,7 @@ export const ChatComposer = memo(function ChatComposer({
                         onChangeDraft(next);
                       }}
                       onSubmitEditing={({ nativeEvent }) => {
-                        if (!disabled) sendAndCloseField(editMentionDraft(latestTextRef.current, nativeEvent.text));
+                        if (!disabled) sendFieldText(editMentionDraft(latestTextRef.current, nativeEvent.text));
                       }}
                       onEndEditing={({ nativeEvent: { text } }) => {
                         if (sendGate.endEditing()) return;

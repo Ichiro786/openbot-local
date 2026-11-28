@@ -2231,7 +2231,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   const { responseStyle, responseVisible } = motion;
   const promptController = questionForm?.messageId ? questionForm : undefined;
   const responseIds = useMemo(() => new Set(rows.slice(tailIndex + 1).map((row) => row.id)), [rows, tailIndex]);
-  const firstUserId = allRows && tailIndex === 0 && !hasOlder ? (rows[0]?.id ?? null) : null;
+  const firstUserId = anchoredEndSpace && allRows && tailIndex === 0 && !hasOlder ? (rows[0]?.id ?? null) : null;
   const openBranchSource = useLatest(onOpenBranchSource);
   const canOpenBranchSource = Boolean(onOpenBranchSource);
   const dividerRowId = useMemo(() => {
@@ -2441,6 +2441,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   const drawDistance = Math.round(screen.height * DRAW_SCREENS);
   const {
     listRef,
+    scrollRef,
     startsAtEnd: listStartsAtEnd,
     followsEnd,
     followMode,
@@ -2470,6 +2471,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     () => (
       <KeyboardAwareLegendList
         ref={listRef}
+        refScrollView={scrollRef}
         data={listRows}
         dataKey={dataKey}
         keyExtractor={rowKey}
@@ -2512,6 +2514,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     ),
     [
       listRef,
+      scrollRef,
       listRows,
       dataKey,
       routineRowType,
