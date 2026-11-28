@@ -144,6 +144,7 @@ export function AndroidHeaderBlur({
       >
         <BlurView
           blurTarget={target}
+          blurRegion
           blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
           intensity={BLUR_INTENSITY}
           tint={theme === "dark" ? "dark" : "light"}

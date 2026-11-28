@@ -7,3 +7,4 @@
 - Stop the transcript follow animation when you drag the list.
 - Limit the Android reaction menu blur to the card, bar, and emoji grid.
 - Keep composer focus when a hardware Enter key sends a message.
+- Limit the shared Android header blur to the top bar.
