@@ -1,7 +1,7 @@
 import { ATTACHMENT_FILE_EXTENSIONS } from "@openbot/contracts/attachment-files";
 import { MOBILE_ATTACHMENT_BYTES } from "@openbot/team-client/remote-peer";
 import { requireNativeView, requireOptionalNativeModule } from "expo";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { haptics } from "@/shared/lib/haptics";
@@ -14,7 +14,12 @@ export interface PastedFiles {
   failed: number;
 }
 
+export interface ComposerPasteHandle {
+  resetComposing?: () => Promise<boolean>;
+}
+
 interface NativeProps extends ViewProps {
+  ref?: Ref<ComposerPasteHandle>;
   extensions: readonly string[];
   maxBytes: number;
   onPasteFiles: (event: NativeSyntheticEvent<PastedFiles>) => void;
@@ -80,10 +85,12 @@ export function ChatDropTarget({
 }
 
 export function ComposerPasteTarget({
+  ref,
   children,
   onPasteFiles,
   onSubmitKey,
 }: {
+  ref?: Ref<ComposerPasteHandle>;
   children: ReactNode;
   onPasteFiles: (pasted: PastedFiles) => void;
   onSubmitKey: (text: string) => void;
@@ -91,6 +98,7 @@ export function ComposerPasteTarget({
   if (!NativePasteTarget) return children;
   return (
     <NativePasteTarget
+      ref={ref}
       style={{ flex: 1, minWidth: 0 }}
       extensions={ATTACHMENT_FILE_EXTENSIONS}
       maxBytes={MOBILE_ATTACHMENT_BYTES}

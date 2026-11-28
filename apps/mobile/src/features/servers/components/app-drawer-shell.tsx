@@ -32,7 +32,11 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
-import { AppDrawerMovingContext, AppDrawerShownOnUIContext } from "@/features/servers/components/app-drawer-activity";
+import {
+  AppDrawerMovingContext,
+  AppDrawerShownContext,
+  AppDrawerShownOnUIContext,
+} from "@/features/servers/components/app-drawer-activity";
 import { ServerDrawerContent } from "@/features/servers/components/server-drawer-content";
 import {
   useMobileWorkspaceActions,
@@ -383,7 +387,9 @@ export function AppDrawerShell({ children }: PropsWithChildren) {
                   }
                 >
                   <Animated.View collapsable={false} className="flex-1" style={contentTouchStyle}>
-                    {children}
+                    <AppDrawerShownContext.Provider value={drawerPhase !== "closed"}>
+                      {children}
+                    </AppDrawerShownContext.Provider>
                   </Animated.View>
                   <Animated.View
                     className="absolute inset-0"

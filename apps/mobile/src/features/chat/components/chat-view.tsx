@@ -80,7 +80,7 @@ import { useAppActive } from "@/shared/lib/use-app-active";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useReducedTransparency } from "@/shared/lib/use-reduced-transparency";
 import { useFrostTarget } from "@/shared/motion/frostTarget";
-import { liveZoomOf } from "@/shared/motion/liveZoom";
+import { liveZoomOf, useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { colorOSMotionEnabled, useColorOSMotion } from "@/shared/motion/useColorOSMotion";
 import { chatShowsLatestButton } from "../model/chat-layout";
 import { mentionDraft } from "../model/chat-mentions";
@@ -664,6 +664,7 @@ export function ChatView({
   const routeKey = useRoute().key;
   const [zoomed] = useState(() => liveZoomOf(routeKey) !== undefined);
   const rowsShown = useRowsAfterOpenTransition(zoomed);
+  const openSettled = useLiveZoomSettled();
   // Hotfix 11.1: the ColorOS agent header (big avatar over a compact pill) ends lower than the classic one.
   const colorOSHeaderOn = useColorOSMotion().enabled;
   // Build 11.2: the same check ChatHeader makes (the split pane keeps the classic header).
@@ -1323,14 +1324,17 @@ export function ChatView({
 
                 {colorOSHeaderOn &&
                 isAndroid &&
-                (ready || server?.initialConnectionPending || (serverOnline && !historyLoadFailed)) ? (
-                  <ChatOpeningSkeleton revealed={motion.revealed} top={insets.top + 84} />
+                openSettled &&
+                rowsShown &&
+                !ready &&
+                messages.length === 0 &&
+                (server?.initialConnectionPending || (serverOnline && !historyLoadFailed)) ? (
+                  <ChatOpeningSkeleton top={insets.top + 84} />
                 ) : null}
               </ChatFrostTarget>
               <Animated.View
                 style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, motion.composerStyle]}
                 pointerEvents="box-none"
-                onLayout={motion.onComposerLayout}
               >
                 {onPullPastEnd !== null ? (
                   <ChatEndPullRing pull={endPull} target={target} leadAgentId={channelLeadAgentId} />
@@ -1360,154 +1364,162 @@ export function ChatView({
                     </ChatGlassIconButton>
                   </Animated.View>
                 ) : null}
-                <View style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
-                  <ConnectionStatus
-                    server={server}
-                    note={
-                      !ready && !server?.initialConnectionPending && !serverOnline
-                        ? t("mobile.chat.history.waiting")
-                        : null
-                    }
-                  />
-                  <ChatSyncStatus syncing={ready && serverOnline && (server?.resuming === true || catchingUp)} />
-                </View>
-                {showBrowserRequests
-                  ? chatBrowserRequests
-                      .filter((request) => !asksForSecret(request))
-                      .map((request) => (
-                        <BrowserTakeoverCard
-                          key={`${target.serverId}:${request.requestId}`}
+                <View pointerEvents="box-none" onLayout={motion.onComposerChromeLayout}>
+                  <View style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
+                    <ConnectionStatus
+                      server={server}
+                      note={
+                        !ready && !server?.initialConnectionPending && !serverOnline
+                          ? t("mobile.chat.history.waiting")
+                          : null
+                      }
+                    />
+                    <ChatSyncStatus syncing={ready && serverOnline && (server?.resuming === true || catchingUp)} />
+                  </View>
+                  {showBrowserRequests
+                    ? chatBrowserRequests
+                        .filter((request) => !asksForSecret(request))
+                        .map((request) => (
+                          <BrowserTakeoverCard
+                            key={`${target.serverId}:${request.requestId}`}
+                            request={request}
+                            respondToTakeover={(decision) =>
+                              workspace().respondToBrowserTakeover(target.serverId, {
+                                requestId: request.requestId,
+                                decision,
+                              })
+                            }
+                            openBrowser={
+                              browserAllowed && browserViewAvailable
+                                ? () =>
+                                    router.push({
+                                      pathname: "/browser/[agentId]",
+                                      params: {
+                                        agentId: request.agentId,
+                                        serverId: target.serverId,
+                                        tabId: request.tabId,
+                                      },
+                                    })
+                                : undefined
+                            }
+                          />
+                        ))
+                    : null}
+                  {showBrowserRequests && browserAllowed
+                    ? locationRequests.map((request) => (
+                        <BrowserLocationCard
+                          key={`${target.serverId}:location:${request.id}`}
                           request={request}
-                          respondToTakeover={(decision) =>
-                            workspace().respondToBrowserTakeover(target.serverId, {
-                              requestId: request.requestId,
-                              decision,
-                            })
-                          }
-                          openBrowser={
-                            browserAllowed && browserViewAvailable
-                              ? () =>
-                                  router.push({
-                                    pathname: "/browser/[agentId]",
-                                    params: {
-                                      agentId: request.agentId,
-                                      serverId: target.serverId,
-                                      tabId: request.tabId,
-                                    },
-                                  })
-                              : undefined
-                          }
+                          answer={(answer) => workspace().answerBrowserPermission(target.serverId, answer)}
                         />
                       ))
-                  : null}
-                {showBrowserRequests && browserAllowed
-                  ? locationRequests.map((request) => (
-                      <BrowserLocationCard
-                        key={`${target.serverId}:location:${request.id}`}
-                        request={request}
-                        answer={(answer) => workspace().answerBrowserPermission(target.serverId, answer)}
-                      />
-                    ))
-                  : null}
-                {sendError?.agentId === target.id ? (
-                  <Typography.Paragraph
-                    accessibilityRole="alert"
-                    className="py-2 text-danger-text"
-                    style={{
-                      backgroundColor: chatBackground,
-                      paddingLeft: insets.left + 16,
-                      paddingRight: insets.right + 16,
-                    }}
-                  >
-                    {sendError.message}
-                  </Typography.Paragraph>
-                ) : null}
-                {outboxSnapshot.storageFailed && outboxMessages.length ? (
-                  <Typography.Paragraph
-                    accessibilityRole="alert"
-                    className="py-2 text-danger-text"
-                    style={{
-                      backgroundColor: chatBackground,
-                      paddingLeft: insets.left + 16,
-                      paddingRight: insets.right + 16,
-                    }}
-                  >
-                    {t("mobile.chat.outbox.saveFailed")}
-                  </Typography.Paragraph>
-                ) : null}
-                {notice
-                  ? null
-                  : statusNotes?.map((note) => (
-                      <Typography.Paragraph
-                        key={note}
-                        type="body-xs"
-                        numberOfLines={2}
-                        accessibilityLiveRegion="polite"
-                        className="py-1.5 text-text-secondary"
-                        style={{
-                          backgroundColor: chatBackground,
-                          paddingLeft: insets.left + 16,
-                          paddingRight: insets.right + 16,
-                        }}
-                      >
-                        {note}
-                      </Typography.Paragraph>
-                    ))}
-                {queue && !notice ? (
-                  <ChatQueueButton
-                    queue={queue}
-                    count={queueCount}
-                    rows={queueRows}
-                    pending={queuePending}
+                    : null}
+                  {sendError?.agentId === target.id ? (
+                    <Typography.Paragraph
+                      accessibilityRole="alert"
+                      className="py-2 text-danger-text"
+                      style={{
+                        backgroundColor: chatBackground,
+                        paddingLeft: insets.left + 16,
+                        paddingRight: insets.right + 16,
+                      }}
+                    >
+                      {sendError.message}
+                    </Typography.Paragraph>
+                  ) : null}
+                  {outboxSnapshot.storageFailed && outboxMessages.length ? (
+                    <Typography.Paragraph
+                      accessibilityRole="alert"
+                      className="py-2 text-danger-text"
+                      style={{
+                        backgroundColor: chatBackground,
+                        paddingLeft: insets.left + 16,
+                        paddingRight: insets.right + 16,
+                      }}
+                    >
+                      {t("mobile.chat.outbox.saveFailed")}
+                    </Typography.Paragraph>
+                  ) : null}
+                  {notice
+                    ? null
+                    : statusNotes?.map((note) => (
+                        <Typography.Paragraph
+                          key={note}
+                          type="body-xs"
+                          numberOfLines={2}
+                          accessibilityLiveRegion="polite"
+                          className="py-1.5 text-text-secondary"
+                          style={{
+                            backgroundColor: chatBackground,
+                            paddingLeft: insets.left + 16,
+                            paddingRight: insets.right + 16,
+                          }}
+                        >
+                          {note}
+                        </Typography.Paragraph>
+                      ))}
+                  {queue && !notice ? (
+                    <ChatQueueButton
+                      queue={queue}
+                      count={queueCount}
+                      rows={queueRows}
+                      pending={queuePending}
+                      liquidGlassAvailable={liquidGlassAvailable}
+                      fallbackBackground={fieldBackground}
+                    />
+                  ) : null}
+                  <ChatSelectionBar
+                    visible={Boolean(selection) && !voiceOpen}
+                    canSend={canSend}
                     liquidGlassAvailable={liquidGlassAvailable}
                     fallbackBackground={fieldBackground}
+                    onAction={sendSelectionAction}
                   />
-                ) : null}
-                <ChatSelectionBar
-                  visible={Boolean(selection) && !voiceOpen}
-                  canSend={canSend}
-                  liquidGlassAvailable={liquidGlassAvailable}
-                  fallbackBackground={fieldBackground}
-                  onAction={sendSelectionAction}
-                />
+                </View>
                 {notice ? (
-                  <Typography.Paragraph
-                    type="body-xs"
-                    align="center"
-                    className="pt-2 text-text-secondary"
-                    style={{
-                      paddingLeft: insets.left + 24,
-                      paddingRight: insets.right + 24,
-                      paddingBottom: Math.max(insets.bottom, 10) + 6,
-                    }}
-                  >
-                    {notice}
-                  </Typography.Paragraph>
+                  <View onLayout={motion.onComposerSlotLayout}>
+                    <Typography.Paragraph
+                      type="body-xs"
+                      align="center"
+                      className="pt-2 text-text-secondary"
+                      style={{
+                        paddingLeft: insets.left + 24,
+                        paddingRight: insets.right + 24,
+                        paddingBottom: Math.max(insets.bottom, 10) + 6,
+                      }}
+                    >
+                      {notice}
+                    </Typography.Paragraph>
+                  </View>
                 ) : secretRequest ? (
-                  <BrowserSecretComposer
-                    key={`${target.serverId}:${secretRequest.requestId}`}
-                    request={secretRequest}
-                    respond={(input) => workspace().respondToBrowserSecret(target.serverId, input)}
-                    bottomInset={insets.bottom}
-                    liquidGlassAvailable={liquidGlassAvailable}
-                    fallbackBackground={fieldBackground}
-                    foreground={foreground}
-                    muted={muted}
-                    action={action}
-                    actionForeground={actionForeground}
-                  />
+                  <View onLayout={motion.onComposerSlotLayout}>
+                    <BrowserSecretComposer
+                      key={`${target.serverId}:${secretRequest.requestId}`}
+                      request={secretRequest}
+                      respond={(input) => workspace().respondToBrowserSecret(target.serverId, input)}
+                      bottomInset={insets.bottom}
+                      liquidGlassAvailable={liquidGlassAvailable}
+                      fallbackBackground={fieldBackground}
+                      foreground={foreground}
+                      muted={muted}
+                      action={action}
+                      actionForeground={actionForeground}
+                    />
+                  </View>
                 ) : secretQuestion ? (
-                  <QuestionSecretComposer
-                    key={`${target.serverId}:${secretQuestion.messageId}:${secretQuestion.question?.id}`}
-                    controller={secretQuestion}
-                    bottomInset={insets.bottom}
-                    liquidGlassAvailable={liquidGlassAvailable}
-                    fallbackBackground={fieldBackground}
-                    foreground={foreground}
-                    muted={muted}
-                    action={action}
-                    actionForeground={actionForeground}
-                  />
+                  <View onLayout={motion.onComposerSlotLayout}>
+                    <QuestionSecretComposer
+                      key={`${target.serverId}:${secretQuestion.messageId}:${secretQuestion.question?.id}`}
+                      controller={secretQuestion}
+                      bottomInset={insets.bottom}
+                      liquidGlassAvailable={liquidGlassAvailable}
+                      fallbackBackground={fieldBackground}
+                      foreground={foreground}
+                      muted={muted}
+                      action={action}
+                      actionForeground={actionForeground}
+                    />
+                  </View>
                 ) : (
                   <ChatComposer
                     sendRetryVersion={sendRetryVersion}
@@ -1535,6 +1547,8 @@ export function ChatView({
                     bottomInset={insets.bottom}
                     disabled={!canSend}
                     keepsKeyboardOnSend={target.kind === "agent"}
+                    heightLive={motion.composerSlotLive}
+                    heightTarget={motion.composerSlotTarget}
                     attachments={attachments}
                     draft={draft}
                     fallbackBackground={fieldBackground}

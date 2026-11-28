@@ -1,19 +1,18 @@
-import { type PropsWithChildren, useEffect, useId } from "react";
+import { Canvas, PaintStyle, Picture, Skia, StrokeCap, StrokeJoin, TileMode } from "@shopify/react-native-skia";
+import { type PropsWithChildren, useEffect, useMemo } from "react";
 import { View } from "react-native";
-import Animated, {
+import {
   cancelAnimation,
   Easing,
   ReduceMotion,
   type SharedValue,
-  useAnimatedProps,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import {
   ORBIT_CYCLE,
-  type OrbitRing,
   orbitFrameIndex,
   orbitFrames,
   orbitRings,
@@ -23,81 +22,63 @@ import { useMotionPreference } from "@/shared/lib/motion";
 import { useAppForeground } from "@/shared/lib/use-app-foreground";
 import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
 const RING_SCALE = 1.58 / 1.28;
 const GRADIENT_OFFSETS = [0, 0.5, 1];
 
-function OrbitArcPath({
-  clock,
-  gradientId,
-  index,
-  layer,
-  ring,
-}: {
-  clock: SharedValue<number>;
-  gradientId: string;
-  index: number;
-  layer: "back" | "front";
-  ring: OrbitRing;
-}) {
-  const props = useAnimatedProps(() => {
+function OrbitLayer({ clock, layer, size }: { clock: SharedValue<number>; layer: "back" | "front"; size: number }) {
+  const box = size * RING_SCALE;
+  const kit = useMemo(
+    () => ({
+      recorder: Skia.PictureRecorder(),
+      bounds: Skia.XYWHRect(0, 0, box, box),
+      paints: orbitRings().map((ring) => {
+        const paint = Skia.Paint();
+        paint.setAntiAlias(true);
+        paint.setStyle(PaintStyle.Stroke);
+        paint.setStrokeWidth(ring.width);
+        paint.setStrokeCap(StrokeCap.Round);
+        paint.setStrokeJoin(StrokeJoin.Miter);
+        paint.setShader(
+          Skia.Shader.MakeLinearGradient(
+            { x: ring.gradient.x1, y: ring.gradient.y1 },
+            { x: ring.gradient.x2, y: ring.gradient.y2 },
+            ring.gradient.stops.map((color) => Skia.Color(color)),
+            ring.gradient.stops.map((_, index) => GRADIENT_OFFSETS[index] ?? 1),
+            TileMode.Clamp,
+          ),
+        );
+        return paint;
+      }),
+    }),
+    [box],
+  );
+  const picture = useDerivedValue(() => {
     const frames = orbitFrames.get();
-    const arc = frames.length > 0 ? frames[orbitFrameIndex(clock.get(), frames.length)]?.[index] : undefined;
-    return { d: arc ? arc[layer] : "", opacity: arc ? arc.opacity : 0 };
+    const frame = frames.length > 0 ? frames[orbitFrameIndex(clock.get(), frames.length)] : undefined;
+    const canvas = kit.recorder.beginRecording(kit.bounds);
+    canvas.translate(box / 2, box / 2);
+    canvas.scale(size / 256, size / 256);
+    if (frame) {
+      for (let index = 0; index < frame.length; index += 1) {
+        const arc = frame[index];
+        const path = arc?.[layer];
+        const paint = kit.paints[index];
+        if (!arc || !path || !paint || arc.opacity <= 0) continue;
+        paint.setAlphaf(arc.opacity);
+        canvas.drawPath(path, paint);
+      }
+    }
+    return kit.recorder.finishRecordingAsPicture();
   });
   return (
-    <AnimatedPath
-      fill="none"
-      stroke={`url(#${gradientId})`}
-      strokeLinecap="round"
-      strokeWidth={ring.width}
-      animatedProps={props}
-    />
-  );
-}
-
-function OrbitLayer({ clock, layer, size }: { clock: SharedValue<number>; layer: "back" | "front"; size: number }) {
-  const id = `orbit-${useId().replaceAll(":", "")}`;
-  const rings = orbitRings();
-  const box = size * RING_SCALE;
-  return (
-    <Svg
+    <Canvas
       accessibilityElementsHidden
       accessible={false}
-      height={box}
       pointerEvents="none"
-      style={{ position: "absolute", left: (size - box) / 2, top: (size - box) / 2 }}
-      viewBox="-158 -158 316 316"
-      width={box}
+      style={{ position: "absolute", left: (size - box) / 2, top: (size - box) / 2, width: box, height: box }}
     >
-      <Defs>
-        {rings.map((ring) => (
-          <LinearGradient
-            key={ring.id}
-            id={`${id}-${ring.id}`}
-            gradientUnits="userSpaceOnUse"
-            x1={ring.gradient.x1}
-            y1={ring.gradient.y1}
-            x2={ring.gradient.x2}
-            y2={ring.gradient.y2}
-          >
-            {ring.gradient.stops.map((color, index) => (
-              <Stop key={color} offset={GRADIENT_OFFSETS[index] ?? 1} stopColor={color} />
-            ))}
-          </LinearGradient>
-        ))}
-      </Defs>
-      {rings.map((ring, index) => (
-        <OrbitArcPath
-          key={ring.id}
-          clock={clock}
-          gradientId={`${id}-${ring.id}`}
-          index={index}
-          layer={layer}
-          ring={ring}
-        />
-      ))}
-    </Svg>
+      <Picture picture={picture} />
+    </Canvas>
   );
 }
 

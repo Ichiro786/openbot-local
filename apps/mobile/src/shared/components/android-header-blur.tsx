@@ -3,21 +3,30 @@ import { BlurTargetView, BlurView } from "expo-blur";
 import type { NativeStackHeaderProps } from "expo-router/native-stack";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import type { ReactNode, RefObject } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type ViewInstance } from "react-native";
-import Animated, { type SharedValue, useAnimatedProps, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  type SharedValue,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { scheduleOnRN } from "react-native-worklets";
 import { useUniwind } from "uniwind";
 import { AndroidStackBackButton } from "@/shared/components/android-header-button";
 import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
+import { useBlurBudget } from "@/shared/glass/blurBudget";
 import { typeScale } from "@/shared/lib/type-scale";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
+import { useBlurLive } from "@/shared/motion/useBlurLive";
 
-const BLUR_INTENSITY = 40;
-const SURFACE_OPACITY = 0.8;
+const BLUR_INTENSITY = 24;
+const SURFACE_OPACITY = 0.32;
 const BLUR_SHAPES = {
-  sheet: { belowBar: 28, full: 0.45 },
-  screen: { belowBar: 32, full: 0.68 },
+  sheet: { belowBar: 12, full: 0.2 },
+  screen: { belowBar: 12, full: 0.28 },
 } as const;
 
 function maskStops(full: number) {
@@ -28,7 +37,8 @@ function maskStops(full: number) {
   return [{ offset: 0, opacity: 1 }, ...fade];
 }
 
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
+const RAISE_AT = 0.05;
+const DROP_MS = 250;
 
 const BAR_HEIGHT = 64;
 const TITLE_INSET = 72;
@@ -52,58 +62,99 @@ export function AndroidBlurTarget({
   );
 }
 
+function useHeaderRaised(shown: SharedValue<number>, initial: boolean): boolean {
+  const [raised, setRaised] = useState(initial);
+  const latch = useSharedValue(-1);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const apply = useCallback((next: boolean) => {
+    clearTimeout(timer.current);
+    if (next) {
+      setRaised(true);
+      return;
+    }
+    timer.current = setTimeout(() => setRaised(false), DROP_MS);
+  }, []);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useAnimatedReaction(
+    () => {
+      const value = shown.get();
+      return value >= RAISE_AT ? 1 : value <= 0 ? 0 : -1;
+    },
+    (next) => {
+      if (next === -1 || next === latch.get()) return;
+      latch.set(next);
+      scheduleOnRN(apply, next === 1);
+    },
+    [shown, apply],
+  );
+  return raised;
+}
+
 export function AndroidHeaderBlur({
   target,
   height,
   surface = "sheet",
   shape,
   progress,
+  paused = false,
 }: {
   target: RefObject<ViewInstance | null>;
   height?: number;
   surface?: "canvas" | "sheet";
   shape: keyof typeof BLUR_SHAPES;
   progress?: SharedValue<number>;
+  paused?: boolean;
 }) {
   const { theme } = useUniwind();
+  const focused = useScreenFocusedWhile(true);
   const fullBar = useSharedValue(1);
   const shown = progress ?? fullBar;
-  const maskProps = useAnimatedProps(() => ({ opacity: shown.get() }));
+  const raised = useHeaderRaised(shown, progress === undefined);
+  const running = ANDROID_BLUR && focused && !paused && raised;
+  const live = useBlurLive(running);
+  useBlurBudget(live, "android-header");
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: shown.get() }));
   const { belowBar, full } = BLUR_SHAPES[shape];
   return (
-    <MaskedView
+    <Animated.View
       pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
         { position: "absolute", top: 0, left: 0, right: 0 },
         height === undefined ? { bottom: -belowBar } : { height: height + belowBar },
+        fadeStyle,
       ]}
-      maskElement={
-        <Svg height="100%" width="100%">
-          <Defs>
-            <LinearGradient id="android-header-mask" x1="0" x2="0" y1="0" y2="1">
-              {maskStops(full).map(({ offset, opacity }) => (
-                <Stop key={offset} offset={offset} stopColor="#000000" stopOpacity={opacity} />
-              ))}
-            </LinearGradient>
-          </Defs>
-          <AnimatedRect fill="url(#android-header-mask)" height="100%" width="100%" animatedProps={maskProps} />
-        </Svg>
-      }
     >
-      <BlurView
-        blurTarget={target}
-        blurMethod="dimezisBlurViewSdk31Plus"
-        intensity={BLUR_INTENSITY}
-        tint={theme === "dark" ? "dark" : "light"}
+      <MaskedView
+        androidRenderingMode="hardware"
         style={StyleSheet.absoluteFill}
-      />
-      <View
-        className={surface === "sheet" ? "bg-sheet" : "bg-background"}
-        style={[StyleSheet.absoluteFill, { opacity: SURFACE_OPACITY }]}
-      />
-    </MaskedView>
+        maskElement={
+          <Svg height="100%" width="100%">
+            <Defs>
+              <LinearGradient id="android-header-mask" x1="0" x2="0" y1="0" y2="1">
+                {maskStops(full).map(({ offset, opacity }) => (
+                  <Stop key={offset} offset={offset} stopColor="#000000" stopOpacity={opacity} />
+                ))}
+              </LinearGradient>
+            </Defs>
+            <Rect fill="url(#android-header-mask)" height="100%" width="100%" />
+          </Svg>
+        }
+      >
+        <BlurView
+          blurTarget={target}
+          blurMethod={running ? "dimezisBlurViewSdk31Plus" : "none"}
+          intensity={BLUR_INTENSITY}
+          tint={theme === "dark" ? "dark" : "light"}
+          style={[StyleSheet.absoluteFill, { opacity: live ? 1 : 0 }]}
+        />
+        <View
+          className={surface === "sheet" ? "bg-sheet" : "bg-background"}
+          style={[StyleSheet.absoluteFill, { opacity: live ? SURFACE_OPACITY : 1 }]}
+        />
+      </MaskedView>
+    </Animated.View>
   );
 }
 

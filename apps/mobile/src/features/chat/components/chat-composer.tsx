@@ -41,7 +41,6 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  cubicBezier,
   Easing,
   Extrapolation,
   FadeIn,
@@ -95,7 +94,12 @@ import { AttachmentPreviewSheet } from "./attachment-preview-sheet";
 import { ComposerAttachmentTile, localPreviewUri } from "./composer-attachment-tile";
 import type { ComposerContextMeter } from "./composer-context-ring";
 import { DictationMic, DictationStrip } from "./composer-dictation";
-import { addPastedFiles, ComposerPasteTarget, type PastedFiles } from "./composer-paste-target";
+import {
+  addPastedFiles,
+  type ComposerPasteHandle,
+  ComposerPasteTarget,
+  type PastedFiles,
+} from "./composer-paste-target";
 import { ComposerSendControl } from "./composer-send-control";
 import type { ComposerVoice } from "./composer-voice";
 import type { ChatAttachments } from "./use-chat-attachments";
@@ -103,7 +107,7 @@ import type { ComposerDictation } from "./use-composer-dictation";
 import { VoiceCallBar } from "./voice-call-bar";
 
 const PLUS_CLOSE_SPRING = { duration: 220, dampingRatio: 1 };
-const REPLY_SPRING = { stiffness: 520, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const REPLY_SPRING = { stiffness: 260, damping: 32, mass: 1, reduceMotion: ReduceMotion.System };
 const REPLY_OUT_EASING = Easing.in(Easing.cubic);
 const MAX_INPUT_LINES = 5;
 const ROW_CONTROL_INSET = 48;
@@ -124,7 +128,6 @@ const VOICE_BUTTON_SIZE = 64;
 const CARD_RADIUS = 24;
 
 const AnimatedGlassView = Animated.createAnimatedComponent(GlassView);
-const SHAPE_EASING = cubicBezier(0.23, 1, 0.32, 1);
 const SHAPE_EASING_FN = Easing.bezier(0.23, 1, 0.32, 1);
 const PLACEHOLDER_DURATION = 200;
 const PLACEHOLDER_EASING_FN = Easing.bezier(0.77, 0, 0.175, 1);
@@ -178,6 +181,8 @@ interface ChatComposerProps {
   voicePalette?: VoicePalette;
   contextMeter?: ComposerContextMeter;
   keepsKeyboardOnSend?: boolean;
+  heightLive?: SharedValue<number>;
+  heightTarget?: SharedValue<number>;
 }
 
 const NO_FILES: ChatAttachments["items"] = [];
@@ -208,7 +213,6 @@ const TAG_GROUPS = [
 
 const FOCUS_RETRY_MS = 1500;
 const FOCUS_RETRY_INTERVAL_MS = 100;
-const REPLY_KEYBOARD_WAIT_MS = 400;
 
 export const ChatComposer = memo(function ChatComposer({
   sendLabel,
@@ -254,6 +258,8 @@ export const ChatComposer = memo(function ChatComposer({
   voicePalette,
   contextMeter,
   keepsKeyboardOnSend = false,
+  heightLive,
+  heightTarget,
 }: ChatComposerProps) {
   const { t, format, sourceText } = useText();
   const still = useSharedValue(0);
@@ -292,6 +298,8 @@ export const ChatComposer = memo(function ChatComposer({
   const isFocused = useIsFocused();
   const latestTextRef = useRef(draft);
   const [sendGate] = useState(createComposerSendGate);
+  const pasteRef = useRef<ComposerPasteHandle>(null);
+  const composingSent = useRef(false);
   const voiceOpen = voice?.open ?? false;
   const colorOSFrost = useColorOSMotion().enabled;
   const frosted = isAndroid && ANDROID_BLUR && !liquidGlassAvailable && colorOSFrost && frostTarget !== undefined;
@@ -386,6 +394,7 @@ export const ChatComposer = memo(function ChatComposer({
   const trailingInset = ROW_CONTROL_INSET + (dictationMic ? CONTROL_SIZE + CONTROL_GAP : 0);
   const rowTextWidth = barWidth - BAR_INSET * 2 - trailingInset - leadingInset;
   const [wrap, setWrap] = useState({ lines: 1, width: 0 });
+  if (!displayText && (wrap.lines > 1 || wrap.width > rowTextWidth)) setWrap({ lines: 1, width: 0 });
   const stacked = dictating || wrap.lines > 1 || wrap.width > rowTextWidth;
   const fieldHeight = Math.max(
     TOOLBAR_HEIGHT,
@@ -447,12 +456,11 @@ export const ChatComposer = memo(function ChatComposer({
   const [shownReply, setShownReply] = useState(replyTarget);
   if (replyTarget && replyTarget !== shownReply) setShownReply(replyTarget);
   const replyActive = replyTarget !== null;
-  const replyActiveValue = useSharedValue(replyActive);
   const replyPresence = useSharedValue(replyActive ? 1 : 0);
   const replyRowHeight = useSharedValue(0);
   const replyHold = useSharedValue(replyActive ? 1 : 0);
-  useEffect(() => {
-    replyActiveValue.set(replyActive);
+  const replyHoldTarget = useSharedValue(replyActive ? 1 : 0);
+  useLayoutEffect(() => {
     const timing = { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System };
     replyPresence.set(
       replyActive
@@ -467,21 +475,9 @@ export const ChatComposer = memo(function ChatComposer({
             },
           ),
     );
-    if (!replyActive || disabled) replyHold.set(withTiming(replyActive ? 1 : 0, timing));
-  }, [replyActive, replyActiveValue, replyPresence, replyHold, shapeDuration, disabled, reducedMotion]);
-  useAnimatedReaction(
-    () => keyboardProgress.get(),
-    (progress, previous) => {
-      if (!replyActiveValue.get() || replyHold.get() > 0) return;
-      if (progress >= 0.99) replyHold.set(1);
-      else if (previous !== null && progress < previous) {
-        replyHold.set(progress);
-        replyHold.set(
-          withTiming(1, { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System }),
-        );
-      }
-    },
-  );
+    replyHoldTarget.set(replyActive ? 1 : 0);
+    replyHold.set(replyActive ? (reducedMotion ? 1 : withSpring(1, REPLY_SPRING)) : withTiming(0, timing));
+  }, [replyActive, replyPresence, replyHold, replyHoldTarget, shapeDuration, reducedMotion]);
   const keyboardExpansion = useSharedValue(0);
   const keyboardExpansionTarget = useSharedValue(0);
   useAnimatedReaction(
@@ -596,6 +592,17 @@ export const ChatComposer = memo(function ChatComposer({
       marginBottom: interpolate(stackedValue.get(), [0, 1], [0, TOOLBAR_HEIGHT]) * (1 - voiced),
     };
   });
+  const attachmentHeight = useSharedValue(attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0);
+  useEffect(() => {
+    attachmentHeight.set(
+      withTiming(attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0, {
+        duration: shapeDuration,
+        easing: SHAPE_EASING_FN,
+        reduceMotion: ReduceMotion.System,
+      }),
+    );
+  }, [attachmentsOpen, attachmentHeight, shapeDuration]);
+  const attachmentStyle = useAnimatedStyle(() => ({ height: attachmentHeight.get() }));
   const openTextOffset = leadingInset - FIELD_INSET;
   const restTextOffset = placeholderWidth > 0 ? restLeadingInset - FIELD_INSET : openTextOffset;
   const fieldOpenOffset =
@@ -628,16 +635,6 @@ export const ChatComposer = memo(function ChatComposer({
     ],
   }));
   const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    if (!focused || !replyActive) return;
-    const timer = setTimeout(() => {
-      if (replyHold.get() > 0 || keyboardProgress.get() > 0) return;
-      replyHold.set(
-        withTiming(1, { duration: shapeDuration, easing: SHAPE_EASING_FN, reduceMotion: ReduceMotion.System }),
-      );
-    }, REPLY_KEYBOARD_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [focused, replyActive, replyHold, keyboardProgress, shapeDuration]);
 
   useLayoutEffect(() => {
     if (files.length > 0) sendGate.edit();
@@ -655,6 +652,20 @@ export const ChatComposer = memo(function ChatComposer({
     latestTextRef.current = draft;
   }, [draft]);
 
+  useLayoutEffect(() => {
+    if (!composingSent.current) return;
+    composingSent.current = false;
+    const field = pasteRef.current;
+    if (draft || !field?.resetComposing) return;
+    sendGate.holdFieldText();
+    field.resetComposing().then(
+      (cleared) => {
+        if (!cleared) sendGate.releaseFieldText();
+      },
+      () => sendGate.releaseFieldText(),
+    );
+  }, [draft, sendGate]);
+
   useEffect(() => {
     if (disabled) inputRef.current?.blur();
   }, [disabled]);
@@ -664,6 +675,75 @@ export const ChatComposer = memo(function ChatComposer({
   useEffect(() => {
     onSuggestionsVisibleChange?.(suggestionsVisible);
   }, [onSuggestionsVisibleChange, suggestionsVisible]);
+  const [suggestionsHeight, setSuggestionsHeight] = useState(0);
+  const suggestionsShown = Boolean(suggestionsVisible && query);
+  const chromeHeight = (suggestionsShown ? suggestionsHeight : 0) + 8 + composerBottomGap(bottomInset);
+  const replyMounted = shownReply !== null && !voiceOpen;
+  const heightTargets = useSharedValue({
+    chrome: chromeHeight,
+    field: fieldHeight,
+    stacked: stacked ? 1 : 0,
+    attachments: attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0,
+    reply: replyActive ? 1 : 0,
+    replyMounted: replyMounted ? 1 : 0,
+    held: anchored ? 1 : 0,
+    voice: voiceOpen ? 1 : 0,
+  });
+  useEffect(() => {
+    heightTargets.set({
+      chrome: chromeHeight,
+      field: fieldHeight,
+      stacked: stacked ? 1 : 0,
+      attachments: attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0,
+      reply: replyActive ? 1 : 0,
+      replyMounted: replyMounted ? 1 : 0,
+      held: anchored ? 1 : 0,
+      voice: voiceOpen ? 1 : 0,
+    });
+  }, [
+    heightTargets,
+    chromeHeight,
+    fieldHeight,
+    stacked,
+    attachmentsOpen,
+    replyActive,
+    replyMounted,
+    anchored,
+    voiceOpen,
+  ]);
+  useAnimatedReaction(
+    () => {
+      const goal = heightTargets.get();
+      const fieldBox = (expanded: number, field: number, stack: number, voiced: number) => {
+        const height = interpolate(expanded, [0, 1], [restHeight, field]);
+        return (
+          height +
+          (VOICE_BUTTON_SIZE - height) * voiced +
+          interpolate(stack, [0, 1], [0, TOOLBAR_HEIGHT]) * (1 - voiced)
+        );
+      };
+      const liveExpansion = expansion.get();
+      const liveReply = Math.min(1, Math.max(0, Math.min(replyPresence.get(), liveExpansion)));
+      const live =
+        goal.chrome +
+        replyRowHeight.get() * liveReply * goal.replyMounted +
+        attachmentHeight.get() +
+        fieldBox(liveExpansion, fieldHeightValue.get(), stackedValue.get(), morph.get());
+      const keyboardGoal =
+        isAndroid && resizes ? keyboardExpansionTarget.get() : Math.min(1, Math.max(0, keyboardProgress.get()));
+      const goalExpansion = resizes ? Math.max(keyboardGoal, goal.held, replyHoldTarget.get()) : 1;
+      const target =
+        goal.chrome +
+        replyRowHeight.get() * Math.min(1, goalExpansion) * goal.reply * (1 - goal.voice) +
+        goal.attachments +
+        fieldBox(goalExpansion, goal.field, goal.stacked, goal.voice);
+      return { live, target };
+    },
+    ({ live, target }) => {
+      heightLive?.set(live);
+      heightTarget?.set(target);
+    },
+  );
   const announcedSuggestions = useRef("");
   useEffect(() => {
     const announcement = suggestionsVisible ? `${suggestionCount}:${query?.query ?? ""}` : "";
@@ -848,6 +928,7 @@ export const ChatComposer = memo(function ChatComposer({
     }
     if (keepsKeyboardOnSend) {
       if (!sendGate.submit(false)) return;
+      composingSent.current = true;
       onSend(latestTextRef.current);
       return;
     }
@@ -911,6 +992,7 @@ export const ChatComposer = memo(function ChatComposer({
     <View>
       {suggestionsVisible && query ? (
         <GlassView
+          onLayout={({ nativeEvent }) => setSuggestionsHeight(nativeEvent.layout.height)}
           glassEffectStyle={liquidGlassAvailable ? "regular" : "none"}
           style={{
             marginLeft: insets.left + 16,
@@ -1103,15 +1185,7 @@ export const ChatComposer = memo(function ChatComposer({
                 </View>
               </Animated.View>
             ) : null}
-            <Animated.View
-              style={{
-                height: attachmentsOpen ? ATTACHMENT_BLOCK_HEIGHT : 0,
-                overflow: "hidden",
-                transitionProperty: "height",
-                transitionDuration: shapeDuration,
-                transitionTimingFunction: SHAPE_EASING,
-              }}
-            >
+            <Animated.View style={[{ overflow: "hidden" }, attachmentStyle]}>
               {attachmentsOpen ? (
                 <ScrollView
                   horizontal
@@ -1146,7 +1220,7 @@ export const ChatComposer = memo(function ChatComposer({
                 <Animated.View
                   style={[{ position: "absolute", left: FIELD_INSET, right: FIELD_INSET, bottom: 0 }, fieldSlideStyle]}
                 >
-                  <ComposerPasteTarget onPasteFiles={pasteFiles} onSubmitKey={submitKey}>
+                  <ComposerPasteTarget ref={pasteRef} onPasteFiles={pasteFiles} onSubmitKey={submitKey}>
                     <TextInput
                       ref={inputRef}
                       nativeID="chat-composer-input"
@@ -1185,7 +1259,11 @@ export const ChatComposer = memo(function ChatComposer({
                       }}
                       onBlur={() => setFocused(false)}
                       onChangeText={(text) => {
-                        if (sendGate.ignoresFieldText()) return;
+                        if (sendGate.ignoresFieldText()) {
+                          if (text === "") sendGate.releaseFieldText();
+                          return;
+                        }
+                        composingSent.current = false;
                         if (dictationBusy) {
                           if (dictating) finishDictation();
                           return;

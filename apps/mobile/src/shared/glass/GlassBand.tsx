@@ -9,23 +9,22 @@ import { ANDROID_BLUR } from "@/shared/components/glass-capsule";
 import { useBlurLive } from "@/shared/motion/useBlurLive";
 import { useBlurBudget } from "./blurBudget";
 
-/** Build 11.3: a strong frost, so text under the bar is unreadable (Syed's reference). */
-const INTENSITY = 40;
+const INTENSITY = 24;
 const REDUCTION = 4;
 /**
  * The dim at the top of the band, fading out with the blur. Build 11.3 (Syed): neutral black, never a
  * theme or agent colour, so the frost adds no tint of its own.
  */
-const DIM_DARK = 0.32;
-const DIM_LIGHT = 0.12;
+const DIM_DARK = 0.16;
+const DIM_LIGHT = 0.06;
 const STEPS = 24;
 /**
  * Build 14 (Syed's phone, build 12 videos: the frost snapped on ~400 ms after the chat opened): while the
  * blur is not running yet, a static scrim of the band's shape stands in for it (no live blur under the
  * moving chat), and the blur fades in over it.
  */
-const SCRIM_DARK = 0.86;
-const SCRIM_LIGHT = 0.8;
+const SCRIM_DARK = 0.36;
+const SCRIM_LIGHT = 0.3;
 const CROSSFADE_MS = 120;
 
 /**
@@ -57,6 +56,8 @@ export function GlassBand({
   solid,
   style,
   fadeHeight,
+  blurHeight,
+  blurSolid,
   shapes,
   scrim = false,
 }: {
@@ -67,6 +68,8 @@ export function GlassBand({
   style?: object;
   /** Build 11.3 batch 1: the fading part's height when `shapes` reach below it (default: all of it). */
   fadeHeight?: number;
+  blurHeight?: number;
+  blurSolid?: number;
   /**
    * Build 11.3 batch 1 (Syed: the name pill read see-through): pills (radius = height / 2) below the fade
    * that get the band's full frost and dim from the same one blur, as the buttons over the band have.
@@ -91,6 +94,7 @@ export function GlassBand({
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim ? 1 - blurShown.get() : 0 }));
   if (!ANDROID_BLUR || !target) return null;
   const ramp = stops(solid);
+  const blurRamp = stops(blurSolid ?? solid);
   return (
     <View
       pointerEvents="none"
@@ -106,12 +110,12 @@ export function GlassBand({
           <Svg width="100%" height="100%">
             <Defs>
               <LinearGradient id={`band-mask-${id}`} x1="0" x2="0" y1="0" y2="1">
-                {ramp.map(({ offset, opacity }) => (
+                {blurRamp.map(({ offset, opacity }) => (
                   <Stop key={offset} offset={offset} stopColor="#000000" stopOpacity={opacity} />
                 ))}
               </LinearGradient>
             </Defs>
-            <Rect width="100%" height={fadeHeight ?? "100%"} fill={`url(#band-mask-${id})`} />
+            <Rect width="100%" height={blurHeight ?? fadeHeight ?? "100%"} fill={`url(#band-mask-${id})`} />
             {shapes?.map((shape) => (
               <Rect key={`${shape.x}:${shape.y}`} {...shape} rx={shape.height / 2} fill="#000000" />
             ))}

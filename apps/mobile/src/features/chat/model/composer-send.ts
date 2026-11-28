@@ -1,10 +1,12 @@
 export function createComposerSendGate() {
   let submitted = false;
   let closing = false;
+  let resetting = false;
   return {
     focus() {
       submitted = false;
       closing = false;
+      resetting = false;
     },
     edit() {
       submitted = false;
@@ -18,8 +20,14 @@ export function createComposerSendGate() {
       closing = fieldFocused;
       return true;
     },
+    holdFieldText() {
+      resetting = true;
+    },
+    releaseFieldText() {
+      resetting = false;
+    },
     ignoresFieldText(): boolean {
-      return closing;
+      return closing || resetting;
     },
     endEditing(): boolean {
       const sentDraft = closing;

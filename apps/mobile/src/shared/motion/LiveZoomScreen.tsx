@@ -53,8 +53,7 @@ import { useColorOSMotion } from "./useColorOSMotion";
  * thread, no layout per frame. The curve is critically damped (no overshoot, a gentle first frame).
  */
 const OPEN_MS = 300;
-const CLOSE_MS = 310;
-const CLOSE_EASING = Easing.bezier(0.32, 0, 0.2, 1);
+const CLOSE_MS = 300;
 const MORPH_AVATAR_BASE = 128;
 /** Critical damping: 1 - (1 + kt)e^(-kt), normalised to reach 1 at t = 1 (k = 7.4: within 0.5 % at ~0.7). */
 const CRIT_K = 5.4;
@@ -74,11 +73,9 @@ function critInverse(value: number): number {
   }
   return (low + high) / 2;
 }
-/** The card itself fades in over this share of the open (out over the close's last share): no hard edge on the row. */
-const CARD_FADE_SHARE = 0.1;
 /** The chat fades in over the card's opaque surface from this share of the clock, over this share. */
-const CONTENT_FADE_FROM = 0.06;
-const CONTENT_FADE_SHARE = 0.3;
+const CONTENT_FADE_FROM = 0.75;
+const CONTENT_FADE_SHARE = 0.25;
 /**
  * The open clock advances at most this much per drawn frame: a slow frame (the chat's mount, a busy
  * render thread) never skips the open, so its first drawn frame is the start and every frame moves.
@@ -86,9 +83,6 @@ const CONTENT_FADE_SHARE = 0.3;
 const MAX_STEP_MS = 25;
 /** The open settles by this at the latest (its deferred work then starts anyway). */
 const SETTLE_BOUND_MS = 1200;
-/** The card's narrowest start (a pinned tile grows from about its own width), and its widest (a row). */
-const MIN_START_SCALE = 0.3;
-const MAX_START_SCALE = 0.92;
 /** The card's corner on screen at the start, in dp (none once open: the chat fills the screen). */
 const START_RADIUS = 24;
 /**
@@ -99,8 +93,6 @@ const START_RADIUS = 24;
 const GESTURE_SCALE = 0.12;
 const GESTURE_RADIUS = 32;
 const GESTURE_SHIFT = 0;
-/** Build 13: the zoom-open skeleton dissolves into the mounted chat over this long. */
-const SHELL_FADE_MS = 120;
 /** Home dims at most this much under the open chat. */
 const DIM = 0.2;
 const SPRING_BACK = { stiffness: 1400, damping: 67, mass: 1 };
@@ -296,7 +288,7 @@ function useLiveZoomMotion(
         gesture.set(withTiming(0, { duration: Math.min(140, duration), easing: Easing.out(Easing.cubic) }));
       const done = api.closed;
       visible.set(
-        withTiming(0, { duration, easing: CLOSE_EASING }, (finished) => {
+        withTiming(0, { duration, easing: crit }, (finished) => {
           if (finished) scheduleOnRN(done);
         }),
       );
@@ -403,19 +395,11 @@ function LiveZoomFrame({
   zoom,
   routeKey,
   agentId,
-  shell,
   children,
 }: {
   zoom: LiveZoom;
   routeKey: string;
   agentId?: string;
-  /**
-   * Build 13 (Syed: "it takes time to open"): the chat's skeleton at its final layout. With it, the
-   * route's first commit is only this light shell, so the zoom starts on the tap's next frames; the chat
-   * itself mounts right after that first frame (its JS and first commit were what held the open back,
-   * ~0.4 s on the phone) under the shell, which dissolves once the chat has laid out.
-   */
-  shell?: ReactNode;
   children: ReactNode;
 }) {
   const background = String(useThemeColor("background") ?? "#000");
@@ -479,30 +463,18 @@ function LiveZoomFrame({
   const onSettled = useCallback(() => setSettled(true), []);
   const onClosing = useCallback(() => setSettled(false), []);
   useLiveZoomMotion(routeKey, zoom, onSettled, visible, gesture, edge, closing, resolveOrigin, onClosing);
-  const [chatShown, setChatShown] = useState(!shell);
-  const [shellGone, setShellGone] = useState(!shell);
-  const shellOpacity = useSharedValue(1);
+  const [chatShown, setChatShown] = useState(false);
   useEffect(() => {
-    openTraceMark("zoom shell mounted");
+    openTraceMark("zoom frame mounted");
   }, []);
   useEffect(() => {
     if (chatShown) return;
-    // After the shell's first frame: the chat's mount never delays the open's start.
     const frame = requestAnimationFrame(() => {
       openTraceMark("chat mount requested");
       startTransition(() => setChatShown(true));
     });
     return () => cancelAnimationFrame(frame);
   }, [chatShown]);
-  const chatLaidOut = useCallback(() => {
-    openTraceMark("chat laid out (shell fade starts)");
-    shellOpacity.set(
-      withTiming(0, { duration: SHELL_FADE_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
-        if (finished) scheduleOnRN(setShellGone, true);
-      }),
-    );
-  }, [shellOpacity]);
-  const shellStyle = useAnimatedStyle(() => ({ opacity: shellOpacity.get() }));
   // The card's geometry on this frame (all on the UI thread): its scale, the half height of its window
   // in the chat's own coordinates, and its centre on screen.
   const card = useDerivedValue(() => {
@@ -512,10 +484,10 @@ function LiveZoomFrame({
     const centreX = originX.get() + originW.get() / 2;
     if (isClosing) {
       const t = 1 - clock;
-      const circleProgress = Math.min(1, t / 0.58);
+      const circleProgress = t;
       const targetDiameter = Math.min(closeW.get(), closeH.get()) * (hasAgent ? avatarScale : 1);
       const targetScale = Math.max(0.05, targetDiameter / width);
-      const travel = t * t * (3 - 2 * t);
+      const travel = t;
       const scale = 1 - (1 - targetScale) * travel;
       const half = height / 2 - (height / 2 - width / 2) * circleProgress;
       const targetCentreX = closeX.get() + closeW.get() / 2;
@@ -535,7 +507,7 @@ function LiveZoomFrame({
       };
     }
     const open = crit(clock);
-    const startScale = Math.min(MAX_START_SCALE, Math.max(MIN_START_SCALE, originW.get() / width));
+    const startScale = Math.min(1, Math.max(0.05, originW.get() / width));
     const scale = startScale + (1 - startScale) * open;
     const half = originH.get() / (2 * startScale) + (height / 2 - originH.get() / (2 * startScale)) * open;
     const centreY = originY.get() + originH.get() / 2;
@@ -554,11 +526,7 @@ function LiveZoomFrame({
   });
   const cardStyle = useAnimatedStyle(() => {
     const c = card.get();
-    const opacity = c.closing
-      ? hasAgent
-        ? 1
-        : Math.min(1, Math.max(0, (1 - c.t) / 0.08))
-      : Math.min(1, c.clock / CARD_FADE_SHARE);
+    const opacity = c.closing && !hasAgent ? Math.min(1, Math.max(0, (1 - c.t) / 0.08)) : 1;
     return {
       opacity,
       transform: [{ translateX: c.x }, { translateY: c.y }, { scale: c.scale }],
@@ -575,12 +543,12 @@ function LiveZoomFrame({
   const cardSurfaceStyle = useAnimatedStyle(() => {
     const c = card.get();
     if (!c.closing || !hasAgent) return { opacity: 1 };
-    return { opacity: Math.min(1, Math.max(0, 1 - (c.t - 0.42) / 0.3)) };
+    return { opacity: Math.min(1, (1 - c.t) / 0.2) };
   });
   const contentStyle = useAnimatedStyle(() => {
     const c = card.get();
     const opacity = c.closing
-      ? Math.min(1, Math.max(0, 1 - c.t / 0.42))
+      ? Math.max(0, 1 - c.t / 0.14)
       : Math.min(1, Math.max(0, (c.clock - CONTENT_FADE_FROM) / CONTENT_FADE_SHARE));
     return {
       opacity,
@@ -589,7 +557,8 @@ function LiveZoomFrame({
   });
   const blobFillStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!c.closing || !hasAgent) return { opacity: 0 };
+    if (!hasAgent) return { opacity: 0 };
+    if (!c.closing) return { opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)) };
     const fadeIn = Math.min(1, Math.max(0, (c.t - 0.14) / 0.24));
     const fadeOut = Math.min(1, Math.max(0, 1 - (c.t - 0.52) / 0.28));
     return {
@@ -598,16 +567,36 @@ function LiveZoomFrame({
   });
   const blobAvatarStyle = useAnimatedStyle(() => {
     const c = card.get();
-    if (!c.closing || !hasAgent) return { opacity: 0 };
+    if (!hasAgent) return { opacity: 0 };
+    const avatarBase = MORPH_AVATAR_BASE * Math.min(1, avatarScale);
+    if (!c.closing) {
+      const diameter = Math.min(closeW.get(), closeH.get()) * avatarScale;
+      const centreX = closeX.get() + closeW.get() / 2;
+      const centreY = closeY.get() + closeH.get() / 2;
+      return {
+        opacity: 1 - Math.min(1, Math.max(0, (c.clock - 0.5) / 0.25)),
+        transform: [
+          { translateX: ((centreX - originX.get() - originW.get() / 2) * (1 - c.open)) / c.scale },
+          { translateY: ((centreY - originY.get() - originH.get() / 2) * (1 - c.open)) / c.scale },
+          { scale: (diameter + (width - diameter) * c.open) / (avatarBase * c.scale) },
+        ],
+      };
+    }
     return {
       opacity: Math.min(1, Math.max(0, (c.t - 0.18) / 0.34)),
-      transform: [{ scale: width / MORPH_AVATAR_BASE }],
+      transform: [{ scale: width / avatarBase }],
     };
   });
-  const dimStyle = useAnimatedStyle(() => ({ opacity: DIM * card.get().open }));
+  const dimStyle = useAnimatedStyle(() => {
+    const c = card.get();
+    return {
+      backgroundColor: "#000",
+      opacity: DIM * c.open,
+    };
+  });
   return (
     <View style={styles.fill}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]} />
       <Animated.View style={[StyleSheet.absoluteFill, cardStyle]}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.clip, topClipStyle]}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.clip, bottomClipStyle]}>
@@ -617,21 +606,8 @@ function LiveZoomFrame({
             />
             <Animated.View renderToHardwareTextureAndroid={!settled} style={[StyleSheet.absoluteFill, contentStyle]}>
               <LiveZoomSettledContext.Provider value={settled}>
-                {chatShown ? (
-                  shell ? (
-                    <View style={styles.fill} onLayout={chatLaidOut}>
-                      {children}
-                    </View>
-                  ) : (
-                    children
-                  )
-                ) : null}
+                {chatShown ? children : null}
               </LiveZoomSettledContext.Provider>
-              {shellGone ? null : (
-                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shellStyle]}>
-                  {shell}
-                </Animated.View>
-              )}
             </Animated.View>
             {agent ? (
               <Animated.View
@@ -653,6 +629,7 @@ function LiveZoomFrame({
               size={MORPH_AVATAR_BASE}
               maxScale={1}
               animateIdle={false}
+              activityMood="idle"
             />
           </Animated.View>
         ) : null}
@@ -665,32 +642,16 @@ function LiveZoomFrame({
  * The chat-like route's screen. A route the ColorOS zoom opened (decided by its options before it
  * mounts) draws inside the live zoom frame; any other route renders exactly as before.
  */
-export function withLiveZoom<P extends object>(
-  Screen: ComponentType<P>,
-  /** Build 13: the skeleton a zoom open draws first (route params give the chat's id). */
-  Shell?: ComponentType<{ chatId?: string }>,
-) {
+export function withLiveZoom<P extends object>(Screen: ComponentType<P>) {
   function LiveZoomScreen(props: P) {
     const route = useRoute();
     const routeKey = route.key;
     const [zoom] = useState(() => liveZoomOf(routeKey));
     if (!zoom) return <Screen {...props} />;
     const { params } = route;
-    const id = !params
-      ? undefined
-      : "agentId" in params
-        ? params.agentId
-        : "channelId" in params
-          ? params.channelId
-          : undefined;
     const agentId = params && "agentId" in params && typeof params.agentId === "string" ? params.agentId : undefined;
     return (
-      <LiveZoomFrame
-        zoom={zoom}
-        routeKey={routeKey}
-        agentId={agentId}
-        shell={Shell ? <Shell chatId={typeof id === "string" ? id : undefined} /> : undefined}
-      >
+      <LiveZoomFrame zoom={zoom} routeKey={routeKey} agentId={agentId}>
         <Screen {...props} />
       </LiveZoomFrame>
     );
@@ -701,6 +662,5 @@ export function withLiveZoom<P extends object>(
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   clip: { overflow: "hidden" },
-  dim: { backgroundColor: "#000" },
   blobOverlay: { alignItems: "center", justifyContent: "center" },
 });

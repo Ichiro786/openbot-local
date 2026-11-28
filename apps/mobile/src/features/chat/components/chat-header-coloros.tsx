@@ -23,6 +23,7 @@ import { SheetScrollEdgeEffect } from "@/shared/components/sheet-scroll-edge-eff
 import { GlassBand } from "@/shared/glass/GlassBand";
 import { GlassFace, useGlassPress, useGlassPressHandlers } from "@/shared/glass/GlassButton";
 import { useText } from "@/shared/lib/text";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 import { useGlassMenuDoubleFrost, useGlassMenuPauses } from "@/shared/motion/GlassMenu";
 import { useLiveZoomSettled } from "@/shared/motion/liveZoom";
 import { useColorOSMotion } from "@/shared/motion/useColorOSMotion";
@@ -52,39 +53,6 @@ const BAND_GAP = 6;
 const GLASS_INSET = 4;
 const GLASS_SIZE = 48 - GLASS_INSET * 2;
 /**
- * Build 13: the header's geometry for the zoom-open skeleton (ChatShellSkeleton), from the constants
- * above, so it draws the shapes where this header puts them. Offsets are from the top of the safe area
- * and from the screen's left and right edges (add the insets).
- */
-export const COLOROS_CHAT_HEADER_GEOMETRY = {
-  rowTop: ROW_TOP,
-  avatar: AVATAR,
-  overlap: OVERLAP,
-  pillHeight: PILL_HEIGHT,
-  pillMinWidth: AVATAR + 16,
-  pillMaxWidth: 220,
-  back: { left: EDGE_PAD + GLASS_INSET, top: ROW_TOP + SIDE_TOP + GLASS_INSET, size: GLASS_SIZE },
-  more: {
-    right: EDGE_PAD + GLASS_INSET,
-    top: ROW_TOP + SIDE_TOP + GLASS_INSET,
-    width: MORE_WIDTH - GLASS_INSET * 2,
-    height: GLASS_SIZE,
-  },
-} as const;
-/** The name pill's last measured width per chat (it hugs the name), for the skeleton's pill. */
-const pillWidths = new Map<string, number>();
-const MAX_PILL_WIDTHS = 200;
-export function headerPillWidthOf(chatId: string): number | undefined {
-  return pillWidths.get(chatId);
-}
-function rememberPillWidth(chatId: string, width: number): void {
-  if (!pillWidths.has(chatId) && pillWidths.size >= MAX_PILL_WIDTHS) {
-    const oldest = pillWidths.keys().next().value;
-    if (oldest !== undefined) pillWidths.delete(oldest);
-  }
-  pillWidths.set(chatId, width);
-}
-/**
  * Build 10 (ColorOS motion, Android): the agent chat's header in the X glass layout. A round Back on
  * the left, the agent's avatar over the top edge of a frosted name pill (name, the thread menu's
  * chevron and unread dot, and the agent's title under it) in the middle, and a ••• pill on the right
@@ -94,11 +62,6 @@ function rememberPillWidth(chatId: string, width: number): void {
  * (`GlassBand`, a sibling region; this header is outside it), with the Notes press physics on each. The
  * band pauses while a frosted glass menu is open, so the chat draws at most two blurs (band + composer;
  * a message menu pauses the composer too). Without a target the glass is the solid material.
- *
- * Build 11.3 (Syed's reference): the band is a full-width progressive frost under the status bar,
- * avatar, pill and both buttons (strong blur + a slight dim, fading out below the pill), so text that
- * scrolls under the header is unreadable mush. Before, the blur was masked to the three glass shapes
- * only, so the text between and around them stayed sharp.
  */
 export function ColorOSChatHeader({
   target,
@@ -138,7 +101,8 @@ export function ColorOSChatHeader({
   const plusMenu = useGlassMenuPauses("header");
   // Build 11.3 simple zoom: the band's blur starts once a zoom open has settled (none under the moving chat).
   const settled = useLiveZoomSettled();
-  const bandOn = Boolean(frostTarget) && !menuDouble && !plusMenu && settled;
+  const focused = useScreenFocusedWhile(true);
+  const bandOn = Boolean(frostTarget) && !menuDouble && !plusMenu && settled && focused;
   // Build 11.3: the band ends above the pill, so the pill and the side buttons (which reach below it)
   // carry their own solid glass fill; text under them never shows through sharp.
   const material = "solid";
@@ -154,6 +118,7 @@ export function ColorOSChatHeader({
   // back to this, plus the cut-outs below.
   const bandHeight = topInset + ROW_TOP + AVATAR - OVERLAP - BAND_GAP;
   const pillTop = topInset + ROW_TOP + AVATAR - OVERLAP;
+  const pillBottom = pillTop + PILL_HEIGHT;
   // Build 11.3 batch 1 + build 13: the name pill, Back and ••• each get a full-strength frost + dim cut
   // from the band's one blur, in their own shape (text under them never reads sharp), then their solid
   // glass fill. The pill is centred in the middle column, as the row lays it out.
@@ -230,12 +195,12 @@ export function ColorOSChatHeader({
       <GlassBand
         target={frostTarget}
         shown={bandOn}
-        solid={(topInset * 0.5) / bandHeight}
+        solid={(topInset * 0.25) / bandHeight}
         fadeHeight={bandHeight}
         shapes={cutOuts}
         // Build 14: from the chat's first frame (the blur starts after the open, and stops for its close).
         scrim={Boolean(frostTarget) && !menuDouble && !plusMenu}
-        style={[styles.band, { top: 0, height: pillTop + PILL_HEIGHT }]}
+        style={[styles.band, { top: 0, height: pillBottom }]}
       />
       <View
         pointerEvents="box-none"
@@ -262,7 +227,6 @@ export function ColorOSChatHeader({
             style={{ marginTop: AVATAR - OVERLAP }}
             onLayout={(event) => {
               setPillWidth(event.nativeEvent.layout.width);
-              rememberPillWidth(target.id, event.nativeEvent.layout.width);
             }}
             {...pillHandlers}
           >
@@ -325,7 +289,7 @@ export function ColorOSChatHeader({
       </View>
       <SheetScrollEdgeEffect
         style={{
-          height: topInset + ROW_TOP + ROW_HEIGHT + 4,
+          height: bandHeight,
           left: 0,
           position: "absolute",
           right: 0,

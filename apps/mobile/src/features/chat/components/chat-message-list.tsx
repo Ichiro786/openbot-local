@@ -51,7 +51,6 @@ import Animated, {
   Keyframe,
   ReduceMotion,
   type SharedValue,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -60,7 +59,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { scheduleOnRN } from "react-native-worklets";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/components/chat-activity-row";
@@ -446,6 +444,7 @@ interface MessageRowShared {
   textReveal: boolean;
   replySession: { progress: Map<string, number>; revealed: Set<string> };
   markRevealed: (id: string) => void;
+  markPlaying: (id: string, playing: boolean) => void;
   replyHaptics: ReturnType<typeof useReplyHaptics>;
   canReply: boolean;
   canReact: boolean;
@@ -769,6 +768,7 @@ const MessageRow = memo(function MessageRow({
     firstMessageStyle,
     replySession,
     markRevealed,
+    markPlaying,
     replyHaptics,
     actions,
   } = shared;
@@ -794,7 +794,10 @@ const MessageRow = memo(function MessageRow({
               markRevealed(message.id);
               replyHaptics.onFlush();
             },
-            onComplete: replyHaptics.onComplete,
+            onComplete: (drained: boolean) => {
+              if (!drained) replyHaptics.onComplete();
+            },
+            onPlaying: (playing: boolean) => markPlaying(message.id, playing),
           }
         : undefined,
     [
@@ -807,6 +810,7 @@ const MessageRow = memo(function MessageRow({
       playbackPaused,
       revealed,
       markRevealed,
+      markPlaying,
       replyHaptics,
     ],
   );
@@ -1144,7 +1148,7 @@ const MessageRow = memo(function MessageRow({
             onBranch: shared.branchPoints.has(bubble.id) ? () => actions.branch(bubble) : undefined,
             onCopy: copyText ? () => actionsControl.current?.copy() : undefined,
             onSelectText: selectable ? () => actions.selectText(bubble) : undefined,
-            onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji) : undefined,
+            onReact: shared.canReact ? (emoji) => actionsControl.current?.react(emoji, true) : undefined,
             sendToChannel: messageActions.sendToChannel,
             pinned: messageActions.pinned,
             onTogglePin: messageActions.togglePin,
@@ -1242,6 +1246,7 @@ const MessageRow = memo(function MessageRow({
           onHold={openMenu ?? messageActions.open}
         >
           {withReactions}
+          {actionRow}
         </ChatMessageGesture>
       )}
       {message.author === "user" && message.status === "failed" ? (
@@ -1251,7 +1256,9 @@ const MessageRow = memo(function MessageRow({
         />
       ) : null}
       {outbox ? <ChatOutboxStatus status={outbox} exiting={shared.colorOSEntrance ? NOTICE_OUT : undefined} /> : null}
-      {bubble && longPressMenu ? (
+      {bubble && longPressMenu && message.author === "user" ? (
+        <View className="pb-2" />
+      ) : bubble && longPressMenu ? (
         actionRow && actionsWereHeld.current ? (
           <Animated.View entering={shared.colorOSEntrance ? SETTLE_IN : undefined}>{actionRow}</Animated.View>
         ) : (
@@ -1709,47 +1716,24 @@ const NO_BROWSER_REQUESTS: readonly BrowserTakeoverRequest[] = [];
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_CHANNELS: readonly { id: string; name: string }[] = [];
 
-/** Build #101: the skeleton fades into the chat over this long once the rows show. */
-const SKELETON_FADE_MS = 180;
-/** Build #101: the skeleton never stays longer than this, whatever the history does. */
 const SKELETON_MAX_MS = 6000;
 
-/**
- * Build #101 (ColorOS motion): placeholder bubbles where the latest exchange lands (the latest user
- * message under the header, the reply under it) until the list shows its rows, then a fade into them
- * while the rows rise in (use-chat-motion). Build 13: the same bubbles as the zoom-open shell
- * (SkeletonBubbles, soft shimmer), so the shell hands over to them without a seam. It unmounts after its
- * fade, on error or offline (the caller stops rendering it), and after SKELETON_MAX_MS at the latest.
- */
-export function ChatOpeningSkeleton({ revealed, top }: { revealed: SharedValue<boolean>; top: number }) {
+export function ChatOpeningSkeleton({ top }: { top: number }) {
   const [done, setDone] = useState(false);
-  const opacity = useSharedValue(1);
   useEffect(() => {
     const timer = setTimeout(() => setDone(true), SKELETON_MAX_MS);
     return () => clearTimeout(timer);
   }, []);
-  useAnimatedReaction(
-    () => revealed.get(),
-    (shown) => {
-      if (!shown) return;
-      opacity.set(
-        withTiming(0, { duration: SKELETON_FADE_MS, reduceMotion: ReduceMotion.System }, () => {
-          scheduleOnRN(setDone, true);
-        }),
-      );
-    },
-  );
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   if (done) return null;
   return (
-    <Animated.View
+    <View
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden
-      style={[StyleSheet.absoluteFill, style]}
+      style={StyleSheet.absoluteFill}
     >
       <SkeletonBubbles top={top + 8} />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -1910,6 +1894,23 @@ export const ChatMessageList = memo(function ChatMessageList({
       replySession.revealed.add(id);
       setRevealedState({ session: replySession, ids: new Set(replySession.revealed) });
     },
+    [replySession],
+  );
+  const [playingState, setPlayingState] = useState<{ session: typeof replySession; ids: ReadonlySet<string> }>({
+    session: replySession,
+    ids: NO_IDS,
+  });
+  const replyPlaying = playingState.session === replySession && playingState.ids.size > 0;
+  const markPlaying = useCallback(
+    (id: string, playing: boolean) =>
+      setPlayingState((state) => {
+        const ids = state.session === replySession ? state.ids : NO_IDS;
+        if (ids.has(id) === playing) return state.session === replySession ? state : { session: replySession, ids };
+        const next = new Set(ids);
+        if (playing) next.add(id);
+        else next.delete(id);
+        return { session: replySession, ids: next };
+      }),
     [replySession],
   );
   const { arriving: arrivals, entrances } = useMessageArrivals(replySession.key, messages, watchesArrivals);
@@ -2160,6 +2161,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       textReveal,
       replySession,
       markRevealed,
+      markPlaying,
       replyHaptics,
       canReply,
       canReact,
@@ -2200,6 +2202,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       textReveal,
       replySession,
       markRevealed,
+      markPlaying,
       replyHaptics,
       canReply,
       canReact,
@@ -2339,7 +2342,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   const openTaggedTab = useTaggedTabOpener(target.serverId);
   const activityRows = useActivityPresence(
     (activities?.length ? activities : [activity]).flatMap((entry) => activitySpec(entry) ?? []),
-    motion.sendSettling,
   );
 
   const heldActionsId =
@@ -2449,11 +2451,21 @@ export const ChatMessageList = memo(function ChatMessageList({
     onScrollBeginDrag,
     onScrollEndDrag,
   } = motion;
-  const followConfig = !followsEnd
-    ? false
-    : followMode === "reply" && colorOSOn && !reducedMotion
-      ? FOLLOW_REPLY
-      : FOLLOW_END;
+  const replyStreaming = messages.some(isStreamingReply);
+  const followGlides = followsEnd && followMode === "reply" && colorOSOn && !reducedMotion;
+  const { streamFollow, handOffOpening, sendFollow, endSendFollow } = motion;
+  const replyFollows = replyStreaming || replyPlaying;
+  const followShifts = followGlides && (replyFollows || sendFollow);
+  const followConfig = !followsEnd ? false : followGlides && !followShifts ? FOLLOW_REPLY : FOLLOW_END;
+  useEffect(() => {
+    streamFollow.set(followShifts);
+  }, [streamFollow, followShifts]);
+  useEffect(() => {
+    if (replyFollows) endSendFollow();
+  }, [replyFollows, endSendFollow]);
+  useEffect(() => {
+    if (replyStreaming && colorOSOn && historyVisible) handOffOpening();
+  }, [replyStreaming, colorOSOn, historyVisible, handOffOpening]);
   const list = useMemo(
     () => (
       <KeyboardAwareLegendList
@@ -2600,7 +2612,10 @@ export const ChatMessageList = memo(function ChatMessageList({
     </>
   );
 
-  const pullStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -(pullShift?.get() ?? 0) }] }));
+  const { followShift, composerShift } = motion;
+  const pullStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: followShift.get() + composerShift.get() - (pullShift?.get() ?? 0) }],
+  }));
   const body = (
     <Animated.View
       onTouchStart={selectingMessageId ? onTouchStart : undefined}

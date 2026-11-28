@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { haptics } from "@/shared/lib/haptics";
+import { useReducedMotion } from "@/shared/lib/motion";
 import { END_X, MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { ChatSwipeGestureContext, ChatTimeRevealContext, MESSAGE_TIME_WIDTH } from "./chat-swipe-gesture";
 
@@ -28,7 +29,7 @@ const PRESS_IN = {
 // Build 10: TalkBack's touch and hold opens the message menu too.
 const HOLD_ACTIONS = [{ name: "longpress" as const }];
 const RELEASE = { stiffness: 600, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
-const SETTLE = { stiffness: 520, damping: 36, mass: 1, reduceMotion: ReduceMotion.System };
+const SETTLE = { stiffness: 260, damping: 32, mass: 1, reduceMotion: ReduceMotion.System };
 const REPLY_THRESHOLD = 64;
 const REPLY_RESET_THRESHOLD = 56;
 const TIMES_SETTLE = { duration: 450, dampingRatio: 0.78, reduceMotion: ReduceMotion.System };
@@ -55,10 +56,12 @@ export function ChatMessageGesture({
   onHold?: (x: number, y: number) => void;
 }>) {
   const muted = useThemeColor("muted");
+  const reducedMotion = useReducedMotion();
   const bubble = useRef<ViewInstance | null>(null);
   const offset = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const thresholdCrossed = useSharedValue(false);
+  const replyTriggered = useSharedValue(false);
   const bubbleStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.get() * END_X }, { scale: pressScale.get() }],
   }));
@@ -99,6 +102,7 @@ export function ChatMessageGesture({
       .failOffsetY([-12, 12])
       .onStart(() => {
         thresholdCrossed.set(false);
+        replyTriggered.set(false);
         scheduleOnRN(setIconShown, true);
       })
       .onUpdate((event) => {
@@ -110,14 +114,24 @@ export function ChatMessageGesture({
         } else if (thresholdCrossed.get() && raw < REPLY_RESET_THRESHOLD) {
           thresholdCrossed.set(false);
         }
+        if (!replyTriggered.get() && raw >= REPLY_THRESHOLD) {
+          replyTriggered.set(true);
+          scheduleOnRN(reply);
+        }
       })
       .onEnd((event) => {
         const distance = event.translationX * END_X;
-        if (distance >= REPLY_THRESHOLD || (distance >= 24 && event.velocityX * END_X >= 650)) scheduleOnRN(reply);
+        if (
+          !replyTriggered.get() &&
+          (distance >= REPLY_THRESHOLD || (distance >= 24 && event.velocityX * END_X >= 650))
+        ) {
+          replyTriggered.set(true);
+          scheduleOnRN(reply);
+        }
       })
       .onFinalize(() => {
         thresholdCrossed.set(false);
-        offset.set(withSpring(0, SETTLE));
+        offset.set(reducedMotion ? 0 : withSpring(0, SETTLE));
       });
     const times = Gesture.Pan()
       .enabled(canRevealTime)
@@ -151,7 +165,18 @@ export function ChatMessageGesture({
         pressScale.set(withSpring(1, RELEASE));
       });
     return Gesture.Race(swipe, times, press);
-  }, [canReply, canHold, canRevealTime, offset, pressScale, thresholdCrossed, listSwipe, timeReveal]);
+  }, [
+    canReply,
+    canHold,
+    canRevealTime,
+    offset,
+    pressScale,
+    thresholdCrossed,
+    replyTriggered,
+    reducedMotion,
+    listSwipe,
+    timeReveal,
+  ]);
 
   return (
     <View className={align === "end" ? "max-w-full self-end" : "max-w-[92%] self-start"}>

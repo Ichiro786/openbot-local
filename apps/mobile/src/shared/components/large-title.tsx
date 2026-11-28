@@ -150,6 +150,7 @@ export function LargeTitleBar({
   blurTarget,
   androidSurfaceWithTitle = false,
   androidSurfaceOnScroll = false,
+  blurPaused = false,
   children,
 }: PropsWithChildren<{
   scroll: LargeTitleScroll;
@@ -161,6 +162,7 @@ export function LargeTitleBar({
   blurTarget?: RefObject<ViewInstance | null>;
   androidSurfaceWithTitle?: boolean;
   androidSurfaceOnScroll?: boolean;
+  blurPaused?: boolean;
 }>) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -210,6 +212,7 @@ export function LargeTitleBar({
           surface={surface}
           shape="screen"
           progress={surfaceProgress}
+          paused={blurPaused}
         />
       ) : isAndroid ? (
         <Animated.View
