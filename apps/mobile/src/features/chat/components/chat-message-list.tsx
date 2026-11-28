@@ -2441,6 +2441,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   const drawDistance = Math.round(screen.height * DRAW_SCREENS);
   const {
     listRef,
+    scrollRef,
     startsAtEnd: listStartsAtEnd,
     followsEnd,
     followMode,
@@ -2470,6 +2471,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     () => (
       <KeyboardAwareLegendList
         ref={listRef}
+        refScrollView={scrollRef}
         data={listRows}
         dataKey={dataKey}
         keyExtractor={rowKey}
@@ -2512,6 +2514,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     ),
     [
       listRef,
+      scrollRef,
       listRows,
       dataKey,
       routineRowType,

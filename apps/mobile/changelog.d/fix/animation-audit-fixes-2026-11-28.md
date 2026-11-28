@@ -4,3 +4,4 @@
 - Keep the chat card and avatar in place when Back interrupts the open animation.
 - Animate the first sent message in an empty ColorOS chat.
 - Use the correct server avatar in the chat transition.
+- Stop the transcript follow animation when you drag the list.
