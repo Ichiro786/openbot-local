@@ -199,6 +199,7 @@ function useLiveZoomMotion(
   const { enabled, reduceMotion } = useColorOSMotion();
   const active = isAndroid && enabled && !reduceMotion;
   const held = useSyncExternalStore(watchChatBackHolds, chatBackHeld);
+  const gestureStart = useSharedValue({ input: 0, displayed: 0 });
   const activeNow = useRef(active);
   activeNow.current = active;
   const settledCallback = useRef(onSettled);
@@ -384,12 +385,24 @@ function useLiveZoomMotion(
       module.addListener("onBackStart", ({ edge: swipeEdge, progress }) => {
         if (st.leaving || zoom.nativeClose || !navigation.isFocused()) return;
         st.gestureOn = true;
-        // BackEventCompat.EDGE_LEFT = 0: the chat moves right, with the finger.
-        edge.set(swipeEdge === 0 ? 1 : -1);
-        gesture.set(progress);
+        scheduleOnUI(() => {
+          "worklet";
+          const displayed = gesture.get() || progress;
+          cancelAnimation(gesture);
+          edge.set(swipeEdge === 0 ? 1 : -1);
+          gestureStart.set({ input: progress, displayed });
+          gesture.set(displayed);
+        });
       }),
       module.addListener("onBackProgress", ({ progress }) => {
-        if (st.gestureOn) gesture.set(withTiming(progress, { duration: FOLLOW_MS, easing: Easing.linear }));
+        if (!st.gestureOn) return;
+        scheduleOnUI(() => {
+          "worklet";
+          const { input, displayed } = gestureStart.get();
+          const remaining = input < 1 ? Math.min(1, (1 - progress) / (1 - input)) : 0;
+          const target = Math.max(0, Math.min(1, progress + (displayed - input) * remaining));
+          gesture.set(withTiming(target, { duration: FOLLOW_MS, easing: Easing.linear }));
+        });
       }),
       module.addListener("onBackCancel", () => {
         gestureCancelledAt = Date.now();
@@ -410,7 +423,7 @@ function useLiveZoomMotion(
       release();
       api.dropGesture();
     };
-  }, [api, edge, gesture, navigation, predictive, st, zoom]);
+  }, [api, edge, gesture, gestureStart, navigation, predictive, st, zoom]);
 }
 
 function LiveZoomFrame({
