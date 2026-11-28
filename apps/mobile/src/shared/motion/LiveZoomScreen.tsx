@@ -1,4 +1,5 @@
 import { avatarHeadColor } from "@openbot/brand/bloub-avatar";
+import { useLocalSearchParams } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, StackActions, useIsFocused, useNavigation, useRoute } from "expo-router/react-navigation";
 import { useThemeColor } from "heroui-native/hooks";
@@ -28,9 +29,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
+import { firstParam } from "@/features/chat/components/use-conversation-message";
 import { useAvatarScale } from "@/features/settings/model/avatar-size";
 import { supportLog } from "@/features/support/model/support-log";
 import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { findChatAgent } from "@/features/workspace/model/directory-agents";
 import { openTraceMark } from "@/shared/lib/open-trace";
 import { isAndroid } from "@/shared/lib/platform";
 import {
@@ -414,16 +417,18 @@ function LiveZoomFrame({
   zoom,
   routeKey,
   agentId,
+  serverId,
   children,
 }: {
   zoom: LiveZoom;
   routeKey: string;
   agentId?: string;
+  serverId?: string;
   children: ReactNode;
 }) {
   const background = String(useThemeColor("background") ?? "#000");
   const agent = useMobileWorkspaceSelector((current) =>
-    agentId ? current.agents.find((item) => item.id === agentId) : undefined,
+    findChatAgent(current.agents, agentId, serverId, current.activeServer.id),
   );
   const hasAgent = Boolean(agent);
   const avatarScale = useAvatarScale((state) => state.scale);
@@ -650,11 +655,10 @@ export function withLiveZoom<P extends object>(Screen: ComponentType<P>) {
     const route = useRoute();
     const routeKey = route.key;
     const [zoom] = useState(() => liveZoomOf(routeKey));
+    const { agentId, serverId } = useLocalSearchParams<{ agentId?: string; serverId?: string }>();
     if (!zoom) return <Screen {...props} />;
-    const { params } = route;
-    const agentId = params && "agentId" in params && typeof params.agentId === "string" ? params.agentId : undefined;
     return (
-      <LiveZoomFrame zoom={zoom} routeKey={routeKey} agentId={agentId}>
+      <LiveZoomFrame zoom={zoom} routeKey={routeKey} agentId={firstParam(agentId)} serverId={firstParam(serverId)}>
         <Screen {...props} />
       </LiveZoomFrame>
     );
