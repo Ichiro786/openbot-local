@@ -8,3 +8,4 @@
 - Limit the Android reaction menu blur to the card, bar, and emoji grid.
 - Keep composer focus when a hardware Enter key sends a message.
 - Limit the shared Android header blur to the top bar.
+- Keep Home Search results visible until the close animation ends.

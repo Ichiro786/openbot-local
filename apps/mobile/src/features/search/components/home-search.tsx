@@ -204,7 +204,8 @@ export function useHomeSearch(): HomeSearch {
   const canUseTasks = useMobileWorkspaceSelector((current) => current.canUseTasks(current.activeServer.id));
   const input = useRef<TextInputInstance>(null);
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
+  const [openGeneration, setOpenGeneration] = useState<number | null>(null);
+  const open = openGeneration !== null;
   const [mounted, setMounted] = useState(false);
   const [prepared, setPrepared] = useState(false);
   const [settled, setSettled] = useState(false);
@@ -217,42 +218,49 @@ export function useHomeSearch(): HomeSearch {
   const targetMatches = canUseTasks && !target ? matchTargets(agents, query) : null;
 
   const openNow = useRef(false);
+  const generation = useRef(0);
+  const finishOpen = useCallback((opened: number) => {
+    if (openNow.current && generation.current === opened) setSettled(true);
+  }, []);
   const prepare = useCallback(() => setPrepared(true), []);
   const openSearch = useCallback(() => {
+    if (openNow.current) return;
     openNow.current = true;
-    setOpen(true);
+    setOpenGeneration(++generation.current);
     setMounted(true);
     setOpeningBlocked(true);
     setSettled(false);
   }, [setOpeningBlocked]);
   useEffect(() => {
-    if (!open) return;
+    if (openGeneration === null || generation.current !== openGeneration) return;
     closing.set(0);
     progress.set(
       withTiming(1, OPEN, (finished) => {
-        if (finished) scheduleOnRN(setSettled, true);
+        if (finished) scheduleOnRN(finishOpen, openGeneration);
       }),
     );
-  }, [open, progress, closing]);
-  const finishClose = useCallback(() => {
-    if (openNow.current) return;
+  }, [closing, progress, openGeneration, finishOpen]);
+  const finishClose = useCallback((closed: number) => {
+    if (openNow.current || generation.current !== closed) return;
     setMounted(false);
     setPrepared(false);
-  }, []);
-  const closeSearch = useCallback(() => {
-    openNow.current = false;
-    input.current?.blur();
-    Keyboard.dismiss();
-    setOpen(false);
-    setSettled(false);
     setQuery("");
     setTarget(null);
     draft.current = "";
+  }, []);
+  const closeSearch = useCallback(() => {
+    if (!openNow.current) return;
+    openNow.current = false;
+    const closed = ++generation.current;
+    input.current?.blur();
+    Keyboard.dismiss();
+    setOpenGeneration(null);
+    setSettled(false);
     setOpeningBlocked(false);
     closing.set(1);
     progress.set(
       withTiming(0, CLOSE, (finished) => {
-        if (finished) scheduleOnRN(finishClose);
+        if (finished) scheduleOnRN(finishClose, closed);
       }),
     );
   }, [progress, closing, setOpeningBlocked, finishClose]);
