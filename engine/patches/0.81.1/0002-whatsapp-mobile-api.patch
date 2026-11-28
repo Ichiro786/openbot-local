@@ -1,0 +1,73 @@
+diff --git a/packages/contracts/package.json b/packages/contracts/package.json
+index 13a0df354..4ad5514b4 100644
+--- a/packages/contracts/package.json
++++ b/packages/contracts/package.json
+@@ -284,6 +284,7 @@
+     "./team-protocol/agent-colors-v1": "./src/team-protocol/agent-colors-v1.ts",
+     "./team-protocol/chat-colors-v1": "./src/team-protocol/chat-colors-v1.ts",
+     "./team-protocol/whatsapp-connector-v1": "./src/team-protocol/whatsapp-connector-v1.ts",
++    "./team-protocol/whatsapp-mobile-v1": "./src/team-protocol/whatsapp-mobile-v1.ts",
+     "./team-protocol/agent-hidden-v1": "./src/team-protocol/agent-hidden-v1.ts",
+     "./team-protocol/agent-notification-levels-v1": "./src/team-protocol/agent-notification-levels-v1.ts",
+     "./team-protocol/sidebar-pins-v1": "./src/team-protocol/sidebar-pins-v1.ts",
+diff --git a/packages/contracts/src/team-protocol/current.ts b/packages/contracts/src/team-protocol/current.ts
+index 04dc68718..de68b5889 100644
+--- a/packages/contracts/src/team-protocol/current.ts
++++ b/packages/contracts/src/team-protocol/current.ts
+@@ -275,6 +275,7 @@ import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
+ import { WHATSAPP_CONNECTOR_CAPABILITY } from "./whatsapp-connector-v1";
+ import { WHATSAPP_READ_ONLY_CAPABILITY } from "./whatsapp-read-only-v1";
+ import { WHATSAPP_STATUS_REACTIONS_CAPABILITY } from "./whatsapp-status-reactions-v1";
++import { WHATSAPP_MOBILE_CAPABILITY } from "./whatsapp-mobile-v1";
+ import { WHATSAPP_WORKING_MESSAGE_CAPABILITY } from "./whatsapp-working-message-v1";
+ import { WORKFLOW_FOLDERS_CAPABILITY } from "./workflow-folders-v1";
+ import { WORKFLOW_PRESENCE_CAPABILITY } from "./workflow-presence-v1";
+@@ -537,6 +538,7 @@ export {
+   WHATSAPP_CONNECTOR_CAPABILITY,
+   WHATSAPP_STATUS_REACTIONS_CAPABILITY,
+   WHATSAPP_WORKING_MESSAGE_CAPABILITY,
++  WHATSAPP_MOBILE_CAPABILITY,
+   WORKFLOW_FOLDERS_CAPABILITY,
+   WORKFLOW_PRESENCE_CAPABILITY,
+   WORKFLOWS_AGENT_FILES_CAPABILITY,
+diff --git a/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts b/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts
+new file mode 100644
+index 000000000..6f10ed858
+--- /dev/null
++++ b/packages/contracts/src/team-protocol/whatsapp-mobile-v1.ts
+@@ -0,0 +1,12 @@
++// OpenBot Local optional whatsapp-mobile-v1 capability (fork patch, not upstream).
++//
++// The OpenBot Local mobile app (engine 0.60.0-2 .. 0.60.0-4) asks for the WhatsApp admin routes with
++// this capability. Upstream then shipped the same 13 routes, paths and bodies as
++// `whatsapp-connector-v1` (#4799), so this is now only an alias: a request that lists either
++// capability reaches `routeWhatsAppConnector`, and the codecs are upstream's. The app sends `{}` to
++// the orchestrator route, which upstream's codec requires.
++import { WHATSAPP_CONNECTOR_ROUTES } from "./whatsapp-connector-v1";
++
++export const WHATSAPP_MOBILE_CAPABILITY = "whatsapp-mobile-v1";
++
++export const WHATSAPP_MOBILE_ROUTES = WHATSAPP_CONNECTOR_ROUTES;
+diff --git a/src/main/team-api/route-whatsapp-connector.ts b/src/main/team-api/route-whatsapp-connector.ts
+index ba02e02d9..bde08e38f 100644
+--- a/src/main/team-api/route-whatsapp-connector.ts
++++ b/src/main/team-api/route-whatsapp-connector.ts
+@@ -2,6 +2,7 @@ import {
+   WHATSAPP_CONNECTOR_CAPABILITY,
+   WHATSAPP_CONNECTOR_ROUTES,
+ } from "@openbot/contracts/team-protocol/whatsapp-connector-v1";
++import { WHATSAPP_MOBILE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-mobile-v1";
+ import { sourceText } from "@openbot/i18n/source";
+ import { Effect } from "effect";
+ import { runCauseEffect } from "../../backend/effect-boundary";
+@@ -35,7 +36,9 @@ export async function routeWhatsAppConnector(
+ ): Promise<RouteOutcome> {
+   const { method, url, capabilities, member, request, json } = context;
+   if (method !== "POST" || !ROUTES.has(url.pathname)) return "unmatched";
+-  if (!connectors || !capabilities.has(WHATSAPP_CONNECTOR_CAPABILITY))
++  // OpenBot Local: the mobile app asks with the older fork alias `whatsapp-mobile-v1` (same routes).
++  const allowed = capabilities.has(WHATSAPP_CONNECTOR_CAPABILITY) || capabilities.has(WHATSAPP_MOBILE_CAPABILITY);
++  if (!connectors || !allowed)
+     throw new HttpError(400, sourceText("error.team.connectorsUnsupported"));
+   requireAdmin(member);
+   const body = await readJson(request);
