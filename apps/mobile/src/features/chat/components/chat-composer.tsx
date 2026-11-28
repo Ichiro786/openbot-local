@@ -4,8 +4,7 @@ import { GlassView } from "expo-glass-effect";
 import { router, useIsFocused } from "expo-router";
 import type { NativeStackNavigationProp } from "expo-router/native-stack";
 import { type ParamListBase, useNavigation } from "expo-router/react-navigation";
-import { Spinner, Typography } from "heroui-native";
-import ArrowUp from "lucide-react-native/icons/arrow-up";
+import { Typography } from "heroui-native";
 import Blocks from "lucide-react-native/icons/blocks";
 import Camera from "lucide-react-native/icons/camera";
 import Globe from "lucide-react-native/icons/globe";
@@ -15,7 +14,6 @@ import Paperclip from "lucide-react-native/icons/paperclip";
 import Plus from "lucide-react-native/icons/plus";
 import Reply from "lucide-react-native/icons/reply";
 import Sparkles from "lucide-react-native/icons/sparkles";
-import Square from "lucide-react-native/icons/square";
 import X from "lucide-react-native/icons/x";
 import {
   memo,
@@ -357,7 +355,8 @@ export const ChatComposer = memo(function ChatComposer({
       stopListening();
     };
   }, [navigation]);
-  const pasteFiles = (pasted: PastedFiles) => addPastedFiles(attachments, pasted);
+  const pasteFiles = (pasted: PastedFiles) =>
+    addPastedFiles(sendingDictationRef.current ? undefined : attachments, pasted);
   const pendingCursor = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (pendingCursor.current === null) return;
@@ -676,8 +675,10 @@ export const ChatComposer = memo(function ChatComposer({
     );
   }, [suggestionsVisible, suggestionCount, query?.query]);
 
-  const busy = preparing;
-  const attachmentsBlocked = disabled || preparing;
+  const [sendingDictation, setSendingDictation] = useState(false);
+  const sendingDictationRef = useRef(false);
+  const busy = preparing || sendingDictation;
+  const attachmentsBlocked = disabled || preparing || sendingDictation;
   const leadingBlocked = attachmentsBlocked;
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const plusTurn = useSharedValue(0);
@@ -780,7 +781,11 @@ export const ChatComposer = memo(function ChatComposer({
     stopping,
     voiceAvailable: voice?.available ?? false,
   });
-  const controlReady = control.pressable && !dictationBusy;
+  const controlReady = control.pressable;
+  const sendBlocked = useRef(false);
+  sendBlocked.current = disabled || preparing;
+  const hasFiles = useRef(false);
+  hasFiles.current = files.length > 0;
 
   const editAfterDictation = useRef(false);
   useEffect(() => {
@@ -791,7 +796,7 @@ export const ChatComposer = memo(function ChatComposer({
     inputRef.current?.focus();
   }, [dictationBusy, sendGate]);
   const finishDictation = useCallback(() => {
-    if (!dictation) return;
+    if (!dictation || sendingDictationRef.current) return;
     editAfterDictation.current = true;
     dictation.finish();
   }, [dictation]);
@@ -813,8 +818,34 @@ export const ChatComposer = memo(function ChatComposer({
     if (fieldFocused) input?.blur();
   }
 
+  async function sendAfterDictation(current: ComposerDictation): Promise<void> {
+    if (sendingDictationRef.current) return;
+    sendingDictationRef.current = true;
+    editAfterDictation.current = false;
+    setSendingDictation(true);
+    try {
+      const text = await current.finishDraft();
+      if (text !== null) latestTextRef.current = text;
+      if (text === null || sendBlocked.current || (!text.trim() && !hasFiles.current)) {
+        inputRef.current?.focus();
+        return;
+      }
+      sendGate.edit();
+      if (keepsKeyboardOnSend) {
+        if (sendGate.submit(false)) onSend(text);
+      } else sendAndCloseField(text);
+    } finally {
+      sendingDictationRef.current = false;
+      setSendingDictation(false);
+    }
+  }
+
   function requestSend(): void {
     if (disabled || preparing) return;
+    if (dictationBusy && dictation) {
+      void sendAfterDictation(dictation);
+      return;
+    }
     if (keepsKeyboardOnSend) {
       if (!sendGate.submit(false)) return;
       onSend(latestTextRef.current);
@@ -825,6 +856,10 @@ export const ChatComposer = memo(function ChatComposer({
 
   function submitKey(text: string): void {
     if (control.mode !== "send" || !controlReady || voiceOpen) return;
+    if (dictationBusy) {
+      requestSend();
+      return;
+    }
     sendAndCloseField(editMentionDraft(latestTextRef.current, text));
   }
 
@@ -1278,7 +1313,7 @@ export const ChatComposer = memo(function ChatComposer({
                       <DictationMic
                         active={dictating}
                         presence={dictationPresence}
-                        enabled={!disabled && !voiceOpen}
+                        enabled={!disabled && !voiceOpen && !sendingDictation}
                         label={t(dictating ? "mobile.chat.composer.stopDictation" : "mobile.chat.composer.dictate")}
                         foreground={String(foreground)}
                         onPress={toggleDictation}
