@@ -9,3 +9,4 @@
 - Keep composer focus when a hardware Enter key sends a message.
 - Limit the shared Android header blur to the top bar.
 - Keep Home Search results visible until the close animation ends.
+- Play the reaction animation when you add a reaction again.

@@ -11,7 +11,7 @@ import Reply from "lucide-react-native/icons/reply";
 import Square from "lucide-react-native/icons/square";
 import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import Volume2 from "lucide-react-native/icons/volume-2";
-import { type PropsWithChildren, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type PropsWithChildren, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type AccessibilityState, Pressable, View } from "react-native";
 import Animated, {
   Easing,
@@ -89,20 +89,19 @@ function useReactionPops(
   reactions: readonly ConversationReaction[],
   ready: boolean,
 ): (reaction: ConversationReaction) => boolean {
-  const seen = useRef<ReadonlySet<string> | null>(null);
-  if (ready && seen.current === null) seen.current = new Set(reactions.map(reactionKey));
-  const known = seen.current;
-  return (reaction) => known !== null && !known.has(reactionKey(reaction));
+  const previous = useRef<ReadonlySet<string> | null>(null);
+  const known = previous.current;
+  useLayoutEffect(() => {
+    previous.current = ready ? new Set(reactions.map(reactionKey)) : null;
+  }, [ready, reactions]);
+  return (reaction) => ready && known !== null && !known.has(reactionKey(reaction));
 }
 
 function ReactionGlyph({ emoji, pop }: { emoji: string; pop: boolean }) {
   const { transforms } = useMotion();
   const shown = useSharedValue(pop ? 0 : 1);
   useEffect(() => {
-    if (!pop) {
-      shown.set(1);
-      return;
-    }
+    if (!pop) return;
     shown.set(0);
     shown.set(withSpring(1, springs.fastSpatial));
   }, [pop, shown]);
